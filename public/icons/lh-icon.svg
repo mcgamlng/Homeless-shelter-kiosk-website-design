@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Listening House check-in app icon</title>
+  <desc id="desc">A Listening House-inspired navy house mark on teal and purple.</desc>
+  <rect width="512" height="512" rx="96" fill="#8BC9C2"/>
+  <path d="M352 512H512V334L440 310L352 512Z" fill="#9B6BAA" opacity="0.92"/>
+  <path d="M0 512H120L188 324L0 374V512Z" fill="#9B6BAA" opacity="0.78"/>
+  <path
+    d="M54 226L256 106L458 226V166L256 48L54 166V226ZM145 222V416H205V314L307 324V416H367V222H307V270L205 260V222H145Z"
+    fill="#22356D"
+  />
+  <path d="M54 226L256 106L458 226" fill="none" stroke="#F7F7F2" stroke-width="8" stroke-linejoin="round" opacity="0.76"/>
+</svg>

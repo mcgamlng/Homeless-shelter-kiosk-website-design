@@ -1,0 +1,16 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "org.listeninghouse.checkin"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "org.listeninghouse.checkin"
+        minSdk 23
+        targetSdk 35
+        versionCode 2
+        versionName "0.1.1"
+    }
+}

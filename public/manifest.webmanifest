@@ -1,0 +1,59 @@
+{
+  "name": "Listening House Guest Check-In System",
+  "short_name": "LH Check-In",
+  "id": "/dashboard",
+  "description": "Open the Listening House name-based check-in and staff dashboard from a phone, tablet, or kiosk.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#8BC9C2",
+  "theme_color": "#22356D",
+  "icons": [
+    {
+      "src": "/icons/lh-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icons/lh-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/lh-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/lh-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open the staff dashboard.",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icons/lh-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Kiosk",
+      "short_name": "Kiosk",
+      "description": "Open the guest kiosk.",
+      "url": "/kiosk",
+      "icons": [{ "src": "/icons/lh-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Admin",
+      "short_name": "Admin",
+      "description": "Open admin settings.",
+      "url": "/admin",
+      "icons": [{ "src": "/icons/lh-icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

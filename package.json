@@ -1,0 +1,41 @@
+{
+  "name": "homeless-shelter-website-design",
+  "version": "0.1.0",
+  "description": "A lightweight open-source shelter kiosk, staff dashboard, and activity scheduling system.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "server": "node --watch server/index.js",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "seed:demo": "node server/seedDemo.js",
+    "reset:demo": "node server/seedDemo.js --reset",
+    "startup:windows:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/install-startup-task.ps1",
+    "startup:windows:remove": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/remove-startup-task.ps1",
+    "startup:windows:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/start-listening-house-kiosk.ps1",
+    "network:windows:allow-phone": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/allow-phone-access.ps1",
+    "public:tunnel:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/start-public-tunnel.ps1",
+    "onboarding:video": "node scripts/create-onboarding-video.js",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "better-sqlite3": "^11.8.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "lucide-react": "^0.468.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.1.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "vite": "^6.0.5"
+  },
+  "devDependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "prettier": "^3.8.3"
+  }
+}

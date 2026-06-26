@@ -8,9 +8,11 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.view.View;
+import android.webkit.JavascriptInterface;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -45,6 +47,7 @@ public class MainActivity extends Activity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
 
         webView.setWebChromeClient(new WebChromeClient());
+        webView.addJavascriptInterface(new AppBridge(), "LHCheckIn");
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
             String cookies = CookieManager.getInstance().getCookie(url);
@@ -67,6 +70,16 @@ public class MainActivity extends Activity {
         });
         webView.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                Uri uri = Uri.parse(url);
+                if (ACTION_SCHEME.equals(uri.getScheme())) {
+                    handleAppAction(uri);
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
                 if (ACTION_SCHEME.equals(uri.getScheme())) {
@@ -82,7 +95,24 @@ public class MainActivity extends Activity {
                     showConnectionHelp(error.getDescription().toString());
                 }
             }
+
+            @Override
+            public void onReceivedHttpError(
+                WebView view,
+                WebResourceRequest request,
+                WebResourceResponse errorResponse
+            ) {
+                if (request.isForMainFrame()) {
+                    showConnectionHelp("The server answered, but the app could not open the dashboard.");
+                }
+            }
         });
+
+        Uri launchUri = getIntent() == null ? null : getIntent().getData();
+        if (launchUri != null && ACTION_SCHEME.equals(launchUri.getScheme())) {
+            handleAppAction(launchUri);
+            return;
+        }
 
         loadDashboard();
     }
@@ -94,6 +124,16 @@ public class MainActivity extends Activity {
             return;
         }
         super.onBackPressed();
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        Uri uri = intent == null ? null : intent.getData();
+        if (uri != null && ACTION_SCHEME.equals(uri.getScheme())) {
+            handleAppAction(uri);
+        }
     }
 
     private String loadServerBaseUrl() {
@@ -125,20 +165,27 @@ public class MainActivity extends Activity {
     }
 
     private void loadDashboard() {
-        webView.stopLoading();
-        webView.loadUrl(getDashboardUrl());
+        runOnUiThread(() -> {
+            webView.stopLoading();
+            webView.clearCache(false);
+            webView.loadUrl(getDashboardUrl());
+        });
     }
 
     private void loadKiosk() {
-        webView.stopLoading();
-        webView.loadUrl(getKioskUrl());
+        runOnUiThread(() -> {
+            webView.stopLoading();
+            webView.loadUrl(getKioskUrl());
+        });
     }
 
     private void saveServerBaseUrl(String rawUrl) {
         String normalizedUrl = normalizeServerBaseUrl(rawUrl);
         if (normalizedUrl == null) {
-            Toast.makeText(this, "Enter a valid server address", Toast.LENGTH_LONG).show();
-            showConnectionHelp("That server address was not valid.");
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Enter a valid server address", Toast.LENGTH_LONG).show();
+                showConnectionHelp("That server address was not valid.");
+            });
             return;
         }
 
@@ -147,7 +194,7 @@ public class MainActivity extends Activity {
             .edit()
             .putString(KEY_SERVER_BASE_URL, serverBaseUrl)
             .apply();
-        Toast.makeText(this, "Server address saved", Toast.LENGTH_LONG).show();
+        runOnUiThread(() -> Toast.makeText(this, "Server address saved", Toast.LENGTH_LONG).show());
         loadDashboard();
     }
 
@@ -250,19 +297,53 @@ public class MainActivity extends Activity {
             + "<p>The phone app could not reach the guest check-in system. Internet alone is not enough for this local setup. The phone must be on the same Wi-Fi as the laptop or Raspberry Pi that is running the server.</p>"
             + "<div class='notice'><p class='small'>Current server address</p><p class='url'>" + safeServerBaseUrl + "</p></div>"
             + (safeError.length() > 0 ? "<div class='notice error'><p class='small'>Connection message</p><p>" + safeError + "</p></div>" : "")
-            + "<a href='lhcheckin://retry'>Try again</a>"
-            + "<a class='secondary' href='lhcheckin://kiosk'>Open kiosk instead</a>"
+            + "<button type='button' onclick='retryApp()'>Try again</button>"
+            + "<button class='secondary' type='button' onclick='openKiosk()'>Open kiosk instead</button>"
             + "<form onsubmit='saveServer();return false;'>"
             + "<label for='server'>Change laptop or Raspberry Pi address</label>"
             + "<input id='server' value='" + safeServerBaseUrl + "' placeholder='http://192.168.1.42:3000' autocomplete='off' autocapitalize='none' spellcheck='false' />"
             + "<button type='submit'>Save address and reconnect</button>"
             + "</form>"
-            + "<a class='light' href='lhcheckin://dashboard'>Open dashboard: " + safeDashboardUrl + "</a>"
-            + "<a class='light' href='lhcheckin://kiosk'>Open kiosk: " + safeKioskUrl + "</a>"
-            + "<a class='danger' href='lhcheckin://reset'>Reset to default address</a>"
+            + "<button class='light' type='button' onclick='retryApp()'>Open dashboard: " + safeDashboardUrl + "</button>"
+            + "<button class='light' type='button' onclick='openKiosk()'>Open kiosk: " + safeKioskUrl + "</button>"
+            + "<button class='danger' type='button' onclick='resetServer()'>Reset to default address</button>"
             + "<p class='small'>Use the laptop or Raspberry Pi IP address, such as <strong>http://10.160.0.248:3000</strong>. Do not use localhost on the phone.</p>"
-            + "<script>function saveServer(){var value=encodeURIComponent(document.getElementById('server').value);location.href='lhcheckin://save?url='+value;}</script>"
+            + "<script>"
+            + "function useLink(path){location.href='lhcheckin://'+path;}"
+            + "function retryApp(){if(window.LHCheckIn){window.LHCheckIn.retry();}else{useLink('retry');}}"
+            + "function openKiosk(){if(window.LHCheckIn){window.LHCheckIn.openKiosk();}else{useLink('kiosk');}}"
+            + "function resetServer(){if(window.LHCheckIn){window.LHCheckIn.resetServer();}else{useLink('reset');}}"
+            + "function saveServer(){var value=document.getElementById('server').value;if(window.LHCheckIn){window.LHCheckIn.saveServer(value);}else{location.href='lhcheckin://save?url='+encodeURIComponent(value);}}"
+            + "</script>"
             + "</main></body></html>";
-        webView.loadDataWithBaseURL(dashboardUrl, html, "text/html", "UTF-8", null);
+        runOnUiThread(() -> webView.loadDataWithBaseURL(dashboardUrl, html, "text/html", "UTF-8", null));
+    }
+
+    private final class AppBridge {
+        @JavascriptInterface
+        public void retry() {
+            loadDashboard();
+        }
+
+        @JavascriptInterface
+        public void openKiosk() {
+            loadKiosk();
+        }
+
+        @JavascriptInterface
+        public void saveServer(String rawUrl) {
+            saveServerBaseUrl(rawUrl);
+        }
+
+        @JavascriptInterface
+        public void resetServer() {
+            serverBaseUrl = getDefaultServerBaseUrl();
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .remove(KEY_SERVER_BASE_URL)
+                .apply();
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, "Server address reset", Toast.LENGTH_LONG).show());
+            loadDashboard();
+        }
     }
 }

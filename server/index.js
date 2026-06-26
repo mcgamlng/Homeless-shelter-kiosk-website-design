@@ -131,6 +131,7 @@ app.get("/api/access-info", (req, res) => {
     kioskUrl: `${baseUrl}/kiosk`,
     iphoneInstallUrl: `${baseUrl}/install?platform=ios`,
     appDownloadUrl: `${baseUrl}/downloads/ListeningHouseKiosk-debug.apk`,
+    androidConfigureUrl: `lhcheckin://save?url=${encodeURIComponent(baseUrl)}`,
     publicUrl: PUBLIC_URL || null,
     addresses
   });

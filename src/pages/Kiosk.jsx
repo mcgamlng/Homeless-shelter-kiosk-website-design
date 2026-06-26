@@ -259,7 +259,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
     if (step === STEPS.CONFIRMATION && confirmation) {
       return [
         `${t.checkedIn}, ${confirmation.guest_name}. ${t.staffWillCall}. ${confirmation.items
-          .map((item) => translateActivityName(item.activity_name, language))
+          .map((item) => translateActivityName(item, language))
           .join(". ")}`
       ];
     }
@@ -486,7 +486,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
               <div className="confirmation-list">
                 {confirmation.items.map((item) => (
                   <div key={item.id}>
-                    <strong>{translateActivityName(item.activity_name, language)}</strong>
+                    <strong>{translateActivityName(item, language)}</strong>
                   </div>
                 ))}
               </div>

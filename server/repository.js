@@ -11,6 +11,11 @@ import {
 } from "./scheduler.js";
 import { createWorkbookBuffer } from "./xlsx.js";
 import {
+  buildActivityTranslations,
+  buildScheduledActivityTranslations,
+  normalizeActivityName
+} from "../shared/activityTranslations.js";
+import {
   DEFAULT_KIOSK_CUSTOMIZATION,
   KIOSK_COLOR_KEYS,
   KIOSK_CUSTOMIZATION_KEYS,
@@ -328,6 +333,9 @@ export function changeAdminPin(payload = {}, fallbackPin = "2468") {
 }
 
 function normalizeActivityPayload(payload, current = {}) {
+  const name = cleanText(payload.name ?? current.name, 120);
+  const generatedTranslations = buildActivityTranslations(name);
+  const nameChanged = normalizeActivityName(name) !== normalizeActivityName(current.name);
   const timeLimitEnabled =
     payload.time_limit_enabled === undefined
       ? Boolean(current.time_limit_enabled ?? true)
@@ -389,7 +397,28 @@ function normalizeActivityPayload(payload, current = {}) {
   const yearlyEnd = normalizeMonthDay(payload.yearly_end ?? current.yearly_end, "12-31");
 
   return {
-    name: cleanText(payload.name ?? current.name, 120),
+    name,
+    name_es: normalizeActivityTranslation(
+      "name_es",
+      payload,
+      current,
+      generatedTranslations,
+      nameChanged
+    ),
+    name_hmn: normalizeActivityTranslation(
+      "name_hmn",
+      payload,
+      current,
+      generatedTranslations,
+      nameChanged
+    ),
+    name_so: normalizeActivityTranslation(
+      "name_so",
+      payload,
+      current,
+      generatedTranslations,
+      nameChanged
+    ),
     durationMinutes,
     timeLimitEnabled,
     availabilityWindowEnabled,
@@ -408,6 +437,15 @@ function normalizeActivityPayload(payload, current = {}) {
     icon: cleanText(payload.icon ?? current.icon ?? "heart-hand", 60),
     active: payload.active === undefined ? Boolean(current.active ?? true) : Boolean(payload.active)
   };
+}
+
+function normalizeActivityTranslation(field, payload, current, generatedTranslations, nameChanged) {
+  const payloadHasField = Object.hasOwn(payload, field);
+  const incoming = payloadHasField ? cleanText(payload[field], 140) : "";
+  const currentValue = cleanText(current[field], 140);
+  if (incoming && (!nameChanged || incoming !== currentValue)) return incoming;
+  if (!nameChanged && currentValue) return currentValue;
+  return generatedTranslations[field] || "";
 }
 
 function normalizeClockTime(value, fallback) {
@@ -488,7 +526,8 @@ export function getActivities({ includeInactive = false } = {}) {
   const now = new Date();
   const where = includeInactive ? "" : "WHERE active = 1";
   return rows(
-    `SELECT id, name, duration_minutes, time_limit_enabled, availability_window_enabled,
+    `SELECT id, name, name_es, name_hmn, name_so,
+            duration_minutes, time_limit_enabled, availability_window_enabled,
             availability_start, availability_end,
             monthly_window_enabled, monthly_start_day, monthly_end_day,
             yearly_window_enabled, yearly_start, yearly_end,
@@ -542,16 +581,20 @@ export function createActivity(payload) {
   const info = db
     .prepare(
       `INSERT INTO activities
-       (name, duration_minutes, time_limit_enabled, availability_window_enabled,
+       (name, name_es, name_hmn, name_so,
+        duration_minutes, time_limit_enabled, availability_window_enabled,
         availability_start, availability_end,
         monthly_window_enabled, monthly_start_day, monthly_end_day,
         yearly_window_enabled, yearly_start, yearly_end,
         daily_limit_enabled, daily_limit,
         alarm_enabled, alarm_minutes_before, icon, active, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       activity.name,
+      activity.name_es,
+      activity.name_hmn,
+      activity.name_so,
       activity.durationMinutes,
       activity.timeLimitEnabled ? 1 : 0,
       activity.availabilityWindowEnabled ? 1 : 0,
@@ -591,7 +634,8 @@ export function updateActivity(id, payload) {
   }
   db.prepare(
     `UPDATE activities
-     SET name = ?, duration_minutes = ?, time_limit_enabled = ?,
+     SET name = ?, name_es = ?, name_hmn = ?, name_so = ?,
+         duration_minutes = ?, time_limit_enabled = ?,
          availability_window_enabled = ?, availability_start = ?, availability_end = ?,
          monthly_window_enabled = ?, monthly_start_day = ?, monthly_end_day = ?,
          yearly_window_enabled = ?, yearly_start = ?, yearly_end = ?,
@@ -600,6 +644,9 @@ export function updateActivity(id, payload) {
      WHERE id = ?`
   ).run(
     activity.name,
+    activity.name_es,
+    activity.name_hmn,
+    activity.name_so,
     activity.durationMinutes,
     activity.timeLimitEnabled ? 1 : 0,
     activity.availabilityWindowEnabled ? 1 : 0,
@@ -708,7 +755,8 @@ export function createCheckIn({ activityIds, language, signIn }) {
   const guestContext = prepareGuestForCheckIn(signIn || {});
   const placeholders = activityIds.map(() => "?").join(",");
   const activities = rows(
-    `SELECT id, name, duration_minutes, time_limit_enabled, availability_window_enabled,
+    `SELECT id, name, name_es, name_hmn, name_so,
+            duration_minutes, time_limit_enabled, availability_window_enabled,
             availability_start, availability_end,
             monthly_window_enabled, monthly_start_day, monthly_end_day,
             yearly_window_enabled, yearly_start, yearly_end,
@@ -769,19 +817,25 @@ export function createCheckIn({ activityIds, language, signIn }) {
     const timedByActivity = new Map(timedItems.map((item) => [Number(item.activity_id), item]));
     const insertItem = db.prepare(
       `INSERT INTO scheduled_activity_items
-       (check_in_id, activity_id, guest_id, activity_name, duration_minutes, is_timed,
+       (check_in_id, activity_id, guest_id, activity_name,
+        activity_name_es, activity_name_hmn, activity_name_so,
+        duration_minutes, is_timed,
         activity_window_enabled, activity_start_time, activity_end_time,
         scheduled_start, scheduled_end,
         alarm_enabled, alarm_minutes_before, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Waiting', ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Waiting', ?)`
     );
     activities.forEach((activity, index) => {
       const timed = timedByActivity.get(Number(activity.id));
+      const translations = buildScheduledActivityTranslations(activity);
       insertItem.run(
         checkInId,
         activity.id,
         guestId,
         activity.name,
+        translations.activity_name_es,
+        translations.activity_name_hmn,
+        translations.activity_name_so,
         activity.duration_minutes,
         timed ? 1 : 0,
         activity.availability_window_enabled ? 1 : 0,

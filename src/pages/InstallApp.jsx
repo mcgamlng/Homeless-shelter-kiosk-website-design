@@ -50,6 +50,12 @@ export default function InstallApp() {
             <Download size={18} />
             Download Android app
           </a>
+          {accessInfo?.androidConfigureUrl ? (
+            <a className="secondary-button" href={accessInfo.androidConfigureUrl}>
+              <Smartphone size={18} />
+              Connect installed app to this server
+            </a>
+          ) : null}
         </article>
       </div>
     </section>

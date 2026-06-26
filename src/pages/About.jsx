@@ -119,6 +119,8 @@ export default function About() {
             description="Downloads the Listening House Android app that opens this local system."
             url={accessInfo?.appDownloadUrl}
             download
+            extraUrl={accessInfo?.androidConfigureUrl}
+            extraLabel="Connect installed app"
           />
         </div>
       </section>
@@ -126,7 +128,16 @@ export default function About() {
   );
 }
 
-function QrAccessCard({ image, title, description, url, download = false, icon = "phone" }) {
+function QrAccessCard({
+  image,
+  title,
+  description,
+  url,
+  download = false,
+  icon = "phone",
+  extraUrl = "",
+  extraLabel = ""
+}) {
   return (
     <article className="qr-access-card">
       <div className="qr-image-frame">
@@ -149,6 +160,12 @@ function QrAccessCard({ image, title, description, url, download = false, icon =
               <Smartphone size={18} />
             )}
             {download ? "Download app" : "Open website"}
+          </a>
+        ) : null}
+        {extraUrl ? (
+          <a className="secondary-button light-button" href={extraUrl}>
+            <Smartphone size={18} />
+            {extraLabel || "Open installed app"}
           </a>
         ) : null}
         <code>{url || "Finding the server address..."}</code>

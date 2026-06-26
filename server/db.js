@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
+import { buildActivityTranslations } from "../shared/activityTranslations.js";
 import { DEFAULT_KIOSK_CUSTOMIZATION } from "../shared/kioskCustomization.js";
 
 dotenv.config();
@@ -52,6 +53,9 @@ function migrateDatabase(database) {
     "activity_window_enabled"
   );
   ensureColumn(database, "activities", "time_limit_enabled", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(database, "activities", "name_es", "TEXT");
+  ensureColumn(database, "activities", "name_hmn", "TEXT");
+  ensureColumn(database, "activities", "name_so", "TEXT");
   ensureColumn(database, "activities", "availability_window_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(database, "activities", "availability_start", "TEXT NOT NULL DEFAULT '08:00'");
   ensureColumn(database, "activities", "availability_end", "TEXT NOT NULL DEFAULT '16:00'");
@@ -65,6 +69,9 @@ function migrateDatabase(database) {
   ensureColumn(database, "activities", "daily_limit", "INTEGER");
   ensureColumn(database, "activities", "alarm_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(database, "activities", "alarm_minutes_before", "INTEGER NOT NULL DEFAULT 5");
+  ensureColumn(database, "scheduled_activity_items", "activity_name_es", "TEXT");
+  ensureColumn(database, "scheduled_activity_items", "activity_name_hmn", "TEXT");
+  ensureColumn(database, "scheduled_activity_items", "activity_name_so", "TEXT");
   ensureColumn(
     database,
     "scheduled_activity_items",
@@ -120,6 +127,7 @@ function migrateDatabase(database) {
       )
       .run(workdayStart, workdayEnd);
   }
+  backfillActivityTranslations(database);
   database.exec(`
     DROP INDEX IF EXISTS idx_check_ins_bracelet;
     CREATE INDEX IF NOT EXISTS idx_check_ins_status ON check_ins(status);
@@ -149,6 +157,62 @@ function migrateDatabase(database) {
          )`
     )
     .run();
+}
+
+function backfillActivityTranslations(database) {
+  const activityRows = database
+    .prepare("SELECT id, name, name_es, name_hmn, name_so FROM activities")
+    .all();
+  const updateActivity = database.prepare(
+    `UPDATE activities
+     SET name_es = ?, name_hmn = ?, name_so = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  );
+  activityRows.forEach((activity) => {
+    const translations = buildActivityTranslations(activity.name);
+    const nameEs = cleanStoredTranslation(activity.name_es) || translations.name_es;
+    const nameHmn = cleanStoredTranslation(activity.name_hmn) || translations.name_hmn;
+    const nameSo = cleanStoredTranslation(activity.name_so) || translations.name_so;
+    if (
+      nameEs !== activity.name_es ||
+      nameHmn !== activity.name_hmn ||
+      nameSo !== activity.name_so
+    ) {
+      updateActivity.run(nameEs, nameHmn, nameSo, activity.id);
+    }
+  });
+
+  const scheduledRows = database
+    .prepare(
+      `SELECT id, activity_name, activity_name_es, activity_name_hmn, activity_name_so
+       FROM scheduled_activity_items`
+    )
+    .all();
+  const updateScheduled = database.prepare(
+    `UPDATE scheduled_activity_items
+     SET activity_name_es = ?, activity_name_hmn = ?, activity_name_so = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  );
+  scheduledRows.forEach((item) => {
+    const translations = buildActivityTranslations(item.activity_name);
+    const nameEs = cleanStoredTranslation(item.activity_name_es) || translations.name_es;
+    const nameHmn = cleanStoredTranslation(item.activity_name_hmn) || translations.name_hmn;
+    const nameSo = cleanStoredTranslation(item.activity_name_so) || translations.name_so;
+    if (
+      nameEs !== item.activity_name_es ||
+      nameHmn !== item.activity_name_hmn ||
+      nameSo !== item.activity_name_so
+    ) {
+      updateScheduled.run(nameEs, nameHmn, nameSo, item.id);
+    }
+  });
+}
+
+function cleanStoredTranslation(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function migrateIdentityTables(database) {
@@ -308,19 +372,29 @@ export function seedBaseData(database) {
   if (activityCount === 0) {
     const insertActivity = database.prepare(
       `INSERT INTO activities
-       (name, duration_minutes, time_limit_enabled, availability_window_enabled,
+       (name, name_es, name_hmn, name_so,
+        duration_minutes, time_limit_enabled, availability_window_enabled,
         availability_start, availability_end,
         monthly_window_enabled, monthly_start_day, monthly_end_day,
         yearly_window_enabled, yearly_start, yearly_end,
         daily_limit_enabled, daily_limit,
         alarm_enabled, alarm_minutes_before, icon, active, sort_order)
-       VALUES (?, ?, 1, 0, '08:00', '16:00',
+       VALUES (?, ?, ?, ?, ?, 1, 0, '08:00', '16:00',
                0, 1, 31, 0, '01-01', '12-31',
                0, NULL, 0, 5, ?, 1, ?)`
     );
     const insertActivities = database.transaction(() => {
       DEFAULT_ACTIVITIES.forEach(([name, minutes, icon], index) => {
-        insertActivity.run(name, minutes, icon, index + 1);
+        const translations = buildActivityTranslations(name);
+        insertActivity.run(
+          name,
+          translations.name_es,
+          translations.name_hmn,
+          translations.name_so,
+          minutes,
+          icon,
+          index + 1
+        );
       });
     });
     insertActivities();

@@ -27,6 +27,8 @@ http://192.168.1.42:3000
 Do not enter `localhost` on the phone.
 
 If the server address changes, use the app connection screen to save the new address and retry.
+After installing from the in-app download page, tap **Connect installed app to this server** to send
+the current laptop, Raspberry Pi, or public server address into the Android app automatically.
 
 ## iPhone and iPad
 

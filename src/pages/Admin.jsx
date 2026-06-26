@@ -20,6 +20,7 @@ import {
   getKioskCssVariables,
   getKioskCustomization
 } from "../../shared/kioskCustomization.js";
+import { buildActivityTranslations } from "../../shared/activityTranslations.js";
 import { ACTIVITY_ICON_OPTIONS, ActivityIcon } from "../icons.jsx";
 
 function todayKey() {
@@ -139,6 +140,9 @@ function cloneDefaultCustomization() {
 function createNewActivityDraft() {
   return {
     name: "",
+    name_es: "",
+    name_hmn: "",
+    name_so: "",
     duration_minutes: 20,
     time_limit_enabled: true,
     availability_window_enabled: false,
@@ -156,6 +160,14 @@ function createNewActivityDraft() {
     alarm_minutes_before: 5,
     icon: "heart-hand",
     active: true
+  };
+}
+
+function updateActivityNameDraft(current, name) {
+  return {
+    ...current,
+    name,
+    ...buildActivityTranslations(name)
   };
 }
 
@@ -1043,7 +1055,7 @@ export default function Admin() {
                 value={newActivity.name}
                 disabled={!signedIn}
                 onChange={(event) =>
-                  setNewActivity((current) => ({ ...current, name: event.target.value }))
+                  setNewActivity((current) => updateActivityNameDraft(current, event.target.value))
                 }
               />
             </label>
@@ -1061,6 +1073,11 @@ export default function Admin() {
               />
             </label>
           </div>
+          <ActivityTranslationFields
+            draft={newActivity}
+            disabled={!signedIn}
+            onChange={setNewActivity}
+          />
           <ActivityOptionFields
             draft={newActivity}
             disabled={!signedIn}
@@ -1136,7 +1153,9 @@ function ActivityRow({ activity, disabled, onSave, onDelete }) {
           <input
             value={draft.name}
             disabled={disabled}
-            onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+            onChange={(event) =>
+              setDraft((current) => updateActivityNameDraft(current, event.target.value))
+            }
           />
         </label>
         <label>
@@ -1148,10 +1167,55 @@ function ActivityRow({ activity, disabled, onSave, onDelete }) {
           />
         </label>
       </div>
+      <ActivityTranslationFields draft={draft} disabled={disabled} onChange={setDraft} />
       <ActivityOptionFields draft={draft} disabled={disabled} onChange={setDraft} />
       <div className="activity-usage-note">
         Used today: <strong>{activity.daily_used || 0}</strong>
         {activity.daily_limit_enabled ? ` of ${activity.daily_limit}` : ""}
+      </div>
+    </div>
+  );
+}
+
+function ActivityTranslationFields({ draft, disabled, onChange }) {
+  function update(field, value) {
+    onChange((current) => ({ ...current, [field]: value }));
+  }
+
+  return (
+    <div className="activity-translation-fields">
+      <div>
+        <strong>Automatic kiosk translations</strong>
+        <p>
+          These names appear when guests choose Spanish, Hmong, or Somali. Edit them here if a
+          shelter wants a more exact wording.
+        </p>
+      </div>
+      <div className="activity-translation-grid">
+        <label>
+          Spanish name
+          <input
+            value={draft.name_es || ""}
+            disabled={disabled}
+            onChange={(event) => update("name_es", event.target.value)}
+          />
+        </label>
+        <label>
+          Hmong name
+          <input
+            value={draft.name_hmn || ""}
+            disabled={disabled}
+            onChange={(event) => update("name_hmn", event.target.value)}
+          />
+        </label>
+        <label>
+          Somali name
+          <input
+            value={draft.name_so || ""}
+            disabled={disabled}
+            onChange={(event) => update("name_so", event.target.value)}
+          />
+        </label>
       </div>
     </div>
   );

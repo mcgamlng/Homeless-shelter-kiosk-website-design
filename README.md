@@ -114,14 +114,16 @@ There is no guest mode and no bracelet screen.
 
 ## Custom Activities and Languages
 
-Staff can add their own activities in Admin. The kiosk automatically translates common shelter
-service names into Spanish, Hmong, and Somali when those words are recognized. Examples include
-beds, private rooms, legal support, case management, bathrooms, transportation help, lockers,
-documents, ID help, coffee, accessibility, and rest areas.
+Staff can add their own activities in Admin. When an English activity name is added or renamed, the
+system automatically creates Spanish, Hmong, and Somali kiosk names for common shelter wording.
+Those translations are saved in SQLite, carried into each check-in item, and can be edited in Admin
+if a shelter wants more exact language. Examples include beds, private rooms, legal support, case
+management, bathrooms, transportation help, lockers, documents, ID help, coffee, accessibility, and
+rest areas.
 
-Unknown custom names stay visible in English instead of showing a fake or misleading translation.
-If a shelter needs perfect translations for every custom phrase, add the reviewed translations to
-`src/i18n.js`.
+The local translator is intentionally lightweight for Raspberry Pi use. It does not require Google
+Translate, internet access, or a paid API key; a shelter can connect a professional translation API
+later if it wants fully reviewed translation for every possible custom phrase.
 
 ## Read-Aloud Support
 

@@ -1,3 +1,5 @@
+import { translateActivityName as translateStoredActivityName } from "../shared/activityTranslations.js";
+
 export const translations = {
   en: {
     languageName: "English",
@@ -340,6 +342,10 @@ function normalizeActivityName(value) {
 }
 
 export function translateActivityName(activityOrName, language = "en") {
+  return translateStoredActivityName(activityOrName, language);
+}
+
+export function translateLegacyActivityName(activityOrName, language = "en") {
   const name =
     typeof activityOrName === "string"
       ? activityOrName

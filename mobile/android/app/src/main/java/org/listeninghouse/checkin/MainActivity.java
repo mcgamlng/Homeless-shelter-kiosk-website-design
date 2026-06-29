@@ -2,11 +2,18 @@ package org.listeninghouse.checkin;
 
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.CookieManager;
@@ -27,6 +34,9 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     private String serverBaseUrl;
+    private boolean connectionHelpVisible;
+    private ConnectivityManager connectivityManager;
+    private ConnectivityManager.NetworkCallback networkCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,7 +116,15 @@ public class MainActivity extends Activity {
                     showConnectionHelp("The server answered, but the app could not open the dashboard.");
                 }
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                if (serverBaseUrl != null && url != null && url.startsWith(serverBaseUrl)) {
+                    connectionHelpVisible = false;
+                }
+            }
         });
+        registerNetworkReconnect();
 
         Uri launchUri = getIntent() == null ? null : getIntent().getData();
         if (launchUri != null && ACTION_SCHEME.equals(launchUri.getScheme())) {
@@ -114,7 +132,13 @@ public class MainActivity extends Activity {
             return;
         }
 
-        loadDashboard();
+        if (serverBaseUrl == null) {
+            showConnectionHelp(
+                "Choose the server address from the website's Network & Phone Access section."
+            );
+        } else {
+            loadDashboard();
+        }
     }
 
     @Override
@@ -134,6 +158,21 @@ public class MainActivity extends Activity {
         if (uri != null && ACTION_SCHEME.equals(uri.getScheme())) {
             handleAppAction(uri);
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (connectivityManager != null && networkCallback != null) {
+            try {
+                connectivityManager.unregisterNetworkCallback(networkCallback);
+            } catch (IllegalArgumentException ignored) {
+                // The callback may already be unregistered while Android is closing the app.
+            }
+        }
+        if (webView != null) {
+            webView.destroy();
+        }
+        super.onDestroy();
     }
 
     private String loadServerBaseUrl() {
@@ -157,22 +196,29 @@ public class MainActivity extends Activity {
     }
 
     private String getDashboardUrl() {
-        return serverBaseUrl + "/dashboard";
+        return serverBaseUrl == null ? "" : serverBaseUrl + "/dashboard";
     }
 
     private String getKioskUrl() {
-        return serverBaseUrl + "/kiosk";
+        return serverBaseUrl == null ? "" : serverBaseUrl + "/kiosk";
     }
 
     private void loadDashboard() {
+        if (serverBaseUrl == null) {
+            showConnectionHelp("Choose a server address before retrying.");
+            return;
+        }
         runOnUiThread(() -> {
             webView.stopLoading();
-            webView.clearCache(false);
-            webView.loadUrl(getDashboardUrl());
+            webView.loadUrl(getDashboardUrl() + "?androidReconnect=" + System.currentTimeMillis());
         });
     }
 
     private void loadKiosk() {
+        if (serverBaseUrl == null) {
+            showConnectionHelp("Choose a server address before opening the kiosk.");
+            return;
+        }
         runOnUiThread(() -> {
             webView.stopLoading();
             webView.loadUrl(getKioskUrl());
@@ -256,7 +302,11 @@ public class MainActivity extends Activity {
                 .remove(KEY_SERVER_BASE_URL)
                 .apply();
             Toast.makeText(this, "Server address reset", Toast.LENGTH_LONG).show();
-            loadDashboard();
+            if (serverBaseUrl == null) {
+                showConnectionHelp("The saved server address was cleared.");
+            } else {
+                loadDashboard();
+            }
             return;
         }
 
@@ -277,6 +327,7 @@ public class MainActivity extends Activity {
     }
 
     private void showConnectionHelp(String errorMessage) {
+        connectionHelpVisible = true;
         String dashboardUrl = getDashboardUrl();
         String kioskUrl = getKioskUrl();
         String safeError = errorMessage == null ? "" : escapeHtml(errorMessage);
@@ -294,10 +345,11 @@ public class MainActivity extends Activity {
             + ".notice{background:#E8F4F1;border-left:6px solid #22356D;padding:12px 14px;margin-top:14px}.error{background:#F7E2D8;border-left-color:#C96A4A}"
             + "</style></head><body><main>"
             + "<h1>Listening House Check-In</h1>"
-            + "<p>The phone app could not reach the guest check-in system. Internet alone is not enough for this local setup. The phone must be on the same Wi-Fi as the laptop or Raspberry Pi that is running the server.</p>"
+            + "<p>The phone app could not reach the guest check-in system. A local address works when the phone and server use the same Wi-Fi. A public HTTPS address works from any internet connection.</p>"
             + "<div class='notice'><p class='small'>Current server address</p><p class='url'>" + safeServerBaseUrl + "</p></div>"
             + (safeError.length() > 0 ? "<div class='notice error'><p class='small'>Connection message</p><p>" + safeError + "</p></div>" : "")
             + "<button type='button' onclick='retryApp()'>Try again</button>"
+            + "<button class='light' type='button' onclick='openWifiSettings()'>Open Wi-Fi settings</button>"
             + "<button class='secondary' type='button' onclick='openKiosk()'>Open kiosk instead</button>"
             + "<form onsubmit='saveServer();return false;'>"
             + "<label for='server'>Change laptop or Raspberry Pi address</label>"
@@ -307,16 +359,48 @@ public class MainActivity extends Activity {
             + "<button class='light' type='button' onclick='retryApp()'>Open dashboard: " + safeDashboardUrl + "</button>"
             + "<button class='light' type='button' onclick='openKiosk()'>Open kiosk: " + safeKioskUrl + "</button>"
             + "<button class='danger' type='button' onclick='resetServer()'>Reset to default address</button>"
-            + "<p class='small'>Use the laptop or Raspberry Pi IP address, such as <strong>http://10.160.0.248:3000</strong>. Do not use localhost on the phone.</p>"
+            + "<p class='small'>In Admin, open <strong>Network &amp; Phone Access</strong>, save the correct address, then press <strong>Connect installed Android app</strong>. Do not use localhost on the phone.</p>"
             + "<script>"
             + "function useLink(path){location.href='lhcheckin://'+path;}"
             + "function retryApp(){if(window.LHCheckIn){window.LHCheckIn.retry();}else{useLink('retry');}}"
             + "function openKiosk(){if(window.LHCheckIn){window.LHCheckIn.openKiosk();}else{useLink('kiosk');}}"
+            + "function openWifiSettings(){if(window.LHCheckIn){window.LHCheckIn.openWifiSettings();}}"
             + "function resetServer(){if(window.LHCheckIn){window.LHCheckIn.resetServer();}else{useLink('reset');}}"
             + "function saveServer(){var value=document.getElementById('server').value;if(window.LHCheckIn){window.LHCheckIn.saveServer(value);}else{location.href='lhcheckin://save?url='+encodeURIComponent(value);}}"
             + "</script>"
             + "</main></body></html>";
-        runOnUiThread(() -> webView.loadDataWithBaseURL(dashboardUrl, html, "text/html", "UTF-8", null));
+        String helpBaseUrl = dashboardUrl.length() > 0 ? dashboardUrl : "https://localhost.invalid/";
+        runOnUiThread(() -> webView.loadDataWithBaseURL(helpBaseUrl, html, "text/html", "UTF-8", null));
+    }
+
+    private void registerNetworkReconnect() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            return;
+        }
+        connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        if (connectivityManager == null) {
+            return;
+        }
+        networkCallback = new ConnectivityManager.NetworkCallback() {
+            @Override
+            public void onAvailable(Network network) {
+                if (!connectionHelpVisible || serverBaseUrl == null) {
+                    return;
+                }
+                new Handler(Looper.getMainLooper()).postDelayed(
+                    MainActivity.this::loadDashboard,
+                    900
+                );
+            }
+        };
+        connectivityManager.registerDefaultNetworkCallback(networkCallback);
+    }
+
+    private void openWifiSettings() {
+        runOnUiThread(() -> {
+            Intent intent = new Intent(Settings.ACTION_WIFI_SETTINGS);
+            startActivity(intent);
+        });
     }
 
     private final class AppBridge {
@@ -343,7 +427,16 @@ public class MainActivity extends Activity {
                 .remove(KEY_SERVER_BASE_URL)
                 .apply();
             runOnUiThread(() -> Toast.makeText(MainActivity.this, "Server address reset", Toast.LENGTH_LONG).show());
-            loadDashboard();
+            if (serverBaseUrl == null) {
+                showConnectionHelp("The saved server address was cleared.");
+            } else {
+                loadDashboard();
+            }
+        }
+
+        @JavascriptInterface
+        public void openWifiSettings() {
+            MainActivity.this.openWifiSettings();
         }
     }
 }

@@ -173,6 +173,19 @@ that are fully closed.
 The Raspberry Pi or laptop is the server. Other devices must be on a network that allows local
 device-to-device traffic.
 
+After signing in to Admin, open **Network & Phone Access**:
+
+1. Connect the laptop or Raspberry Pi to the building Wi-Fi using its normal operating-system
+   settings.
+2. Press **Refresh network**.
+3. Choose the detected local address and select **Local Wi-Fi**.
+4. Press **Save and test connection**.
+5. Join staff phones to the same Wi-Fi and press **Connect installed Android app**.
+
+Web browsers are not allowed to switch a computer's Wi-Fi connection. The Admin controls detect,
+save, test, and share the correct server address after the host computer has joined the network.
+This keeps Wi-Fi passwords out of the check-in database.
+
 Common Raspberry Pi links:
 
 ```text
@@ -198,21 +211,23 @@ On Windows, allow phone access:
 npm run network:windows:allow-phone
 ```
 
-The About page automatically creates QR codes using a detected local IP address.
+The About and Install pages automatically create links using the address selected in Admin.
 
 When `PUBLIC_URL` is set, all QR codes use that public HTTPS address. See
 [`PUBLIC_ACCESS.md`](PUBLIC_ACCESS.md) for Cloudflare Tunnel setup.
 
 ## Android App
 
-The Android wrapper opens the local staff dashboard. Download it from:
+The Android wrapper opens the staff dashboard. Download it from:
 
 ```text
 http://YOUR-SERVER:3000/downloads/ListeningHouseKiosk-debug.apk
 ```
 
-The server must be running, and the phone must be able to reach the server over Wi-Fi. The app
-includes a connection screen for changing the laptop or Raspberry Pi address.
+The server must be running. A local address requires the phone and server to use the same Wi-Fi. A
+public HTTPS address works from any internet connection. The app remembers the selected address,
+automatically retries when Android reconnects to a network, and includes controls to change the
+address or open Wi-Fi settings.
 
 On iPhone or iPad, scan the browser QR code, open it in Safari, and choose **Add to Home Screen**.
 

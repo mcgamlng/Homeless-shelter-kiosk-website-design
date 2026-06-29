@@ -1,7 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
-import os from "node:os";
 import dotenv from "dotenv";
 import express from "express";
 import http from "node:http";
@@ -31,6 +30,7 @@ import {
   verifyNameSignIn,
   verifyAdminPin
 } from "./repository.js";
+import { createAccessInfo, getWifiName, normalizeServerBaseUrl } from "./network.js";
 
 dotenv.config();
 
@@ -48,6 +48,13 @@ const PUBLIC_URL = String(process.env.PUBLIC_URL || "").replace(/\/+$/, "");
 const adminSessions = new Map();
 const analyticsDownloads = new Map();
 const DOWNLOAD_TTL_MS = 10 * 60 * 1000;
+
+if (PUBLIC_URL) {
+  updateSettings({
+    network_mode: "public",
+    public_base_url: PUBLIC_URL
+  });
+}
 
 app.use(express.json({ limit: "256kb" }));
 app.set("trust proxy", 1);
@@ -112,28 +119,33 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/access-info", (req, res) => {
   const port = Number(req.socket.localPort || PORT);
-  const addresses = Object.values(os.networkInterfaces())
-    .flat()
-    .filter(
-      (address) =>
-        address &&
-        address.family === "IPv4" &&
-        !address.internal &&
-        !address.address.startsWith("169.254.")
-    )
-    .map((address) => `http://${address.address}:${port}`);
   const requestBase = `${req.protocol}://${req.get("host")}`;
-  const requestedHost = String(req.hostname || "").toLowerCase();
-  const requestIsLocalhost = ["localhost", "127.0.0.1", "::1"].includes(requestedHost);
-  const baseUrl = PUBLIC_URL || (requestIsLocalhost ? addresses[0] : requestBase) || requestBase;
+  const settings = getSettings();
+  const access = createAccessInfo({
+    requestBase,
+    requestHostname: req.hostname,
+    port,
+    environmentPublicUrl: PUBLIC_URL,
+    networkSettings: settings.network
+  });
+  const baseUrl = access.baseUrl;
   res.json({
     browserUrl: `${baseUrl}/dashboard`,
     kioskUrl: `${baseUrl}/kiosk`,
     iphoneInstallUrl: `${baseUrl}/install?platform=ios`,
     appDownloadUrl: `${baseUrl}/downloads/ListeningHouseKiosk-debug.apk`,
     androidConfigureUrl: `lhcheckin://save?url=${encodeURIComponent(baseUrl)}`,
-    publicUrl: PUBLIC_URL || null,
-    addresses
+    selectedServerUrl: baseUrl,
+    activeMode: access.activeMode,
+    requestedMode: access.requestedMode,
+    localBaseUrl: access.localBaseUrl,
+    publicUrl: access.publicBaseUrl,
+    publicReady: access.publicReady,
+    preferredLocalUrl: access.preferredLocalUrl,
+    preferredLocalAvailable: access.preferredLocalAvailable,
+    wifiName: getWifiName(),
+    networkOptions: access.networkOptions,
+    addresses: access.addresses
   });
 });
 
@@ -392,6 +404,41 @@ app.put(
     const settings = updateSetting(req.params.key, req.body.value);
     emitDashboard();
     res.json(settings);
+  })
+);
+
+app.post(
+  "/api/admin/network/test",
+  requireAdmin,
+  handleRoute(async (req, res) => {
+    const baseUrl = normalizeServerBaseUrl(req.body.url);
+    if (!baseUrl) {
+      return res.status(400).json({ error: "Enter a valid local or public server address." });
+    }
+
+    let response;
+    try {
+      response = await fetch(`${baseUrl}/api/health`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(6000)
+      });
+    } catch {
+      return res.status(502).json({
+        error:
+          "The server could not reach that address. Check the Wi-Fi connection, address, and firewall."
+      });
+    }
+
+    if (!response.ok) {
+      return res
+        .status(502)
+        .json({ error: `That address responded with HTTP ${response.status}.` });
+    }
+    const health = await response.json().catch(() => ({}));
+    if (!health.ok) {
+      return res.status(502).json({ error: "That address is not the check-in server." });
+    }
+    return res.json({ ok: true, url: baseUrl });
   })
 );
 

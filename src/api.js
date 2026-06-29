@@ -32,6 +32,13 @@ export const api = {
   getAccessInfo() {
     return request("/api/access-info");
   },
+  testNetwork(token, url) {
+    return request("/api/admin/network/test", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ url })
+    });
+  },
   createCheckIn(payload) {
     return request("/api/check-ins", {
       method: "POST",

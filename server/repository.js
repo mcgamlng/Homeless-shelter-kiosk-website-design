@@ -30,6 +30,7 @@ const SIGN_IN_TYPES = new Set(["sign_in", "sign_up"]);
 const PIN_HASH_ITERATIONS = 100000;
 const KIOSK_COLOR_KEY_SET = new Set(KIOSK_COLOR_KEYS);
 const KIOSK_CUSTOMIZATION_KEY_SET = new Set(KIOSK_CUSTOMIZATION_KEYS);
+const NETWORK_URL_KEYS = new Set(["preferred_local_url", "public_base_url"]);
 
 function rows(statement, params = []) {
   return db.prepare(statement).all(...params);
@@ -59,6 +60,14 @@ function normalizeSettingValue(key, value) {
     return String(value || "")
       .trim()
       .slice(0, 260);
+  }
+  if (key === "network_mode") {
+    return String(value || "").toLowerCase() === "public" ? "public" : "local";
+  }
+  if (NETWORK_URL_KEYS.has(key)) {
+    return String(value || "")
+      .trim()
+      .slice(0, 300);
   }
   return value;
 }
@@ -291,6 +300,11 @@ export function getSettings() {
     buffer_minutes: Number(values.buffer_minutes || 5),
     workday_start: values.workday_start || "08:00",
     workday_end: values.workday_end || "16:00",
+    network: {
+      mode: values.network_mode === "public" ? "public" : "local",
+      preferred_local_url: values.preferred_local_url || "",
+      public_base_url: values.public_base_url || ""
+    },
     customization
   };
 }

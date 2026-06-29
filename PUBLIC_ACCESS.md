@@ -59,6 +59,10 @@ the tunnel restarts and is intended only for testing.
 
 6. Restart the Listening House service.
 
+7. In Admin, open **Network & Phone Access**, select **Public internet**, enter the same HTTPS
+   address, and press **Save and test connection**. The Android connect button and all QR codes will
+   then use the public address.
+
 The About page and its browser, iPhone, and Android QR codes will then use the public address.
 
 ## Availability

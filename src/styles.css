@@ -4482,6 +4482,150 @@ main {
   box-shadow: 0 8px 24px rgba(45, 45, 42, 0.08);
 }
 
+.network-settings-panel {
+  display: grid;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.network-settings-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.network-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.network-guide > div {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--lh-border);
+  background: var(--lh-cream);
+}
+
+.network-guide span {
+  grid-row: 1 / span 2;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  background: var(--lh-navy);
+  color: var(--lh-warm-white);
+  font-weight: 950;
+}
+
+.network-guide p {
+  margin: 0;
+  color: var(--lh-muted-brown);
+  font-size: 0.88rem;
+}
+
+.network-current {
+  display: grid;
+  grid-template-columns: auto minmax(170px, 1fr) minmax(220px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-left: 6px solid var(--lh-aqua);
+  background: var(--lh-soft-aqua);
+  color: var(--lh-navy);
+}
+
+.network-current div {
+  display: grid;
+  gap: 2px;
+}
+
+.network-current span {
+  color: var(--lh-muted-brown);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.network-current code {
+  overflow-wrap: anywhere;
+  font-weight: 900;
+}
+
+.network-mode-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.network-mode-picker label {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 94px;
+  padding: 16px;
+  border: 2px solid var(--lh-border);
+  background: var(--lh-warm-white);
+  cursor: pointer;
+}
+
+.network-mode-picker label.is-selected {
+  border-color: var(--lh-navy);
+  background: var(--lh-aqua);
+}
+
+.network-mode-picker input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+.network-mode-picker span {
+  display: grid;
+  gap: 4px;
+}
+
+.network-mode-picker small,
+.network-address-field small {
+  color: var(--lh-muted-brown);
+  line-height: 1.4;
+}
+
+.network-address-field {
+  display: grid;
+  gap: 8px;
+  font-weight: 900;
+}
+
+.network-address-field input,
+.network-address-field select {
+  width: 100%;
+  min-height: 50px;
+  padding: 10px 12px;
+  border: 2px solid var(--lh-border);
+  background: white;
+  color: var(--lh-charcoal);
+  font: inherit;
+}
+
+.network-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.network-status {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 6px solid var(--lh-navy);
+  background: var(--lh-soft-aqua);
+  color: var(--lh-navy);
+  font-weight: 850;
+}
+
 .access-qr-heading {
   display: flex;
   align-items: center;
@@ -4503,6 +4647,48 @@ main {
 .install-page {
   display: grid;
   gap: 22px;
+}
+
+.install-connection-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 2px solid var(--lh-navy);
+  background: var(--lh-soft-aqua);
+  color: var(--lh-navy);
+}
+
+.install-connection-banner div {
+  display: grid;
+  gap: 4px;
+}
+
+.install-connection-banner span {
+  color: var(--lh-charcoal);
+}
+
+.install-connection-banner code {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  font-weight: 900;
+}
+
+.install-error {
+  padding: 16px;
+  border-left: 6px solid var(--lh-coral);
+  background: #f7e2d8;
+}
+
+.install-error p,
+.install-platform-note {
+  margin: 0;
+}
+
+.install-platform-note {
+  color: var(--lh-muted-brown);
+  font-size: 0.9rem;
 }
 
 .install-platform-grid {
@@ -4593,6 +4779,10 @@ main {
     grid-template-columns: 1fr;
   }
 
+  .network-guide {
+    grid-template-columns: 1fr;
+  }
+
   .qr-access-card {
     grid-template-columns: minmax(140px, 190px) minmax(0, 1fr);
   }
@@ -4613,6 +4803,21 @@ main {
 
   .qr-access-card {
     grid-template-columns: 1fr;
+  }
+
+  .network-current,
+  .network-mode-picker,
+  .install-connection-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .network-current > svg {
+    display: none;
+  }
+
+  .network-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .qr-image-frame {

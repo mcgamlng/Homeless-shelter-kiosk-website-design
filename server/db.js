@@ -364,6 +364,9 @@ export function seedBaseData(database) {
   insertSetting.run("buffer_minutes", "5");
   insertSetting.run("workday_start", "08:00");
   insertSetting.run("workday_end", "16:00");
+  insertSetting.run("network_mode", "local");
+  insertSetting.run("preferred_local_url", "");
+  insertSetting.run("public_base_url", "");
   Object.entries(DEFAULT_KIOSK_CUSTOMIZATION).forEach(([key, value]) => {
     insertSetting.run(key, value);
   });

@@ -4,15 +4,20 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Globe2,
   KeyRound,
+  Link2,
   Lock,
   LogOut,
   Palette,
   Plus,
+  RefreshCw,
   RotateCcw,
   Save,
   ShieldCheck,
-  Trash2
+  Smartphone,
+  Trash2,
+  Wifi
 } from "lucide-react";
 import { api } from "../api.js";
 import {
@@ -137,6 +142,14 @@ function cloneDefaultCustomization() {
   return { ...DEFAULT_KIOSK_CUSTOMIZATION };
 }
 
+function createNetworkDraft(network = {}) {
+  return {
+    mode: network.mode === "public" ? "public" : "local",
+    preferred_local_url: network.preferred_local_url || "",
+    public_base_url: network.public_base_url || ""
+  };
+}
+
 function createNewActivityDraft() {
   return {
     name: "",
@@ -220,6 +233,10 @@ export default function Admin() {
   const [savingPin, setSavingPin] = useState(false);
   const [newActivity, setNewActivity] = useState(createNewActivityDraft);
   const [customizationDraft, setCustomizationDraft] = useState(cloneDefaultCustomization);
+  const [accessInfo, setAccessInfo] = useState(null);
+  const [networkDraft, setNetworkDraft] = useState(createNetworkDraft);
+  const [networkStatus, setNetworkStatus] = useState("");
+  const [savingNetwork, setSavingNetwork] = useState(false);
   const kioskPreviewStyle = useMemo(
     () => getKioskCssVariables({ customization: customizationDraft }),
     [customizationDraft]
@@ -255,8 +272,13 @@ export default function Admin() {
   useEffect(() => {
     if (data?.settings) {
       setCustomizationDraft(getKioskCustomization(data.settings));
+      setNetworkDraft(createNetworkDraft(data.settings.network));
     }
   }, [data?.settings]);
+
+  useEffect(() => {
+    refreshNetworkInfo(false);
+  }, []);
 
   const mostRequested = useMemo(() => data?.totals.mostRequestedActivities || [], [data]);
 
@@ -502,6 +524,81 @@ export default function Admin() {
     }
   }
 
+  async function refreshNetworkInfo(showMessage = true) {
+    try {
+      const info = await api.getAccessInfo();
+      setAccessInfo(info);
+      setNetworkDraft((current) => ({
+        ...current,
+        preferred_local_url:
+          current.preferred_local_url || info.preferredLocalUrl || info.localBaseUrl || ""
+      }));
+      if (showMessage) {
+        setNetworkStatus(
+          info.wifiName
+            ? `Connected network detected: ${info.wifiName}`
+            : "Network addresses refreshed."
+        );
+      }
+      return info;
+    } catch (err) {
+      setNetworkStatus(err.message);
+      return null;
+    }
+  }
+
+  async function saveNetworkSettings(event) {
+    event.preventDefault();
+    setNetworkStatus("");
+    const authToken = currentAdminToken();
+    if (!authToken) {
+      setNetworkStatus("Unlock Admin first.");
+      return;
+    }
+    if (networkDraft.mode === "local" && !networkDraft.preferred_local_url) {
+      setNetworkStatus("Choose the local Wi-Fi address this server should use.");
+      return;
+    }
+    if (networkDraft.mode === "public" && !networkDraft.public_base_url.trim()) {
+      setNetworkStatus("Enter the public HTTPS address before selecting public mode.");
+      return;
+    }
+    if (networkDraft.mode === "public") {
+      try {
+        if (new URL(networkDraft.public_base_url).protocol !== "https:") {
+          setNetworkStatus("Public internet mode requires an HTTPS address.");
+          return;
+        }
+      } catch {
+        setNetworkStatus("Enter a valid public HTTPS address.");
+        return;
+      }
+    }
+
+    setSavingNetwork(true);
+    try {
+      const nextSettings = await api.updateSettings(authToken, {
+        network_mode: networkDraft.mode,
+        preferred_local_url: networkDraft.preferred_local_url,
+        public_base_url: networkDraft.public_base_url
+      });
+      setData((current) => (current ? { ...current, settings: nextSettings } : current));
+      const info = await refreshNetworkInfo(false);
+      if (!info?.selectedServerUrl) {
+        throw new Error("The server address could not be prepared.");
+      }
+      await api.testNetwork(authToken, info.selectedServerUrl);
+      setNetworkStatus(
+        `Saved and working: ${info.selectedServerUrl}. Phones can now use the Connect app button.`
+      );
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setNetworkStatus(err.message);
+    } finally {
+      setSavingNetwork(false);
+    }
+  }
+
   function updateCustomizationDraft(key, value) {
     setCustomizationDraft((current) => ({
       ...current,
@@ -682,6 +779,169 @@ export default function Admin() {
           </div>
         </div>
       </div>
+
+      <form className="card-panel network-settings-panel" onSubmit={saveNetworkSettings}>
+        <div className="analytics-heading">
+          <div>
+            <h2>
+              <Wifi size={24} />
+              Network & Phone Access
+            </h2>
+            <p>
+              Choose the address phones and tablets should use, test it, then connect the Android
+              app with one tap.
+            </p>
+          </div>
+          <button
+            className="secondary-button compact-button"
+            type="button"
+            onClick={() => refreshNetworkInfo(true)}
+          >
+            <RefreshCw size={18} />
+            Refresh network
+          </button>
+        </div>
+
+        <div className="network-guide">
+          <div>
+            <span>1</span>
+            <strong>Connect the server</strong>
+            <p>Use Windows or Raspberry Pi settings to join the Wi-Fi you want to use.</p>
+          </div>
+          <div>
+            <span>2</span>
+            <strong>Choose its address</strong>
+            <p>Select the matching network below and save it.</p>
+          </div>
+          <div>
+            <span>3</span>
+            <strong>Connect phones</strong>
+            <p>Join phones to that Wi-Fi, then press Connect installed app.</p>
+          </div>
+        </div>
+
+        <div className="network-current">
+          <Wifi size={22} />
+          <div>
+            <span>Wi-Fi detected on this server</span>
+            <strong>{accessInfo?.wifiName || "Network name unavailable"}</strong>
+          </div>
+          <code>{accessInfo?.localBaseUrl || "Looking for a local address..."}</code>
+        </div>
+
+        <div className="network-mode-picker" role="radiogroup" aria-label="Server access mode">
+          <label className={networkDraft.mode === "local" ? "is-selected" : ""}>
+            <input
+              type="radio"
+              name="network_mode"
+              value="local"
+              checked={networkDraft.mode === "local"}
+              disabled={!signedIn}
+              onChange={() => setNetworkDraft((current) => ({ ...current, mode: "local" }))}
+            />
+            <Wifi />
+            <span>
+              <strong>Local Wi-Fi</strong>
+              <small>Phones must use the same building Wi-Fi.</small>
+            </span>
+          </label>
+          <label className={networkDraft.mode === "public" ? "is-selected" : ""}>
+            <input
+              type="radio"
+              name="network_mode"
+              value="public"
+              checked={networkDraft.mode === "public"}
+              disabled={!signedIn}
+              onChange={() => setNetworkDraft((current) => ({ ...current, mode: "public" }))}
+            />
+            <Globe2 />
+            <span>
+              <strong>Public internet</strong>
+              <small>Uses a public HTTPS tunnel or hosted address.</small>
+            </span>
+          </label>
+        </div>
+
+        {networkDraft.mode === "local" ? (
+          <label className="network-address-field">
+            Local server address
+            <select
+              value={networkDraft.preferred_local_url}
+              disabled={!signedIn}
+              onChange={(event) =>
+                setNetworkDraft((current) => ({
+                  ...current,
+                  preferred_local_url: event.target.value
+                }))
+              }
+            >
+              <option value="">Choose this computer&apos;s network address</option>
+              {(accessInfo?.networkOptions || []).map((option) => (
+                <option key={`${option.interfaceName}-${option.address}`} value={option.url}>
+                  {option.label}
+                </option>
+              ))}
+              {networkDraft.preferred_local_url &&
+              !(accessInfo?.networkOptions || []).some(
+                (option) => option.url === networkDraft.preferred_local_url
+              ) ? (
+                <option value={networkDraft.preferred_local_url}>
+                  Saved address - currently unavailable
+                </option>
+              ) : null}
+            </select>
+            <small>
+              A website cannot switch the computer&apos;s Wi-Fi. Switch Wi-Fi in the device
+              settings, then press Refresh network here.
+            </small>
+          </label>
+        ) : (
+          <label className="network-address-field">
+            Public HTTPS address
+            <input
+              type="url"
+              placeholder="https://checkin.example.org"
+              value={networkDraft.public_base_url}
+              disabled={!signedIn}
+              onChange={(event) =>
+                setNetworkDraft((current) => ({
+                  ...current,
+                  public_base_url: event.target.value
+                }))
+              }
+            />
+            <small>
+              Enter the address created by your hosting service or Cloudflare Tunnel. Saving an
+              address here does not create the tunnel by itself.
+            </small>
+          </label>
+        )}
+
+        <div className="network-actions">
+          <button className="primary-button" type="submit" disabled={!signedIn || savingNetwork}>
+            <Save size={18} />
+            {savingNetwork ? "Saving and testing..." : "Save and test connection"}
+          </button>
+          {accessInfo?.browserUrl ? (
+            <a
+              className="secondary-button"
+              href={accessInfo.browserUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Link2 size={18} />
+              Open selected address
+            </a>
+          ) : null}
+          {accessInfo?.androidConfigureUrl ? (
+            <a className="secondary-button" href={accessInfo.androidConfigureUrl}>
+              <Smartphone size={18} />
+              Connect installed Android app
+            </a>
+          ) : null}
+        </div>
+        {networkStatus ? <p className="network-status">{networkStatus}</p> : null}
+      </form>
 
       <form className="card-panel kiosk-customization-panel" onSubmit={saveKioskCustomization}>
         <div className="analytics-heading">

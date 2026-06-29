@@ -1,11 +1,11 @@
 # Listening House Android App
 
-The Android app opens the local Listening House staff dashboard inside a lightweight native
-WebView.
+The Android app opens the selected local or public Listening House staff dashboard inside a
+lightweight native WebView.
 
 ## Download
 
-From a phone on the same network as the server:
+From a phone that can reach the server:
 
 ```text
 http://YOUR-SERVER:3000/downloads/ListeningHouseKiosk-debug.apk
@@ -15,8 +15,16 @@ The About page also displays a QR code for this download.
 
 ## Network Requirement
 
-The app connects to the laptop or Raspberry Pi running the server. Internet access alone is not
-enough. The phone and server must be on a network that permits device-to-device traffic.
+The app connects to the laptop or Raspberry Pi running the server:
+
+- **Local Wi-Fi mode:** the phone and server must use the same network, and that network must permit
+  device-to-device traffic.
+- **Public internet mode:** the app uses the configured public HTTPS address and can connect from
+  any internet connection.
+
+Configure this in Admin under **Network & Phone Access**. The website cannot switch the server's
+Wi-Fi itself; use Windows or Raspberry Pi network settings first, then refresh and select the
+detected address in Admin.
 
 Use an address such as:
 
@@ -26,7 +34,10 @@ http://192.168.1.42:3000
 
 Do not enter `localhost` on the phone.
 
-If the server address changes, use the app connection screen to save the new address and retry.
+If the server address changes, use **Connect installed Android app** again. The app remembers the
+new address and retries automatically after temporary network loss. Its connection screen also has
+working **Try again** and **Open Wi-Fi settings** controls.
+
 After installing from the in-app download page, tap **Connect installed app to this server** to send
 the current laptop, Raspberry Pi, or public server address into the Android app automatically.
 

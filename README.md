@@ -131,10 +131,14 @@ Edge, or Chromium with system speech voices installed. Some embedded browsers, i
 in-app browser, do not expose speech voices; in that case the kiosk shows a clear unavailable
 message instead of silently failing.
 
-The kiosk now selects only a voice matching the chosen language. It never reads Hmong or Somali
-through an English voice. If the device lacks that language voice, it asks staff to install it
-instead of producing incorrect pronunciation. For Raspberry Pi kiosk mode, use Chromium and install
-speech support for English, Spanish, Hmong, and Somali.
+The kiosk prefers natural or neural voices that match the chosen language and uses language-specific
+pacing and pitch. Hmong accepts both `hmn` and Microsoft Hmong Daw (`mww`) voice identifiers and can
+use a device-provided multilingual voice. If a device does not list a Hmong voice, the kiosk still
+requests Hmong from the platform speech engine instead of disabling the readout.
+
+Voice quality depends on the speech voices installed on the device. For the clearest native
+pronunciation, install English, Spanish, Hmong Daw, and Somali speech support in the device settings.
+The confirmation readout does not send or speak the guest's name.
 
 ## Activity Rules
 
@@ -155,8 +159,12 @@ Untimed Service Queue.
 
 ## Dashboard Alarms
 
-Open the Dashboard and press **Turn on timer alerts**. The browser may ask for notification
-permission. The setting is remembered on that staff device. When staff marks a timed activity
+Open the Dashboard and press **Turn on staff alerts**. The browser may ask for notification
+permission. The setting is remembered on that staff device. The Staff Action Center stays above the
+calendar and shows each guest who is ready, their activity, and one-tap status controls.
+
+Five minutes before an alarm-enabled activity starts, staff receive a start reminder so they can
+call the guest. When staff marks a timed activity
 **In Progress**, its countdown starts from that moment.
 When an alarm-enabled activity is In Progress and reaches its configured warning point, the
 dashboard:
@@ -166,7 +174,7 @@ dashboard:
 - Repeats vibration on supported phones and tablets
 - Sends a browser notification when permission is granted
 - Keeps the dashboard screen awake when the device supports Screen Wake Lock
-- Schedules an Android system alarm in the installed Android app
+- Schedules Android system reminders for both upcoming starts and ending-time warnings
 
 Use **Test alarm** after enabling alerts to confirm the device volume and permissions. Android asks
 for notification and exact-alarm permission and can alert while the app is backgrounded. On iPhone
@@ -312,12 +320,13 @@ Manual checks:
 4. Select a timed activity and verify its calendar block.
 5. Select an untimed activity and verify the service queue.
 6. Reach a daily activity limit and verify the kiosk shows Full for today.
-7. Mark an alarm activity In Progress and test its warning threshold.
-8. Complete and skip activities.
-9. Reset the day and verify live totals return to zero.
-10. Open two dashboards and confirm real-time updates.
-11. Scan both About-page QR codes from a phone.
-12. Press the kiosk read-aloud button in Chrome or Chromium and confirm the screen is spoken.
+7. Confirm the Staff Action Center shows due activities and its status buttons work.
+8. Turn on staff alerts and verify both a five-minute start reminder and an ending-time warning.
+9. Complete and skip activities.
+10. Reset the day and verify live totals return to zero.
+11. Open two dashboards and confirm real-time updates.
+12. Scan both About-page QR codes from a phone.
+13. Test the kiosk readout in all four languages, including a device with Hmong Daw speech support.
 
 ## Project Structure
 

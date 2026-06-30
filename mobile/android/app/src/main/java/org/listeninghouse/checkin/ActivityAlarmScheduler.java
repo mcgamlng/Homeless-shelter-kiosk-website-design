@@ -33,7 +33,9 @@ final class ActivityAlarmScheduler {
                     alarm.optLong("triggerAt", System.currentTimeMillis() + 1000),
                     alarm.optString("guestName", "Guest"),
                     alarm.optString("activityName", "Activity"),
-                    Math.max(1, alarm.optInt("minutesLeft", 5))
+                    Math.max(1, alarm.optInt("minutesLeft", 5)),
+                    alarm.optString("title", ""),
+                    alarm.optString("body", "")
                 );
             }
 
@@ -75,7 +77,9 @@ final class ActivityAlarmScheduler {
             "test",
             "Test guest",
             "Timer alarm test",
-            5
+            5,
+            "Listening House alert test",
+            "Phone sounds and notifications are working."
         );
     }
 
@@ -85,7 +89,9 @@ final class ActivityAlarmScheduler {
         long triggerAt,
         String guestName,
         String activityName,
-        int minutesLeft
+        int minutesLeft,
+        String title,
+        String body
     ) {
         AlarmManager manager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (manager == null) return;
@@ -97,6 +103,8 @@ final class ActivityAlarmScheduler {
             guestName,
             activityName,
             minutesLeft,
+            title,
+            body,
             PendingIntent.FLAG_UPDATE_CURRENT
         );
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !manager.canScheduleExactAlarms()) {
@@ -114,6 +122,8 @@ final class ActivityAlarmScheduler {
             "",
             "",
             5,
+            "",
+            "",
             PendingIntent.FLAG_NO_CREATE
         );
         if (manager != null && pendingIntent != null) {
@@ -128,6 +138,8 @@ final class ActivityAlarmScheduler {
         String guestName,
         String activityName,
         int minutesLeft,
+        String title,
+        String body,
         int baseFlag
     ) {
         Intent intent = new Intent(context, ActivityAlarmReceiver.class);
@@ -135,6 +147,8 @@ final class ActivityAlarmScheduler {
         intent.putExtra("guest_name", guestName);
         intent.putExtra("activity_name", activityName);
         intent.putExtra("minutes_left", minutesLeft);
+        intent.putExtra("notification_title", title);
+        intent.putExtra("notification_body", body);
         int flags = baseFlag | PendingIntent.FLAG_IMMUTABLE;
         return PendingIntent.getBroadcast(context, requestCode(id), intent, flags);
     }

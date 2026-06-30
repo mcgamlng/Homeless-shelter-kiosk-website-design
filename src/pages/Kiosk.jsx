@@ -10,7 +10,7 @@ import {
   translateActivityName,
   translations
 } from "../i18n.js";
-import { chooseSpeechVoice, preferredSpeechLanguage } from "../speechVoices.js";
+import { chooseSpeechVoice, preferredSpeechLanguage, speechProfile } from "../speechVoices.js";
 import { getCustomizedKioskText, getKioskCssVariables } from "../../shared/kioskCustomization.js";
 
 const STEPS = {
@@ -150,11 +150,6 @@ export default function Kiosk({ settings: shellSettings = null }) {
     if (segments.length === 0) return;
     await refreshSpeechVoices();
     const voice = chooseSpeechVoice(speechVoicesRef.current, language);
-    if (language !== "en" && !voice) {
-      setSpeaking(false);
-      setReadoutMessage(t.readoutVoiceMissing);
-      return;
-    }
     cancelSpeech();
     const runId = speechRunRef.current + 1;
     speechRunRef.current = runId;
@@ -166,9 +161,11 @@ export default function Kiosk({ settings: shellSettings = null }) {
   function speakSegments(segments, runId, pauseMs, voice, index = 0) {
     if (runId !== speechRunRef.current) return;
     const utterance = new window.SpeechSynthesisUtterance(segments[index]);
+    const profile = speechProfile(language);
     if (voice) utterance.voice = voice;
     utterance.lang = preferredSpeechLanguage(language);
-    utterance.rate = language === "en" ? 0.9 : 0.86;
+    utterance.rate = profile.rate;
+    utterance.pitch = profile.pitch;
     utterance.onend = () => {
       if (runId !== speechRunRef.current) return;
       if (index >= segments.length - 1) {
@@ -245,7 +242,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
     }
     if (step === STEPS.CONFIRMATION && confirmation) {
       return [
-        `${t.checkedIn}, ${confirmation.guest_name}. ${t.staffWillCall}. ${confirmation.items
+        `${t.checkedIn}. ${t.staffWillCall}. ${confirmation.items
           .map((item) => translateActivityName(item, language))
           .join(". ")}`
       ];

@@ -41,12 +41,16 @@ working **Try again** and **Open Wi-Fi settings** controls.
 After installing from the in-app download page, tap **Connect installed app to this server** to send
 the current laptop, Raspberry Pi, or public server address into the Android app automatically.
 
-## Activity Timer Alarms
+## Staff Activity Alerts
 
-In the Dashboard, press **Turn on timer alerts** and allow Android notifications and **Alarms &
-reminders**. When staff marks an alarm-enabled activity In Progress, the Android app schedules a
-system alarm for its warning time. The alarm can sound and vibrate while the app is in the
-background. Press **Test alarm** to verify the phone volume and permissions.
+In the Dashboard, press **Turn on staff alerts** and allow Android notifications and **Alarms &
+reminders**. The Staff Action Center shows who needs attention next, where they are going, and
+one-tap Waiting, Start, Complete, and Skip controls.
+
+For every alarm-enabled timed activity, the Android app schedules a system reminder five minutes
+before it starts. When staff marks the activity In Progress, the app schedules its configured
+ending-time warning. These reminders can sound and vibrate while the app is in the background.
+Press **Test alarm** to verify the phone volume and permissions.
 
 The website also repeats its own sound, vibration, and visible warning until staff dismisses it.
 iPhone and iPad use this website alarm and must keep the dashboard web app open; a website cannot add

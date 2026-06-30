@@ -24,7 +24,9 @@ public class ActivityAlarmReceiver extends BroadcastReceiver {
             intent.getStringExtra("alarm_id"),
             intent.getStringExtra("guest_name"),
             intent.getStringExtra("activity_name"),
-            Math.max(1, intent.getIntExtra("minutes_left", 5))
+            Math.max(1, intent.getIntExtra("minutes_left", 5)),
+            intent.getStringExtra("notification_title"),
+            intent.getStringExtra("notification_body")
         );
     }
 
@@ -40,10 +42,10 @@ public class ActivityAlarmReceiver extends BroadcastReceiver {
             .build();
         NotificationChannel channel = new NotificationChannel(
             CHANNEL_ID,
-            "Activity timer alarms",
+            "Staff activity alerts",
             NotificationManager.IMPORTANCE_HIGH
         );
-        channel.setDescription("Alerts staff when an activity is nearing its end.");
+        channel.setDescription("Alerts staff before activities begin and when time is nearly finished.");
         channel.enableVibration(true);
         channel.setVibrationPattern(new long[] { 0, 500, 180, 500, 180, 700 });
         channel.setSound(sound, audioAttributes);
@@ -55,7 +57,9 @@ public class ActivityAlarmReceiver extends BroadcastReceiver {
         String alarmId,
         String guestName,
         String activityName,
-        int minutesLeft
+        int minutesLeft,
+        String title,
+        String body
     ) {
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -77,13 +81,19 @@ public class ActivityAlarmReceiver extends BroadcastReceiver {
             ? "Activity"
             : activityName;
         String safeGuest = guestName == null || guestName.length() == 0 ? "Guest" : guestName;
+        String safeTitle = title == null || title.length() == 0
+            ? minutesLeft + " minutes left: " + safeActivity
+            : title;
+        String safeBody = body == null || body.length() == 0
+            ? safeGuest + " is nearing the end of this activity."
+            : body;
         Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
             ? new Notification.Builder(context, CHANNEL_ID)
             : new Notification.Builder(context);
         builder
             .setSmallIcon(R.drawable.lh_icon)
-            .setContentTitle(minutesLeft + " minutes left: " + safeActivity)
-            .setContentText(safeGuest + " is nearing the end of this activity.")
+            .setContentTitle(safeTitle)
+            .setContentText(safeBody)
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
             .setCategory(Notification.CATEGORY_ALARM)

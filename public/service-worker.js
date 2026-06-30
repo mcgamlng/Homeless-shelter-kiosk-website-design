@@ -1,4 +1,4 @@
-const CACHE_NAME = "listening-house-check-in-shell-v7";
+const CACHE_NAME = "listening-house-check-in-shell-v8";
 const SHELL_ASSETS = [
   "/manifest.webmanifest",
   "/icons/lh-icon.svg",

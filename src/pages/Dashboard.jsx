@@ -6,14 +6,17 @@ import {
   BellRing,
   CalendarDays,
   CheckCircle2,
+  Clock3,
   Filter,
   LayoutDashboard,
+  MapPin,
   RotateCcw,
   Search,
   Trash2,
   X
 } from "lucide-react";
 import { api } from "../api.js";
+import { describeActionTiming, getStaffActionItems, getStartingSoonItems } from "../staffAlerts.js";
 import { createDashboardSocket } from "../socket.js";
 import { formatTime, minutesBetween, STATUSES } from "../utils.js";
 
@@ -38,6 +41,7 @@ export default function Dashboard() {
   const [clockNow, setClockNow] = useState(Date.now());
   const [alerts, setAlerts] = useState([]);
   const alertedItems = useRef(new Set());
+  const startingSoonItems = useRef(new Set());
   const wakeLockRef = useRef(null);
   const nativeAlarmSetupRequested = useRef(false);
 
@@ -90,6 +94,17 @@ export default function Dashboard() {
   }, [alarmsEnabled, data]);
 
   useEffect(() => {
+    if (!alarmsEnabled || !data) return;
+    for (const item of getStartingSoonItems(data.scheduledItems, clockNow)) {
+      if (startingSoonItems.current.has(item.id)) continue;
+      startingSoonItems.current.add(item.id);
+      playAlarmTone(0.1);
+      navigator.vibrate?.([350, 140, 350]);
+      showStartingSoonNotification(item);
+    }
+  }, [alarmsEnabled, clockNow, data]);
+
+  useEffect(() => {
     if (!alarmsEnabled || alerts.length === 0) return undefined;
     const soundAlarm = () => {
       playAlarmTone();
@@ -136,23 +151,40 @@ export default function Dashboard() {
         bridge.cancelAllActivityAlarms?.();
         return;
       }
-      const alarms = data.scheduledItems
-        .filter(
-          (item) =>
-            item.is_timed &&
-            item.alarm_enabled &&
-            item.status === "In Progress" &&
-            item.scheduled_end
-        )
-        .map((item) => ({
-          id: String(item.id),
-          triggerAt:
-            new Date(item.scheduled_end).getTime() -
-            Number(item.alarm_minutes_before || 5) * 60_000,
-          guestName: item.guest_name,
-          activityName: item.activity_name,
-          minutesLeft: Number(item.alarm_minutes_before || 5)
-        }));
+      const now = Date.now();
+      const alarms = data.scheduledItems.flatMap((item) => {
+        if (!item.is_timed || !item.alarm_enabled) return [];
+        if (item.status === "Waiting" && item.scheduled_start) {
+          const startsAt = new Date(item.scheduled_start).getTime();
+          if (startsAt < now - 60_000) return [];
+          return [
+            {
+              id: `start-${item.id}`,
+              triggerAt: startsAt - 5 * 60_000,
+              guestName: item.guest_name,
+              activityName: item.activity_name,
+              minutesLeft: 5,
+              title: `${item.guest_name} is ready soon`,
+              body: `${item.activity_name} starts at ${formatTime(item.scheduled_start)}. Please call the guest.`
+            }
+          ];
+        }
+        if (item.status === "In Progress" && item.scheduled_end) {
+          const minutesLeft = Number(item.alarm_minutes_before || 5);
+          return [
+            {
+              id: `end-${item.id}`,
+              triggerAt: new Date(item.scheduled_end).getTime() - minutesLeft * 60_000,
+              guestName: item.guest_name,
+              activityName: item.activity_name,
+              minutesLeft,
+              title: `${minutesLeft} minutes left: ${item.activity_name}`,
+              body: `${item.guest_name} is nearing the end of this activity.`
+            }
+          ];
+        }
+        return [];
+      });
       bridge.syncActivityAlarms(JSON.stringify(alarms));
     };
     syncNativeAlarms();
@@ -198,6 +230,10 @@ export default function Dashboard() {
       }, {}),
     [timedItems]
   );
+  const staffActionItems = useMemo(
+    () => getStaffActionItems(data?.scheduledItems || [], clockNow),
+    [clockNow, data?.scheduledItems]
+  );
 
   async function enableAlarms() {
     setAlarmsEnabled(true);
@@ -208,7 +244,7 @@ export default function Dashboard() {
     }
     playAlarmTone(0.04);
     setMessage(
-      "Staff timer alerts are on. Keep this dashboard open on iPhone or iPad; the Android app also schedules a system alarm."
+      "Staff alerts are on. Keep this dashboard open on iPhone or iPad; the Android app also schedules system reminders."
     );
   }
 
@@ -218,7 +254,7 @@ export default function Dashboard() {
     setAlerts([]);
     window.LHCheckIn?.cancelAllActivityAlarms?.();
     nativeAlarmSetupRequested.current = false;
-    setMessage("Staff timer alerts are off for this device.");
+    setMessage("Staff alerts are off for this device.");
   }
 
   function testAlarm() {
@@ -319,7 +355,7 @@ export default function Dashboard() {
               onClick={alarmsEnabled ? disableAlarms : enableAlarms}
             >
               {alarmsEnabled ? <BellRing size={18} /> : <Bell size={18} />}
-              {alarmsEnabled ? "Timer alerts on" : "Turn on timer alerts"}
+              {alarmsEnabled ? "Staff alerts on" : "Turn on staff alerts"}
             </button>
             {alarmsEnabled ? (
               <button className="secondary-button" onClick={testAlarm}>
@@ -353,6 +389,8 @@ export default function Dashboard() {
           ))}
         </div>
       ) : null}
+
+      <StaffActionCenter items={staffActionItems} nowMs={clockNow} onStatus={updateStatus} />
 
       <div className="mobile-dashboard-switch" aria-label="Phone dashboard sections">
         <button
@@ -551,6 +589,73 @@ export default function Dashboard() {
           )}
         </section>
       </div>
+    </section>
+  );
+}
+
+function StaffActionCenter({ items, nowMs, onStatus }) {
+  const inProgressCount = items.filter((item) => item.status === "In Progress").length;
+  return (
+    <section className="staff-action-center" aria-label="Activities needing staff attention">
+      <div className="staff-action-heading">
+        <div>
+          <span className="staff-action-eyebrow">
+            <BellRing size={17} />
+            Staff Action Center
+          </span>
+          <h2>Who needs attention next</h2>
+          <p>Call the guest when their service is ready, then update their status here.</p>
+        </div>
+        <span className="staff-action-count">
+          {items.length} ready
+          {inProgressCount ? ` • ${inProgressCount} in progress` : ""}
+        </span>
+      </div>
+      {items.length === 0 ? (
+        <div className="staff-action-empty">
+          <CheckCircle2 size={22} />
+          No activity needs action right now.
+        </div>
+      ) : (
+        <div className="staff-action-list">
+          {items.map((item) => (
+            <article className="staff-action-card" key={item.id}>
+              <div className="staff-action-person">
+                <strong>{item.guest_name}</strong>
+                <span>
+                  <MapPin size={15} />
+                  {item.activity_name}
+                </span>
+              </div>
+              <div className="staff-action-time">
+                <strong>{describeActionTiming(item, nowMs)}</strong>
+                <span>
+                  <Clock3 size={15} />
+                  {formatTime(item.scheduled_start)}
+                </span>
+              </div>
+              <div className="staff-action-buttons" aria-label={`Update ${item.guest_name}`}>
+                <button
+                  className={item.status === "Waiting" ? "is-active" : ""}
+                  onClick={() => onStatus(item.id, "Waiting")}
+                >
+                  Waiting
+                </button>
+                <button
+                  className={item.status === "In Progress" ? "is-active is-start" : "is-start"}
+                  onClick={() => onStatus(item.id, "In Progress")}
+                >
+                  Start
+                </button>
+                <button className="is-complete" onClick={() => onStatus(item.id, "Completed")}>
+                  Complete
+                </button>
+                <button onClick={() => onStatus(item.id, "Skipped")}>Skip</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -884,15 +989,32 @@ function getAlarmAudioContext(AudioContext) {
 }
 
 async function showActivityNotification(alert) {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const title = `${alert.minutesLeft} minutes left: ${alert.activityName}`;
-  const options = {
+  return showDeviceNotification({
+    title: `${alert.minutesLeft} minutes left: ${alert.activityName}`,
     body: `${alert.guestName} is nearing the end of this activity.`,
+    tag: `activity-alarm-${alert.id}`,
+    requireInteraction: true
+  });
+}
+
+async function showStartingSoonNotification(item) {
+  return showDeviceNotification({
+    title: `${item.guest_name} is ready soon`,
+    body: `${item.activity_name} starts at ${formatTime(item.scheduled_start)}. Please call the guest.`,
+    tag: `activity-start-${item.id}`,
+    requireInteraction: true
+  });
+}
+
+async function showDeviceNotification({ title, body, tag, requireInteraction = false }) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const options = {
+    body,
     icon: "/icons/lh-icon-192.png",
     badge: "/icons/lh-icon-192.png",
-    tag: `activity-alarm-${alert.id}`,
+    tag,
     renotify: true,
-    requireInteraction: true,
+    requireInteraction,
     vibrate: [500, 180, 500]
   };
   try {

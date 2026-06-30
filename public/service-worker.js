@@ -1,4 +1,4 @@
-const CACHE_NAME = "listening-house-check-in-shell-v6";
+const CACHE_NAME = "listening-house-check-in-shell-v7";
 const SHELL_ASSETS = [
   "/manifest.webmanifest",
   "/icons/lh-icon.svg",
@@ -48,5 +48,16 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(request))
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const dashboardClient = clients.find((client) => client.url.includes("/dashboard"));
+      if (dashboardClient) return dashboardClient.focus();
+      return self.clients.openWindow("/dashboard");
+    })
   );
 });

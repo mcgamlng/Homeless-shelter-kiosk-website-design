@@ -115,15 +115,14 @@ There is no guest mode and no bracelet screen.
 ## Custom Activities and Languages
 
 Staff can add their own activities in Admin. When an English activity name is added or renamed, the
-system automatically creates Spanish, Hmong, and Somali kiosk names for common shelter wording.
-Those translations are saved in SQLite, carried into each check-in item, and can be edited in Admin
-if a shelter wants more exact language. Examples include beds, private rooms, legal support, case
-management, bathrooms, transportation help, lockers, documents, ID help, coffee, accessibility, and
-rest areas.
+system automatically translates it into Spanish, Hmong, and Somali. Common shelter terms use the
+lightweight built-in dictionary; unfamiliar wording uses the online activity-label translator.
+Translations are saved in SQLite, carried into each check-in item, and remain editable in Admin.
 
-The local translator is intentionally lightweight for Raspberry Pi use. It does not require Google
-Translate, internet access, or a paid API key; a shelter can connect a professional translation API
-later if it wants fully reviewed translation for every possible custom phrase.
+Only the activity label is sent for online translation. Guest names and check-in data are never sent.
+If internet access is unavailable, built-in shelter terms still work and Admin clearly identifies
+translations that need manual review. Set `ACTIVITY_TRANSLATION_URL` only when using a compatible
+alternative translation endpoint.
 
 ## Read-Aloud Support
 
@@ -132,7 +131,10 @@ Edge, or Chromium with system speech voices installed. Some embedded browsers, i
 in-app browser, do not expose speech voices; in that case the kiosk shows a clear unavailable
 message instead of silently failing.
 
-For Raspberry Pi kiosk mode, use Chromium and install speech support for the languages you need.
+The kiosk now selects only a voice matching the chosen language. It never reads Hmong or Somali
+through an English voice. If the device lacks that language voice, it asks staff to install it
+instead of producing incorrect pronunciation. For Raspberry Pi kiosk mode, use Chromium and install
+speech support for English, Spanish, Hmong, and Somali.
 
 ## Activity Rules
 
@@ -160,13 +162,16 @@ When an alarm-enabled activity is In Progress and reaches its configured warning
 dashboard:
 
 - Shows a visible warning
-- Plays a short sound when the browser permits audio
-- Vibrates supported Android devices
+- Repeats an audible alarm until staff dismisses it
+- Repeats vibration on supported phones and tablets
 - Sends a browser notification when permission is granted
+- Keeps the dashboard screen awake when the device supports Screen Wake Lock
+- Schedules an Android system alarm in the installed Android app
 
-Keep the dashboard or installed web app open for in-browser alarms. Phone operating systems may pause
-local web pages
-that are fully closed.
+Use **Test alarm** after enabling alerts to confirm the device volume and permissions. Android asks
+for notification and exact-alarm permission and can alert while the app is backgrounded. On iPhone
+and iPad, keep the installed web app open because websites cannot create entries in Apple Clock or
+guarantee background execution after the web app is fully closed.
 
 ## Local Network Access
 

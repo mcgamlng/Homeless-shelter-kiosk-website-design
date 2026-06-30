@@ -1,9 +1,12 @@
 package org.listeninghouse.checkin;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.AlarmManager;
 import android.app.DownloadManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.Network;
@@ -31,6 +34,7 @@ public class MainActivity extends Activity {
     private static final String PREFS_NAME = "listening_house_checkin";
     private static final String KEY_SERVER_BASE_URL = "server_base_url";
     private static final String ACTION_SCHEME = "lhcheckin";
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 4102;
 
     private WebView webView;
     private String serverBaseUrl;
@@ -157,6 +161,32 @@ public class MainActivity extends Activity {
         Uri uri = intent == null ? null : intent.getData();
         if (uri != null && ACTION_SCHEME.equals(uri.getScheme())) {
             handleAppAction(uri);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView != null) {
+            new Handler(Looper.getMainLooper()).postDelayed(
+                () -> webView.evaluateJavascript(
+                    "window.dispatchEvent(new Event('lh:native-alarm-ready'));",
+                    null
+                ),
+                400
+            );
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+        int requestCode,
+        String[] permissions,
+        int[] grantResults
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
+            requestExactAlarmPermissionIfNeeded();
         }
     }
 
@@ -403,6 +433,43 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void enableNativeActivityAlarms() {
+        runOnUiThread(() -> {
+            ActivityAlarmReceiver.ensureChannel(this);
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(
+                    new String[] { Manifest.permission.POST_NOTIFICATIONS },
+                    NOTIFICATION_PERMISSION_REQUEST
+                );
+                return;
+            }
+            requestExactAlarmPermissionIfNeeded();
+        });
+    }
+
+    private void requestExactAlarmPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+        AlarmManager manager = (AlarmManager) getSystemService(ALARM_SERVICE);
+        if (manager == null || manager.canScheduleExactAlarms()) return;
+        try {
+            Intent intent = new Intent(
+                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                Uri.parse("package:" + getPackageName())
+            );
+            startActivity(intent);
+        } catch (Exception ignored) {
+            Toast.makeText(
+                this,
+                "Allow alarms and reminders in Android settings for exact timer alerts.",
+                Toast.LENGTH_LONG
+            ).show();
+        }
+    }
+
     private final class AppBridge {
         @JavascriptInterface
         public void retry() {
@@ -437,6 +504,26 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void openWifiSettings() {
             MainActivity.this.openWifiSettings();
+        }
+
+        @JavascriptInterface
+        public void enableActivityAlarms() {
+            enableNativeActivityAlarms();
+        }
+
+        @JavascriptInterface
+        public void syncActivityAlarms(String alarmsJson) {
+            ActivityAlarmScheduler.sync(MainActivity.this, alarmsJson);
+        }
+
+        @JavascriptInterface
+        public void cancelAllActivityAlarms() {
+            ActivityAlarmScheduler.cancelAll(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void testActivityAlarm() {
+            runOnUiThread(() -> ActivityAlarmScheduler.test(MainActivity.this));
         }
     }
 }

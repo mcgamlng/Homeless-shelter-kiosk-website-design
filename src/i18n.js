@@ -28,6 +28,8 @@ export const translations = {
     stopReading: "Stop reading",
     readingNow: "Reading this screen.",
     readoutUnavailable: "Read aloud is not available in this browser.",
+    readoutVoiceMissing:
+      "This device does not have a voice for this language. Ask staff to install the language voice in the device speech settings.",
     readoutStopped: "Reading stopped.",
     readoutLanguageOptions: "The language options are",
     readoutActivityOptions: "The options are",
@@ -70,6 +72,8 @@ export const translations = {
     stopReading: "Detener lectura",
     readingNow: "Leyendo esta pantalla.",
     readoutUnavailable: "La lectura en voz alta no está disponible en este navegador.",
+    readoutVoiceMissing:
+      "Este dispositivo no tiene una voz para este idioma. Pida al personal que instale la voz del idioma en la configuración de voz.",
     readoutStopped: "Lectura detenida.",
     readoutLanguageOptions: "Las opciones de idioma son",
     readoutActivityOptions: "Las opciones son",
@@ -112,6 +116,8 @@ export const translations = {
     stopReading: "Nres nyeem",
     readingNow: "Tab tom nyeem nplooj no.",
     readoutUnavailable: "Kev nyeem nrov tsis muaj nyob rau hauv qhov browser no.",
+    readoutVoiceMissing:
+      "Lub cuab yeej no tsis muaj lub suab Hmoob. Thov kom neeg ua hauj lwm nruab lub suab Hmoob hauv qhov chaw teeb suab.",
     readoutStopped: "Nres nyeem lawm.",
     readoutLanguageOptions: "Cov lus xaiv yog",
     readoutActivityOptions: "Cov kev xaiv yog",
@@ -154,6 +160,8 @@ export const translations = {
     stopReading: "Jooji akhriska",
     readingNow: "Shaashaddan ayaa la akhrinayaa.",
     readoutUnavailable: "Akhrinta codka kuma shaqaynayso browser-kan.",
+    readoutVoiceMissing:
+      "Qalabkan ma laha cod Soomaali ah. Fadlan shaqaalaha ka codso inay codka Soomaaliga ku rakibaan dejinta codka.",
     readoutStopped: "Akhriska waa la joojiyay.",
     readoutLanguageOptions: "Ikhtiyaarrada luqaddu waa",
     readoutActivityOptions: "Ikhtiyaarradu waa",

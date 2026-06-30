@@ -10,6 +10,7 @@ import {
   translateActivityName,
   translations
 } from "../i18n.js";
+import { chooseSpeechVoice, preferredSpeechLanguage } from "../speechVoices.js";
 import { getCustomizedKioskText, getKioskCssVariables } from "../../shared/kioskCustomization.js";
 
 const STEPS = {
@@ -21,13 +22,6 @@ const STEPS = {
 };
 const DEFAULT_IDENTITY = { firstName: "", lastName: "" };
 const CONFIRMATION_AUTO_RESET_SECONDS = 10;
-const speechLanguageCodes = {
-  en: ["en-GB", "en-US", "en"],
-  es: ["es-US", "es-ES", "es"],
-  hmn: ["hmn", "en-US", "en"],
-  so: ["so-SO", "so", "en-GB", "en"]
-};
-const britishVoiceHints = ["british", "uk", "england", "daniel", "george", "sonia", "google uk"];
 
 export default function Kiosk({ settings: shellSettings = null }) {
   const [step, setStep] = useState(STEPS.WELCOME);
@@ -154,21 +148,27 @@ export default function Kiosk({ settings: shellSettings = null }) {
     }
     const segments = buildReadoutSegments();
     if (segments.length === 0) return;
+    await refreshSpeechVoices();
+    const voice = chooseSpeechVoice(speechVoicesRef.current, language);
+    if (language !== "en" && !voice) {
+      setSpeaking(false);
+      setReadoutMessage(t.readoutVoiceMissing);
+      return;
+    }
     cancelSpeech();
     const runId = speechRunRef.current + 1;
     speechRunRef.current = runId;
     setSpeaking(true);
     setReadoutMessage(t.readingNow);
-    speakSegments(segments, runId, step === STEPS.ACTIVITIES ? 1000 : 250);
+    speakSegments(segments, runId, step === STEPS.ACTIVITIES ? 1000 : 250, voice);
   }
 
-  function speakSegments(segments, runId, pauseMs, index = 0) {
+  function speakSegments(segments, runId, pauseMs, voice, index = 0) {
     if (runId !== speechRunRef.current) return;
     const utterance = new window.SpeechSynthesisUtterance(segments[index]);
-    const voice = chooseSpeechVoice(language);
     if (voice) utterance.voice = voice;
-    utterance.lang = voice?.lang || preferredSpeechLanguage(language);
-    utterance.rate = 0.9;
+    utterance.lang = preferredSpeechLanguage(language);
+    utterance.rate = language === "en" ? 0.9 : 0.86;
     utterance.onend = () => {
       if (runId !== speechRunRef.current) return;
       if (index >= segments.length - 1) {
@@ -177,7 +177,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
         return;
       }
       speechTimerRef.current = window.setTimeout(
-        () => speakSegments(segments, runId, pauseMs, index + 1),
+        () => speakSegments(segments, runId, pauseMs, voice, index + 1),
         pauseMs
       );
     };
@@ -196,26 +196,13 @@ export default function Kiosk({ settings: shellSettings = null }) {
     }
   }
 
-  function chooseSpeechVoice(currentLanguage) {
-    const voices = speechVoicesRef.current.length
-      ? speechVoicesRef.current
-      : window.speechSynthesis.getVoices();
-    speechVoicesRef.current = voices;
-    const languageCodes = speechLanguageCodes[currentLanguage] || speechLanguageCodes.en;
-    const matchingVoices = voices.filter((voice) =>
-      languageCodes.some((code) => voice.lang?.toLowerCase().startsWith(code.toLowerCase()))
-    );
-    if (currentLanguage === "en") {
-      const britishVoice = matchingVoices.find((voice) =>
-        britishVoiceHints.some((hint) => voice.name.toLowerCase().includes(hint))
-      );
-      if (britishVoice) return britishVoice;
+  async function refreshSpeechVoices() {
+    let voices = window.speechSynthesis.getVoices();
+    if (!voices.length) {
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+      voices = window.speechSynthesis.getVoices();
     }
-    return matchingVoices[0] || voices[0] || null;
-  }
-
-  function preferredSpeechLanguage(currentLanguage) {
-    return (speechLanguageCodes[currentLanguage] || speechLanguageCodes.en)[0];
+    speechVoicesRef.current = voices;
   }
 
   function buildReadoutSegments() {

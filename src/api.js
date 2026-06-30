@@ -169,6 +169,13 @@ export const api = {
       body: JSON.stringify(activity)
     });
   },
+  translateActivityName(token, name) {
+    return request("/api/admin/activity-translations", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name })
+    });
+  },
   updateActivity(token, id, activity) {
     return request(`/api/admin/activities/${id}`, {
       method: "PATCH",

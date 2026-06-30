@@ -4098,6 +4098,12 @@ main {
   margin: 0 0 18px;
 }
 
+.dashboard-alarm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .activity-timer {
   width: fit-content;
   display: inline-flex;
@@ -4280,6 +4286,17 @@ main {
   padding: 14px;
   background: rgba(143, 205, 196, 0.18);
   border: 1px solid var(--lh-aqua);
+}
+
+.activity-translation-status {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 6px 9px;
+  border-left: 4px solid var(--lh-navy);
+  background: var(--lh-soft-aqua);
+  color: var(--lh-navy);
+  font-size: 0.82rem;
+  font-weight: 850;
 }
 
 .activity-translation-fields strong {
@@ -4799,6 +4816,11 @@ main {
   .untimed-queue-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .dashboard-alarm-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .qr-access-card {

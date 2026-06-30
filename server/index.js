@@ -31,6 +31,7 @@ import {
   verifyAdminPin
 } from "./repository.js";
 import { createAccessInfo, getWifiName, normalizeServerBaseUrl } from "./network.js";
+import { enrichActivityTranslations, translateActivityLabel } from "./translationService.js";
 
 dotenv.config();
 
@@ -61,6 +62,27 @@ app.set("trust proxy", 1);
 
 function emitDashboard() {
   io.emit("dashboard:update", getDashboardData());
+}
+
+async function repairEnglishActivityTranslations() {
+  const activities = getActivities({ includeInactive: true });
+  let changed = false;
+  for (const activity of activities) {
+    const name = String(activity.name || "")
+      .trim()
+      .toLowerCase();
+    const needsRepair = ["name_es", "name_hmn", "name_so"].some((field) => {
+      const translation = String(activity[field] || "")
+        .trim()
+        .toLowerCase();
+      return !translation || translation === name;
+    });
+    if (!needsRepair) continue;
+    const enriched = await enrichActivityTranslations(activity);
+    updateActivity(activity.id, enriched);
+    changed = true;
+  }
+  if (changed) emitDashboard();
 }
 
 function requireAdmin(req, res, next) {
@@ -360,8 +382,8 @@ app.get(
 app.post(
   "/api/admin/activities",
   requireAdmin,
-  handleRoute((req, res) => {
-    const activity = createActivity(req.body);
+  handleRoute(async (req, res) => {
+    const activity = createActivity(await enrichActivityTranslations(req.body));
     emitDashboard();
     res.status(201).json(activity);
   })
@@ -370,10 +392,18 @@ app.post(
 app.patch(
   "/api/admin/activities/:id",
   requireAdmin,
-  handleRoute((req, res) => {
-    const activity = updateActivity(req.params.id, req.body);
+  handleRoute(async (req, res) => {
+    const activity = updateActivity(req.params.id, await enrichActivityTranslations(req.body));
     emitDashboard();
     res.json(activity);
+  })
+);
+
+app.post(
+  "/api/admin/activity-translations",
+  requireAdmin,
+  handleRoute(async (req, res) => {
+    res.json(await translateActivityLabel(req.body.name));
   })
 );
 
@@ -479,4 +509,7 @@ io.on("connection", (socket) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Listening House Guest Check-In System running at http://localhost:${PORT}`);
+  repairEnglishActivityTranslations().catch((error) => {
+    console.warn(`Activity translation repair skipped: ${error.message}`);
+  });
 });

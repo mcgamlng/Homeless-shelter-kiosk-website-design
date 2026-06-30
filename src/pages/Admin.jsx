@@ -1438,6 +1438,60 @@ function ActivityRow({ activity, disabled, onSave, onDelete }) {
 }
 
 function ActivityTranslationFields({ draft, disabled, onChange }) {
+  const [translationStatus, setTranslationStatus] = useState("");
+
+  useEffect(() => {
+    const name = String(draft.name || "").trim();
+    if (disabled || !name) {
+      setTranslationStatus("");
+      return undefined;
+    }
+    const needsTranslation = ["name_es", "name_hmn", "name_so"].some((field) => {
+      const value = String(draft[field] || "").trim();
+      return !value || value.toLowerCase() === name.toLowerCase();
+    });
+    if (!needsTranslation) {
+      setTranslationStatus("");
+      return undefined;
+    }
+
+    setTranslationStatus("Translating activity name...");
+    const timer = window.setTimeout(async () => {
+      try {
+        const authToken = sessionStorage.getItem("lh-admin-token") || "";
+        const result = await api.translateActivityName(authToken, name);
+        const localTranslations = buildActivityTranslations(name);
+        onChange((current) => {
+          if (String(current.name || "").trim() !== name) return current;
+          const next = { ...current };
+          ["name_es", "name_hmn", "name_so"].forEach((field) => {
+            const currentValue = String(current[field] || "").trim();
+            const localValue = String(localTranslations[field] || "").trim();
+            const canReplace =
+              !currentValue ||
+              currentValue.toLowerCase() === name.toLowerCase() ||
+              (localValue && currentValue.toLowerCase() === localValue.toLowerCase());
+            if (canReplace && result.translations?.[field]) {
+              next[field] = result.translations[field];
+            }
+          });
+          return next;
+        });
+        setTranslationStatus(
+          result.complete
+            ? "Spanish, Hmong, and Somali translations are ready."
+            : "Some words could not be translated online. Check the fields before saving."
+        );
+      } catch {
+        setTranslationStatus(
+          "Online translation is unavailable. Check the connection or enter the translations manually."
+        );
+      }
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [disabled, draft.name, onChange]);
+
   function update(field, value) {
     onChange((current) => ({ ...current, [field]: value }));
   }
@@ -1447,9 +1501,14 @@ function ActivityTranslationFields({ draft, disabled, onChange }) {
       <div>
         <strong>Automatic kiosk translations</strong>
         <p>
-          These names appear when guests choose Spanish, Hmong, or Somali. Edit them here if a
-          shelter wants a more exact wording.
+          The system translates the English activity name into Spanish, Hmong, and Somali. You can
+          still edit any wording before saving.
         </p>
+        {translationStatus ? (
+          <span className="activity-translation-status" aria-live="polite">
+            {translationStatus}
+          </span>
+        ) : null}
       </div>
       <div className="activity-translation-grid">
         <label>

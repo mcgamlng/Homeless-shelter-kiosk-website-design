@@ -367,7 +367,7 @@ export function translateActivityName(activityOrName, language = "en") {
   const savedTranslation = getSavedActivityTranslation(activityOrName, language);
   if (savedTranslation) return savedTranslation;
 
-  return generateActivityTranslation(text, language);
+  return generateActivityTranslation(text, language) || text;
 }
 
 export function buildActivityTranslations(name) {
@@ -397,7 +397,7 @@ function generateActivityTranslation(name, language = "en") {
   if (phraseTranslation) return phraseTranslation;
 
   const wordTranslation = translateByWord(text, language);
-  return wordTranslation || text;
+  return wordTranslation || "";
 }
 
 function translateCompoundPhrase(text, language) {

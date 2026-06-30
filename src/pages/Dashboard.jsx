@@ -38,6 +38,8 @@ export default function Dashboard() {
   const [clockNow, setClockNow] = useState(Date.now());
   const [alerts, setAlerts] = useState([]);
   const alertedItems = useRef(new Set());
+  const wakeLockRef = useRef(null);
+  const nativeAlarmSetupRequested = useRef(false);
 
   useEffect(() => {
     api
@@ -79,19 +81,83 @@ export default function Dashboard() {
           minutesLeft
         };
         setAlerts((current) => [alert, ...current].slice(0, 4));
-        playAlarmTone();
-        navigator.vibrate?.([250, 120, 250]);
-        if (Notification.permission === "granted") {
-          new Notification(`${minutesLeft} minutes left: ${item.activity_name}`, {
-            body: `${item.guest_name} is nearing the end of this activity.`,
-            icon: "/icons/lh-icon-192.png"
-          });
-        }
+        showActivityNotification(alert);
       });
     };
     checkAlarms();
-    const timer = window.setInterval(checkAlarms, 15000);
+    const timer = window.setInterval(checkAlarms, 1000);
     return () => window.clearInterval(timer);
+  }, [alarmsEnabled, data]);
+
+  useEffect(() => {
+    if (!alarmsEnabled || alerts.length === 0) return undefined;
+    const soundAlarm = () => {
+      playAlarmTone();
+      navigator.vibrate?.([500, 180, 500, 180, 700]);
+    };
+    soundAlarm();
+    const timer = window.setInterval(soundAlarm, 4500);
+    return () => window.clearInterval(timer);
+  }, [alarmsEnabled, alerts.length]);
+
+  useEffect(() => {
+    if (!alarmsEnabled || !("wakeLock" in navigator)) return undefined;
+    let active = true;
+    const requestWakeLock = async () => {
+      if (!active || document.visibilityState !== "visible" || wakeLockRef.current) return;
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+        wakeLockRef.current.addEventListener("release", () => {
+          wakeLockRef.current = null;
+        });
+      } catch {
+        wakeLockRef.current = null;
+      }
+    };
+    requestWakeLock();
+    document.addEventListener("visibilitychange", requestWakeLock);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", requestWakeLock);
+      wakeLockRef.current?.release?.();
+      wakeLockRef.current = null;
+    };
+  }, [alarmsEnabled]);
+
+  useEffect(() => {
+    const bridge = window.LHCheckIn;
+    if (!bridge?.syncActivityAlarms) return undefined;
+    if (alarmsEnabled && !nativeAlarmSetupRequested.current) {
+      nativeAlarmSetupRequested.current = true;
+      bridge.enableActivityAlarms?.();
+    }
+    const syncNativeAlarms = () => {
+      if (!alarmsEnabled || !data) {
+        bridge.cancelAllActivityAlarms?.();
+        return;
+      }
+      const alarms = data.scheduledItems
+        .filter(
+          (item) =>
+            item.is_timed &&
+            item.alarm_enabled &&
+            item.status === "In Progress" &&
+            item.scheduled_end
+        )
+        .map((item) => ({
+          id: String(item.id),
+          triggerAt:
+            new Date(item.scheduled_end).getTime() -
+            Number(item.alarm_minutes_before || 5) * 60_000,
+          guestName: item.guest_name,
+          activityName: item.activity_name,
+          minutesLeft: Number(item.alarm_minutes_before || 5)
+        }));
+      bridge.syncActivityAlarms(JSON.stringify(alarms));
+    };
+    syncNativeAlarms();
+    window.addEventListener("lh:native-alarm-ready", syncNativeAlarms);
+    return () => window.removeEventListener("lh:native-alarm-ready", syncNativeAlarms);
   }, [alarmsEnabled, data]);
 
   const filteredItems = useMemo(() => {
@@ -136,18 +202,40 @@ export default function Dashboard() {
   async function enableAlarms() {
     setAlarmsEnabled(true);
     localStorage.setItem("lh-staff-timer-alerts", "on");
+    window.LHCheckIn?.enableActivityAlarms?.();
     if ("Notification" in window && Notification.permission === "default") {
       await Notification.requestPermission();
     }
     playAlarmTone(0.04);
-    setMessage("Staff timer alerts are on for this device.");
+    setMessage(
+      "Staff timer alerts are on. Keep this dashboard open on iPhone or iPad; the Android app also schedules a system alarm."
+    );
   }
 
   function disableAlarms() {
     setAlarmsEnabled(false);
     localStorage.removeItem("lh-staff-timer-alerts");
     setAlerts([]);
+    window.LHCheckIn?.cancelAllActivityAlarms?.();
+    nativeAlarmSetupRequested.current = false;
     setMessage("Staff timer alerts are off for this device.");
+  }
+
+  function testAlarm() {
+    const testAlert = {
+      id: `test-${Date.now()}`,
+      guestName: "Test guest",
+      activityName: "Timer alarm test",
+      minutesLeft: 5
+    };
+    setAlerts((current) => [testAlert, ...current].slice(0, 4));
+    showActivityNotification(testAlert);
+    window.LHCheckIn?.testActivityAlarm?.();
+    setMessage("Test alarm started. Press Dismiss alarm to stop the repeating website sound.");
+  }
+
+  function dismissAlarm(id) {
+    setAlerts((current) => current.filter((item) => item.id !== id));
   }
 
   async function updateStatus(id, status) {
@@ -225,13 +313,21 @@ export default function Dashboard() {
           <p>Today&apos;s services organized by guest name, activity, time, and status.</p>
         </div>
         <div className="dashboard-heading-actions">
-          <button
-            className="secondary-button"
-            onClick={alarmsEnabled ? disableAlarms : enableAlarms}
-          >
-            {alarmsEnabled ? <BellRing size={18} /> : <Bell size={18} />}
-            {alarmsEnabled ? "Timer alerts on" : "Turn on timer alerts"}
-          </button>
+          <div className="dashboard-alarm-actions">
+            <button
+              className="secondary-button"
+              onClick={alarmsEnabled ? disableAlarms : enableAlarms}
+            >
+              {alarmsEnabled ? <BellRing size={18} /> : <Bell size={18} />}
+              {alarmsEnabled ? "Timer alerts on" : "Turn on timer alerts"}
+            </button>
+            {alarmsEnabled ? (
+              <button className="secondary-button" onClick={testAlarm}>
+                <Bell size={18} />
+                Test alarm
+              </button>
+            ) : null}
+          </div>
           <button className="secondary-button" onClick={() => setShowReset((value) => !value)}>
             <RotateCcw size={18} />
             New day reset
@@ -250,12 +346,7 @@ export default function Dashboard() {
                 </strong>
                 <span>{alert.guestName} is nearing the end of this activity.</span>
               </div>
-              <button
-                onClick={() =>
-                  setAlerts((current) => current.filter((item) => item.id !== alert.id))
-                }
-                aria-label="Dismiss activity alarm"
-              >
+              <button onClick={() => dismissAlarm(alert.id)} aria-label="Dismiss alarm">
                 <X size={18} />
               </button>
             </div>
@@ -763,17 +854,60 @@ function findCheckIn(data, checkInId) {
 function playAlarmTone(volume = 0.16) {
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const context = new AudioContext();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.frequency.value = 880;
-    gain.gain.value = volume;
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.22);
+    if (!AudioContext) return;
+    const context = getAlarmAudioContext(AudioContext);
+    context.resume?.();
+    [0, 0.32, 0.64].forEach((delay, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const start = context.currentTime + delay;
+      oscillator.frequency.value = index === 1 ? 740 : 920;
+      gain.gain.setValueAtTime(volume, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.24);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.25);
+    });
   } catch {
     // In-app and vibration alerts still work when audio is unavailable.
+  }
+}
+
+let alarmAudioContext = null;
+
+function getAlarmAudioContext(AudioContext) {
+  if (!alarmAudioContext || alarmAudioContext.state === "closed") {
+    alarmAudioContext = new AudioContext();
+  }
+  return alarmAudioContext;
+}
+
+async function showActivityNotification(alert) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const title = `${alert.minutesLeft} minutes left: ${alert.activityName}`;
+  const options = {
+    body: `${alert.guestName} is nearing the end of this activity.`,
+    icon: "/icons/lh-icon-192.png",
+    badge: "/icons/lh-icon-192.png",
+    tag: `activity-alarm-${alert.id}`,
+    renotify: true,
+    requireInteraction: true,
+    vibrate: [500, 180, 500]
+  };
+  try {
+    if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, options);
+      return;
+    }
+    new Notification(title, options);
+  } catch {
+    try {
+      new Notification(title, options);
+    } catch {
+      // The visible repeating alert remains available when notifications are blocked.
+    }
   }
 }
 

@@ -24,7 +24,7 @@ test("custom activities save translated names and carry them into check-ins", as
       active: true
     });
 
-    assert.equal(activity.name_es, "Habitacion privada de ducha");
+    assert.equal(activity.name_es, "Habitación privada de ducha");
     assert.equal(activity.name_hmn, "Chav da dej ntiag tug");
     assert.equal(activity.name_so, "Qol qubeys gaar ah");
 

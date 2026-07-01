@@ -32,6 +32,14 @@ import {
 } from "./repository.js";
 import { createAccessInfo, getWifiName, normalizeServerBaseUrl } from "./network.js";
 import { enrichActivityTranslations, translateActivityLabel } from "./translationService.js";
+import { buildActivityTranslations } from "../shared/activityTranslations.js";
+import {
+  createHmongSpeechAudio,
+  createHmongSpeechPlan,
+  getHmongSyllablePath,
+  getSpanishSpeechAudio,
+  getSpeechStatus
+} from "./speechService.js";
 
 dotenv.config();
 
@@ -71,18 +79,34 @@ async function repairEnglishActivityTranslations() {
     const name = String(activity.name || "")
       .trim()
       .toLowerCase();
+    const localTranslations = buildActivityTranslations(activity.name);
+    const repaired = { ...activity };
     const needsRepair = ["name_es", "name_hmn", "name_so"].some((field) => {
       const translation = String(activity[field] || "")
         .trim()
         .toLowerCase();
-      return !translation || translation === name;
+      const expected = String(localTranslations[field] || "").trim();
+      const isLegacyAccentlessSpanish =
+        field === "name_es" &&
+        expected &&
+        normalizeWithoutDiacritics(translation) === normalizeWithoutDiacritics(expected) &&
+        translation !== expected.toLowerCase();
+      if (isLegacyAccentlessSpanish) repaired[field] = expected;
+      return !translation || translation === name || isLegacyAccentlessSpanish;
     });
     if (!needsRepair) continue;
-    const enriched = await enrichActivityTranslations(activity);
+    const enriched = await enrichActivityTranslations(repaired);
     updateActivity(activity.id, enriched);
     changed = true;
   }
   if (changed) emitDashboard();
+}
+
+function normalizeWithoutDiacritics(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
 }
 
 function requireAdmin(req, res, next) {
@@ -181,6 +205,48 @@ app.get(
 app.get("/api/settings", (_req, res) => {
   res.json(getSettings());
 });
+
+app.get("/api/speech/status", (_req, res) => {
+  res.json(getSpeechStatus());
+});
+
+app.get(
+  "/api/speech/hmong-plan",
+  handleRoute((req, res) => {
+    res.json(createHmongSpeechPlan(req.query.text));
+  })
+);
+
+app.get(
+  "/api/speech/hmong",
+  handleRoute((req, res) => {
+    const audio = createHmongSpeechAudio(req.query.text);
+    res.setHeader("Content-Type", "audio/wav");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(audio);
+  })
+);
+
+app.get("/api/speech/hmong-syllable/:token", (req, res) => {
+  const filePath = getHmongSyllablePath(req.params.token);
+  if (!filePath) {
+    res.status(404).json({ error: "Hmong speech sample not found." });
+    return;
+  }
+  res.setHeader("Content-Type", "audio/wav");
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.sendFile(filePath);
+});
+
+app.get(
+  "/api/speech/spanish",
+  handleRoute(async (req, res) => {
+    const audio = await getSpanishSpeechAudio(req.query.text);
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(audio);
+  })
+);
 
 app.post(
   "/api/check-ins",

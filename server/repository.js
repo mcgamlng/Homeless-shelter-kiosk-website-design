@@ -31,6 +31,18 @@ const PIN_HASH_ITERATIONS = 100000;
 const KIOSK_COLOR_KEY_SET = new Set(KIOSK_COLOR_KEYS);
 const KIOSK_CUSTOMIZATION_KEY_SET = new Set(KIOSK_CUSTOMIZATION_KEYS);
 const NETWORK_URL_KEYS = new Set(["preferred_local_url", "public_base_url"]);
+const LOCAL_DATE_FORMATTER = new Intl.DateTimeFormat([], {
+  year: "numeric",
+  month: "long",
+  day: "numeric"
+});
+const LOCAL_DATE_TIME_FORMATTER = new Intl.DateTimeFormat([], {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "numeric",
+  minute: "2-digit"
+});
 
 function rows(statement, params = []) {
   return db.prepare(statement).all(...params);
@@ -1220,16 +1232,23 @@ export function seedDemoCheckIns() {
 export function getDailyTotals() {
   ensureCurrentDashboardDay();
   const { dashboardDayStart, checkInIdFloor } = getCurrentDashboardDayContext();
+  const currentDayWhere = checkInIdFloor > 0 ? "ci.id > ?" : "ci.checked_in_at >= ?";
+  const currentDayParameter =
+    checkInIdFloor > 0 ? checkInIdFloor : formatDateKey(dashboardDayStart);
   const checkInsToday = rows(
     `SELECT ci.id, ci.status, ci.checked_in_at, g.first_name, g.last_name
      FROM check_ins ci
-     JOIN guests g ON g.id = ci.guest_id`
-  ).filter((row) => isInCurrentDashboardDay(row, dashboardDayStart, checkInIdFloor));
+     JOIN guests g ON g.id = ci.guest_id
+     WHERE ${currentDayWhere}`,
+    [currentDayParameter]
+  );
   const itemsToday = rows(
     `SELECT sai.activity_name, sai.status, sai.check_in_id, ci.checked_in_at
      FROM scheduled_activity_items sai
-     JOIN check_ins ci ON ci.id = sai.check_in_id`
-  ).filter((row) => isInCurrentDashboardDay(row, dashboardDayStart, checkInIdFloor));
+     JOIN check_ins ci ON ci.id = sai.check_in_id
+     WHERE ${currentDayWhere}`,
+    [currentDayParameter]
+  );
   const activityCounts = new Map();
   itemsToday.forEach((item) => {
     activityCounts.set(item.activity_name, (activityCounts.get(item.activity_name) || 0) + 1);
@@ -1250,6 +1269,7 @@ export function getDailyTotals() {
 
 export function getAnalyticsReport({ period = "day", date } = {}) {
   const bounds = getReportBounds(period, date);
+  const rangeParameters = [formatDateKey(bounds.start), formatDateKey(bounds.end)];
   const details = rows(
     `SELECT
        sai.id, sai.activity_name, sai.status, sai.scheduled_start, sai.scheduled_end,
@@ -1258,24 +1278,18 @@ export function getAnalyticsReport({ period = "day", date } = {}) {
      FROM scheduled_activity_items sai
      JOIN check_ins ci ON ci.id = sai.check_in_id
      JOIN guests g ON g.id = ci.guest_id
-     ORDER BY datetime(ci.checked_in_at), sai.activity_name`
-  )
-    .filter((row) => {
-      const checkedInAt = parseStoredDate(row.checked_in_at);
-      return checkedInAt >= bounds.start && checkedInAt < bounds.end;
-    })
-    .map((row) => normalizeScheduledItem(attachGuestSummary(row)));
+     WHERE ci.checked_in_at >= ? AND ci.checked_in_at < ?
+     ORDER BY datetime(ci.checked_in_at), sai.activity_name`,
+    rangeParameters
+  ).map((row) => normalizeScheduledItem(attachGuestSummary(row)));
   const checkIns = rows(
     `SELECT ci.*, g.first_name, g.last_name
      FROM check_ins ci
      JOIN guests g ON g.id = ci.guest_id
-     ORDER BY datetime(ci.checked_in_at), g.last_name, g.first_name`
-  )
-    .filter((row) => {
-      const checkedInAt = parseStoredDate(row.checked_in_at);
-      return checkedInAt >= bounds.start && checkedInAt < bounds.end;
-    })
-    .map(attachGuestSummary);
+     WHERE ci.checked_in_at >= ? AND ci.checked_in_at < ?
+     ORDER BY datetime(ci.checked_in_at), g.last_name, g.first_name`,
+    rangeParameters
+  ).map(attachGuestSummary);
   const activityMap = new Map();
   const dayMap = new Map();
   const peopleMap = new Map();
@@ -1720,21 +1734,11 @@ function formatDateKey(date) {
 }
 
 function formatLocalDateOnly(date) {
-  return new Intl.DateTimeFormat([], {
-    year: "numeric",
-    month: "long",
-    day: "numeric"
-  }).format(date);
+  return LOCAL_DATE_FORMATTER.format(date);
 }
 
 function formatLocalDateTime(date) {
-  return new Intl.DateTimeFormat([], {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(date);
+  return LOCAL_DATE_TIME_FORMATTER.format(date);
 }
 
 function saveAdminPin(pin) {

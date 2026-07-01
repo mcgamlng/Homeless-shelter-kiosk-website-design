@@ -40,6 +40,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
   const speechTimerRef = useRef(null);
   const speechRunRef = useRef(0);
   const speechVoicesRef = useRef([]);
+  const speechAudioRef = useRef(null);
 
   const baseTranslations = { ...translations.en, ...(translations[language] || {}) };
   const t = useMemo(
@@ -122,6 +123,12 @@ export default function Kiosk({ settings: shellSettings = null }) {
     speechRunRef.current += 1;
     if (speechTimerRef.current) window.clearTimeout(speechTimerRef.current);
     speechTimerRef.current = null;
+    if (speechAudioRef.current) {
+      speechAudioRef.current.pause();
+      speechAudioRef.current.removeAttribute("src");
+      speechAudioRef.current.load();
+      speechAudioRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
@@ -134,11 +141,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
   }
 
   async function readCurrentScreen() {
-    if (
-      typeof window === "undefined" ||
-      !("speechSynthesis" in window) ||
-      !("SpeechSynthesisUtterance" in window)
-    ) {
+    if (typeof window === "undefined") {
       setReadoutMessage(t.readoutUnavailable);
       return;
     }
@@ -148,14 +151,90 @@ export default function Kiosk({ settings: shellSettings = null }) {
     }
     const segments = buildReadoutSegments();
     if (segments.length === 0) return;
-    await refreshSpeechVoices();
-    const voice = chooseSpeechVoice(speechVoicesRef.current, language);
+    const pauseMs = step === STEPS.ACTIVITIES ? 1000 : 250;
     cancelSpeech();
     const runId = speechRunRef.current + 1;
     speechRunRef.current = runId;
     setSpeaking(true);
     setReadoutMessage(t.readingNow);
-    speakSegments(segments, runId, step === STEPS.ACTIVITIES ? 1000 : 250, voice);
+
+    if (language === "hmn") {
+      if (!("Audio" in window)) {
+        stopReadout(t.readoutUnavailable);
+        return;
+      }
+      const queue = segments.map((segment) => ({
+        url: `/api/speech/hmong?text=${encodeURIComponent(segment)}`,
+        pauseAfter: pauseMs
+      }));
+      playAudioQueue(queue, runId, 0, 1);
+      return;
+    }
+    if (language === "es") {
+      if (!("Audio" in window)) {
+        stopReadout(t.readoutUnavailable);
+        return;
+      }
+      const queue = segments.map((segment) => ({
+        url: `/api/speech/spanish?text=${encodeURIComponent(segment)}`,
+        pauseAfter: pauseMs
+      }));
+      playAudioQueue(queue, runId, 0, 1);
+      return;
+    }
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+      stopReadout(t.readoutUnavailable);
+      return;
+    }
+    await refreshSpeechVoices();
+    const voice = chooseSpeechVoice(speechVoicesRef.current, language);
+    speakSegments(segments, runId, pauseMs, voice);
+  }
+
+  function playAudioQueue(queue, runId, index, playbackRate) {
+    if (runId !== speechRunRef.current) return;
+    if (index >= queue.length) {
+      speechAudioRef.current = null;
+      setSpeaking(false);
+      setReadoutMessage("");
+      return;
+    }
+    const audio = new window.Audio(queue[index].url);
+    speechAudioRef.current = audio;
+    audio.preload = "auto";
+    audio.playbackRate = playbackRate;
+    audio.onended = () => {
+      if (runId !== speechRunRef.current) return;
+      speechAudioRef.current = null;
+      speechTimerRef.current = window.setTimeout(
+        () => playAudioQueue(queue, runId, index + 1, playbackRate),
+        queue[index].pauseAfter
+      );
+    };
+    audio.onerror = () => {
+      if (runId !== speechRunRef.current) return;
+      speechAudioRef.current = null;
+      if (language === "es" && "speechSynthesis" in window) {
+        refreshSpeechVoices().then(() => {
+          if (runId !== speechRunRef.current) return;
+          const fallbackVoice = chooseSpeechVoice(speechVoicesRef.current, language);
+          speakSegments(
+            buildReadoutSegments(),
+            runId,
+            step === STEPS.ACTIVITIES ? 1000 : 250,
+            fallbackVoice
+          );
+        });
+        return;
+      }
+      setSpeaking(false);
+      setReadoutMessage(language === "hmn" ? t.readoutVoiceMissing : t.readoutUnavailable);
+    };
+    audio.play().catch(() => {
+      if (runId !== speechRunRef.current) return;
+      setSpeaking(false);
+      setReadoutMessage(t.readoutUnavailable);
+    });
   }
 
   function speakSegments(segments, runId, pauseMs, voice, index = 0) {

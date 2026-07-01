@@ -29,7 +29,7 @@ export const translations = {
     readingNow: "Reading this screen.",
     readoutUnavailable: "Read aloud is not available in this browser.",
     readoutVoiceMissing:
-      "This device does not have a voice for this language. Ask staff to install the language voice in the device speech settings.",
+      "The local Hmong voice pack is not installed. Please ask staff to run the Hmong voice setup.",
     readoutStopped: "Reading stopped.",
     readoutLanguageOptions: "The language options are",
     readoutActivityOptions: "The options are",
@@ -117,7 +117,7 @@ export const translations = {
     readingNow: "Tab tom nyeem nplooj no.",
     readoutUnavailable: "Kev nyeem nrov tsis muaj nyob rau hauv qhov browser no.",
     readoutVoiceMissing:
-      "Lub cuab yeej no tsis muaj lub suab Hmoob. Thov kom neeg ua hauj lwm nruab lub suab Hmoob hauv qhov chaw teeb suab.",
+      "Lub suab Hmoob tseem tsis tau nruab. Thov neeg ua hauj lwm teeb lub suab Hmoob.",
     readoutStopped: "Nres nyeem lawm.",
     readoutLanguageOptions: "Cov lus xaiv yog",
     readoutActivityOptions: "Cov kev xaiv yog",

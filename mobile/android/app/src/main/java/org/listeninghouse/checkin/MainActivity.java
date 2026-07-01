@@ -522,6 +522,11 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void dismissActivityAlarm(String alarmId) {
+            ActivityAlarmScheduler.dismiss(MainActivity.this, alarmId);
+        }
+
+        @JavascriptInterface
         public void testActivityAlarm() {
             runOnUiThread(() -> ActivityAlarmScheduler.test(MainActivity.this));
         }

@@ -41,6 +41,7 @@ export default function Dashboard() {
   const [clockNow, setClockNow] = useState(Date.now());
   const [alerts, setAlerts] = useState([]);
   const alertedItems = useRef(new Set());
+  const dismissedAlarmItems = useRef(new Set());
   const startingSoonItems = useRef(new Set());
   const wakeLockRef = useRef(null);
   const nativeAlarmSetupRequested = useRef(false);
@@ -74,7 +75,12 @@ export default function Dashboard() {
         }
         const minutesLeft = Math.ceil((new Date(item.scheduled_end).getTime() - now) / 60000);
         const threshold = Number(item.alarm_minutes_before || 5);
-        if (minutesLeft <= 0 || minutesLeft > threshold || alertedItems.current.has(item.id)) {
+        if (
+          minutesLeft <= 0 ||
+          minutesLeft > threshold ||
+          alertedItems.current.has(item.id) ||
+          dismissedAlarmItems.current.has(item.id)
+        ) {
           return;
         }
         alertedItems.current.add(item.id);
@@ -82,7 +88,9 @@ export default function Dashboard() {
           id: item.id,
           guestName: item.guest_name,
           activityName: item.activity_name,
-          minutesLeft
+          minutesLeft,
+          notificationTag: `activity-alarm-${item.id}`,
+          nativeAlarmId: `end-${item.id}`
         };
         setAlerts((current) => [alert, ...current].slice(0, 4));
         showActivityNotification(alert);
@@ -170,6 +178,7 @@ export default function Dashboard() {
           ];
         }
         if (item.status === "In Progress" && item.scheduled_end) {
+          if (dismissedAlarmItems.current.has(item.id)) return [];
           const minutesLeft = Number(item.alarm_minutes_before || 5);
           return [
             {
@@ -252,33 +261,50 @@ export default function Dashboard() {
     setAlarmsEnabled(false);
     localStorage.removeItem("lh-staff-timer-alerts");
     setAlerts([]);
+    stopAlarmFeedback();
+    dismissAllActivityNotifications();
     window.LHCheckIn?.cancelAllActivityAlarms?.();
     nativeAlarmSetupRequested.current = false;
     setMessage("Staff alerts are off for this device.");
   }
 
   function testAlarm() {
+    const testId = `test-${Date.now()}`;
     const testAlert = {
-      id: `test-${Date.now()}`,
+      id: testId,
       guestName: "Test guest",
       activityName: "Timer alarm test",
-      minutesLeft: 5
+      minutesLeft: 5,
+      notificationTag: `activity-alarm-${testId}`,
+      nativeAlarmId: "test"
     };
     setAlerts((current) => [testAlert, ...current].slice(0, 4));
     showActivityNotification(testAlert);
     window.LHCheckIn?.testActivityAlarm?.();
-    setMessage("Test alarm started. Press Dismiss alarm to stop the repeating website sound.");
+    setMessage("Test alarm started. Press Stop alarm to silence it.");
   }
 
-  function dismissAlarm(id) {
-    setAlerts((current) => current.filter((item) => item.id !== id));
+  function dismissAlarm(alert) {
+    dismissedAlarmItems.current.add(alert.id);
+    alertedItems.current.add(alert.id);
+    setAlerts((current) => current.filter((item) => item.id !== alert.id));
+    stopAlarmFeedback();
+    dismissDeviceNotification(alert.notificationTag);
+    window.LHCheckIn?.dismissActivityAlarm?.(alert.nativeAlarmId);
+    setMessage(`${alert.activityName} alarm stopped.`);
   }
 
   async function updateStatus(id, status) {
     setMessage("");
     try {
       await api.updateStatus(staffToken, id, status);
-      if (status === "In Progress") alertedItems.current.delete(Number(id));
+      if (status === "In Progress") {
+        alertedItems.current.delete(Number(id));
+        dismissedAlarmItems.current.delete(Number(id));
+      } else {
+        const activeAlert = alerts.find((alert) => Number(alert.id) === Number(id));
+        if (activeAlert) dismissAlarm(activeAlert);
+      }
     } catch (err) {
       setMessage(err.message);
     }
@@ -382,8 +408,13 @@ export default function Dashboard() {
                 </strong>
                 <span>{alert.guestName} is nearing the end of this activity.</span>
               </div>
-              <button onClick={() => dismissAlarm(alert.id)} aria-label="Dismiss alarm">
+              <button
+                className="stop-alarm-button"
+                onClick={() => dismissAlarm(alert)}
+                aria-label={`Stop ${alert.activityName} alarm`}
+              >
                 <X size={18} />
+                Stop alarm
               </button>
             </div>
           ))}
@@ -980,6 +1011,7 @@ function playAlarmTone(volume = 0.16) {
 }
 
 let alarmAudioContext = null;
+const activeDeviceNotifications = new Map();
 
 function getAlarmAudioContext(AudioContext) {
   if (!alarmAudioContext || alarmAudioContext.state === "closed") {
@@ -988,11 +1020,50 @@ function getAlarmAudioContext(AudioContext) {
   return alarmAudioContext;
 }
 
+function stopAlarmFeedback() {
+  navigator.vibrate?.(0);
+  if (alarmAudioContext && alarmAudioContext.state !== "closed") {
+    alarmAudioContext.close().catch(() => {});
+  }
+  alarmAudioContext = null;
+}
+
+async function dismissDeviceNotification(tag) {
+  if (!tag) return;
+  const notification = activeDeviceNotifications.get(tag);
+  notification?.close?.();
+  activeDeviceNotifications.delete(tag);
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const notifications = await registration.getNotifications({ tag });
+    notifications.forEach((item) => item.close());
+  } catch {
+    // The visible dashboard alarm is already stopped.
+  }
+}
+
+function dismissAllActivityNotifications() {
+  for (const [tag, notification] of activeDeviceNotifications) {
+    if (tag.startsWith("activity-")) notification.close?.();
+  }
+  activeDeviceNotifications.clear();
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.ready
+    .then((registration) => registration.getNotifications())
+    .then((notifications) => {
+      notifications
+        .filter((notification) => notification.tag.startsWith("activity-"))
+        .forEach((notification) => notification.close());
+    })
+    .catch(() => {});
+}
+
 async function showActivityNotification(alert) {
   return showDeviceNotification({
     title: `${alert.minutesLeft} minutes left: ${alert.activityName}`,
     body: `${alert.guestName} is nearing the end of this activity.`,
-    tag: `activity-alarm-${alert.id}`,
+    tag: alert.notificationTag || `activity-alarm-${alert.id}`,
     requireInteraction: true
   });
 }
@@ -1023,10 +1094,14 @@ async function showDeviceNotification({ title, body, tag, requireInteraction = f
       await registration.showNotification(title, options);
       return;
     }
-    new Notification(title, options);
+    const notification = new Notification(title, options);
+    activeDeviceNotifications.set(tag, notification);
+    notification.onclose = () => activeDeviceNotifications.delete(tag);
   } catch {
     try {
-      new Notification(title, options);
+      const notification = new Notification(title, options);
+      activeDeviceNotifications.set(tag, notification);
+      notification.onclose = () => activeDeviceNotifications.delete(tag);
     } catch {
       // The visible repeating alert remains available when notifications are blocked.
     }

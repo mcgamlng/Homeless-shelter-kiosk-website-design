@@ -25,6 +25,7 @@ npm --version
 cd /path/to/listening-house-project
 npm install
 npm run build
+npm run speech:install-hmong
 ```
 
 Create `.env`:

@@ -71,6 +71,23 @@ final class ActivityAlarmScheduler {
             .apply();
     }
 
+    static void dismiss(Context context, String id) {
+        if (id == null || id.length() == 0) return;
+        cancel(context, id);
+        ActivityAlarmReceiver.dismissNotification(context, id);
+        Set<String> ids = new HashSet<>(
+            context
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getStringSet(KEY_IDS, new HashSet<>())
+        );
+        ids.remove(id);
+        context
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putStringSet(KEY_IDS, ids)
+            .apply();
+    }
+
     static void test(Context context) {
         ActivityAlarmReceiver.showNotification(
             context,

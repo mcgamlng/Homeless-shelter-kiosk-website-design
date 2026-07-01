@@ -16,9 +16,14 @@ import android.os.Build;
 
 public class ActivityAlarmReceiver extends BroadcastReceiver {
     static final String CHANNEL_ID = "listening_house_activity_alarms";
+    static final String ACTION_DISMISS = "org.listeninghouse.checkin.DISMISS_ACTIVITY_ALARM";
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        if (ACTION_DISMISS.equals(intent.getAction())) {
+            dismissNotification(context, intent.getStringExtra("alarm_id"));
+            return;
+        }
         showNotification(
             context,
             intent.getStringExtra("alarm_id"),
@@ -77,6 +82,15 @@ public class ActivityAlarmReceiver extends BroadcastReceiver {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
+        Intent dismissIntent = new Intent(context, ActivityAlarmReceiver.class);
+        dismissIntent.setAction(ACTION_DISMISS);
+        dismissIntent.putExtra("alarm_id", alarmId);
+        PendingIntent dismissPendingIntent = PendingIntent.getBroadcast(
+            context,
+            notificationId(alarmId) + 1,
+            dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
         String safeActivity = activityName == null || activityName.length() == 0
             ? "Activity"
             : activityName;
@@ -96,17 +110,25 @@ public class ActivityAlarmReceiver extends BroadcastReceiver {
             .setContentText(safeBody)
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_ALARM)
             .setPriority(Notification.PRIORITY_MAX)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setVibrate(new long[] { 0, 500, 180, 500, 180, 700 })
-            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
+            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop alarm", dismissPendingIntent);
 
         NotificationManager manager =
             (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager != null) {
             manager.notify(notificationId(alarmId), builder.build());
         }
+    }
+
+    static void dismissNotification(Context context, String alarmId) {
+        NotificationManager manager =
+            (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) manager.cancel(notificationId(alarmId));
     }
 
     private static int notificationId(String alarmId) {

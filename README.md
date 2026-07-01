@@ -52,6 +52,11 @@ without a large database server or local AI model.
 An 8 GB Raspberry Pi is only useful if the same Pi will also run unrelated software or many browser
 tabs. It is not required for this system.
 
+Measured storage, live-day, and report results are in
+[`PERFORMANCE_AND_CAPACITY.md`](PERFORMANCE_AND_CAPACITY.md). A detailed explanation of startup,
+manual operation, architecture, data flow, and the purpose of the main code files is in
+[`SYSTEM_GUIDE.md`](SYSTEM_GUIDE.md).
+
 ## Physical Kiosk Enclosure
 
 This repository focuses on the software. A physical kiosk model for the original Listening House
@@ -126,18 +131,27 @@ alternative translation endpoint.
 
 ## Read-Aloud Support
 
-The kiosk read-aloud button uses the browser's built-in speech engine. It works best in Chrome,
-Edge, or Chromium with system speech voices installed. Some embedded browsers, including the Codex
-in-app browser, do not expose speech voices; in that case the kiosk shows a clear unavailable
-message instead of silently failing.
+The kiosk uses a different speech path for each language so it does not force unsupported languages
+through an English voice:
 
-The kiosk prefers natural or neural voices that match the chosen language and uses language-specific
-pacing and pitch. Hmong accepts both `hmn` and Microsoft Hmong Daw (`mww`) voice identifiers and can
-use a device-provided multilingual voice. If a device does not list a Hmong voice, the kiosk still
-requests Hmong from the platform speech engine instead of disabling the readout.
+- English and Somali use the best matching natural system voice.
+- Spanish uses a smoother online Spanish audio service. If the internet is unavailable, it falls
+  back to the best Spanish voice installed on the device.
+- Hmong uses a local native-recorded White Hmong RPA voice pack. It works without internet and does
+  not depend on browser or operating-system Hmong support. The server joins the recorded syllables
+  into one sentence with a short crossfade instead of pausing between every word.
 
-Voice quality depends on the speech voices installed on the device. For the clearest native
-pronunciation, install English, Spanish, Hmong Daw, and Somali speech support in the device settings.
+Install the Hmong voice once on each server:
+
+```powershell
+npm run speech:install-hmong
+```
+
+The download is about 248 MB and installs 6,200+ speech samples under the ignored `data/` folder.
+On Raspberry Pi OS, install `unzip` first with `sudo apt install unzip`. The voice pack is downloaded
+from Yuhalu and remains subject to Yuhalu's separate non-commercial terms; it is not part of this
+project's MIT-licensed source code. See `THIRD_PARTY_NOTICES.md`.
+
 The confirmation readout does not send or speak the guest's name.
 
 ## Activity Rules
@@ -180,6 +194,9 @@ Use **Test alarm** after enabling alerts to confirm the device volume and permis
 for notification and exact-alarm permission and can alert while the app is backgrounded. On iPhone
 and iPad, keep the installed web app open because websites cannot create entries in Apple Clock or
 guarantee background execution after the web app is fully closed.
+
+Press **Stop alarm** on the dashboard warning to stop its sound and vibration and dismiss its device
+notification. The Android notification also includes its own **Stop alarm** action.
 
 ## Local Network Access
 

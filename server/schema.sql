@@ -89,3 +89,13 @@ CREATE TABLE IF NOT EXISTS status_history (
   changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (scheduled_item_id) REFERENCES scheduled_activity_items(id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_check_ins_status ON check_ins(status);
+CREATE INDEX IF NOT EXISTS idx_check_ins_guest ON check_ins(guest_id);
+CREATE INDEX IF NOT EXISTS idx_check_ins_checked_in_at ON check_ins(checked_in_at);
+CREATE INDEX IF NOT EXISTS idx_guests_name ON guests(last_name, first_name);
+CREATE INDEX IF NOT EXISTS idx_scheduled_check_in ON scheduled_activity_items(check_in_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_guest ON scheduled_activity_items(guest_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_status ON scheduled_activity_items(status);
+CREATE INDEX IF NOT EXISTS idx_scheduled_start ON scheduled_activity_items(scheduled_start);
+CREATE INDEX IF NOT EXISTS idx_status_history_changed_at ON status_history(changed_at);

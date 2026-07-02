@@ -199,6 +199,13 @@ once, and permits different guests to use different activity columns simultaneou
 
 Untimed activities receive no calendar time and appear in the untimed queue.
 
+For timed activities, the scheduler compares all of a guest's remaining selected services and picks
+the earliest legal lane. This allows an open private-room, laundry, or meal lane to be used while
+another selected service is occupied. A five-minute buffer applies between that guest's services,
+but activity lanes do not receive an unnecessary buffer between different guests. Waiting items are
+rebalanced after new check-ins, final status changes, and server startup when the remaining workday
+has enough capacity. In Progress items stay fixed.
+
 Staff can move a block. The repair functions then move affected items to preserve no-overlap,
 activity hours, workday hours, durations, and buffers.
 
@@ -231,8 +238,10 @@ For Hmong, `server/speechService.js`:
 
 1. Converts numbers up to 100 into Hmong words.
 2. Finds the corresponding native-recorded Yuhalu samples.
-3. blends adjacent samples with an 18 ms crossfade.
-4. Returns one continuous WAV for the sentence.
+3. Trims the isolated-recording tail from words that continue into another word.
+4. Removes the isolated-recording lead-in and tail at internal word boundaries.
+5. Blends adjacent samples with an 85 ms equal-power crossfade so volume remains steady.
+6. Preserves the complete final word and returns one continuous WAV for the sentence.
 
 The browser therefore plays one sentence, not one separately loaded word at a time. Activity cards
 still use a deliberate one-second pause between cards so a listener can distinguish the choices.

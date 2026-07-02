@@ -21,8 +21,6 @@ import { createDashboardSocket } from "../socket.js";
 import { formatTime, minutesBetween, STATUSES } from "../utils.js";
 
 const PIXELS_PER_MINUTE = 3.1;
-const COMPACT_BLOCK_MIN_HEIGHT = 76;
-const COMPACT_BLOCK_MAX_HEIGHT = 96;
 const DEFAULT_WORKDAY_START = "08:00";
 const DEFAULT_WORKDAY_END = "16:00";
 
@@ -592,11 +590,10 @@ export default function Dashboard() {
                           <CalendarBlock
                             calendarStart={calendar.start}
                             checkIn={findCheckIn(data, item.check_in_id)}
-                            height={Math.max(
-                              42,
+                            height={
                               minutesBetween(item.scheduled_start, item.scheduled_end) *
-                                PIXELS_PER_MINUTE
-                            )}
+                              PIXELS_PER_MINUTE
+                            }
                             item={item}
                             nowMs={clockNow}
                             key={item.id}
@@ -639,7 +636,7 @@ function StaffActionCenter({ items, nowMs, onStatus }) {
         </div>
         <span className="staff-action-count">
           {items.length} ready
-          {inProgressCount ? ` • ${inProgressCount} in progress` : ""}
+          {inProgressCount ? ` / ${inProgressCount} in progress` : ""}
         </span>
       </div>
       {items.length === 0 ? (
@@ -652,7 +649,10 @@ function StaffActionCenter({ items, nowMs, onStatus }) {
           {items.map((item) => (
             <article className="staff-action-card" key={item.id}>
               <div className="staff-action-person">
-                <strong>{item.guest_name}</strong>
+                <strong>
+                  <DailyPersonNumber item={item} />
+                  {item.guest_name}
+                </strong>
                 <span>
                   <MapPin size={15} />
                   {item.activity_name}
@@ -660,10 +660,13 @@ function StaffActionCenter({ items, nowMs, onStatus }) {
               </div>
               <div className="staff-action-time">
                 <strong>{describeActionTiming(item, nowMs)}</strong>
-                <span>
-                  <Clock3 size={15} />
-                  {formatTime(item.scheduled_start)}
-                </span>
+                <div className="staff-action-window">
+                  <span>
+                    <Clock3 size={15} />
+                    Starts {formatTime(item.scheduled_start)}
+                  </span>
+                  <span>Ends {formatTime(item.scheduled_end)}</span>
+                </div>
               </div>
               <div className="staff-action-buttons" aria-label={`Update ${item.guest_name}`}>
                 <button
@@ -710,7 +713,10 @@ function UntimedQueue({ data, items, onClearGuest, onStatus }) {
             return (
               <article className="untimed-request-card" key={item.id}>
                 <div>
-                  <strong>{item.guest_name}</strong>
+                  <strong>
+                    <DailyPersonNumber item={item} />
+                    {item.guest_name}
+                  </strong>
                   <span>{item.activity_name}</span>
                 </div>
                 <span
@@ -755,9 +761,9 @@ function ActivityLaneHeading({ activity }) {
       <span>
         {activity.duration_minutes} min
         {activity.daily_limit_enabled
-          ? ` • ${activity.daily_used}/${activity.daily_limit} today`
+          ? ` / ${activity.daily_used}/${activity.daily_limit} today`
           : ""}
-        {activity.alarm_enabled ? ` • timer alert at ${activity.alarm_minutes_before} min` : ""}
+        {activity.alarm_enabled ? ` / timer alert at ${activity.alarm_minutes_before} min` : ""}
       </span>
     </>
   );
@@ -772,6 +778,24 @@ function Summary({ label, value }) {
   );
 }
 
+function DailyPersonNumber({ item }) {
+  if (!item.daily_number) return null;
+  return (
+    <span className="daily-person-number" title={`Person ${item.daily_number} checked in today`}>
+      {item.daily_number}
+    </span>
+  );
+}
+
+function GuestNameBadge({ item }) {
+  return (
+    <span className="guest-name-badge">
+      <DailyPersonNumber item={item} />
+      <span>{item.guest_name}</span>
+    </span>
+  );
+}
+
 function MobileScheduleCard(props) {
   const { item, nowMs } = props;
   return (
@@ -781,7 +805,7 @@ function MobileScheduleCard(props) {
         .toLowerCase()}`}
     >
       <div className="mobile-card-head">
-        <span className="guest-name-badge">{item.guest_name}</span>
+        <GuestNameBadge item={item} />
         <span className={`status-badge status-${item.status.replaceAll(" ", "-").toLowerCase()}`}>
           {item.status}
         </span>
@@ -803,10 +827,7 @@ function CalendarBlock(props) {
   const { calendarStart, checkIn, height, item, nowMs, onReschedule, top } = props;
   const [drag, setDrag] = useState(null);
   const [expanded, setExpanded] = useState(false);
-  const compactHeight = Math.min(
-    COMPACT_BLOCK_MAX_HEIGHT,
-    Math.max(COMPACT_BLOCK_MIN_HEIGHT, height)
-  );
+  const durationClass = height < 32 ? "is-tiny" : height < 64 ? "is-short" : "";
 
   function handlePointerDown(event) {
     if (event.target.closest("button, input, select, textarea, a")) return;
@@ -852,14 +873,14 @@ function CalendarBlock(props) {
     <article
       className={`calendar-block ${expanded ? "is-open is-expanded" : ""} ${
         drag ? "is-dragging" : ""
-      } status-border-${item.status.replaceAll(" ", "-").toLowerCase()}`}
+      } ${durationClass} status-border-${item.status.replaceAll(" ", "-").toLowerCase()}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       role="button"
       style={{
         top,
-        height: compactHeight,
+        height,
         transform: drag ? `translateY(${drag.y - drag.startY}px)` : undefined
       }}
       tabIndex={0}
@@ -869,7 +890,7 @@ function CalendarBlock(props) {
     >
       <div className="calendar-block-summary">
         <div className="calendar-block-head">
-          <span className="guest-name-badge">{item.guest_name}</span>
+          <GuestNameBadge item={item} />
           <span className={`status-badge status-${item.status.replaceAll(" ", "-").toLowerCase()}`}>
             {item.status}
           </span>

@@ -168,7 +168,14 @@ export function findEarliestSlot({
       const sameLane = Number(item.activity_id) === Number(activityId);
       if (!samePerson && !sameLane) return false;
       const range = itemRange(item);
-      return rangesOverlap(cursor, end, range.start, range.end);
+      return samePerson
+        ? rangesOverlap(
+            addMinutes(cursor, -bufferMinutes),
+            addMinutes(end, bufferMinutes),
+            range.start,
+            range.end
+          )
+        : rangesOverlap(cursor, end, range.start, range.end);
     });
 
     if (!blockingItem) return { start: cursor, end };
@@ -187,6 +194,7 @@ export function scheduleActivities({
   existingItems,
   bufferMinutes,
   now = new Date(),
+  preserveOrder = false,
   settings = {}
 }) {
   const timedActivities = activities.filter((activity) => Boolean(activity.time_limit_enabled));
@@ -194,22 +202,44 @@ export function scheduleActivities({
   const workingItems = [...existingItems];
   const { start: workdayStart, end: workdayEnd } = getWorkdayBounds(now, settings);
   let minStart = maxDate(roundUpToFiveMinutes(now), workdayStart);
+  const remaining = timedActivities.map((activity, originalIndex) => ({
+    activity,
+    originalIndex
+  }));
 
   if (timedActivities.length > 0 && minStart >= workdayEnd) {
     throw scheduleError("The workday is closed. Please ask staff for help.");
   }
 
-  timedActivities.forEach((activity, index) => {
-    const activityBounds = requireActivityWindow(now, activity, settings);
-    const slot = findEarliestSlot({
-      activityId: activity.id,
-      guestId,
-      durationMinutes: activity.duration_minutes,
-      minStart: maxDate(minStart, activityBounds.start),
-      existingItems: workingItems,
-      bufferMinutes,
-      maxEnd: activityBounds.end
+  while (remaining.length > 0) {
+    const candidates = [];
+    let firstError = null;
+    const activitiesToEvaluate = preserveOrder ? remaining.slice(0, 1) : remaining;
+    activitiesToEvaluate.forEach(({ activity, originalIndex }) => {
+      try {
+        const activityBounds = requireActivityWindow(now, activity, settings);
+        const slot = findEarliestSlot({
+          activityId: activity.id,
+          guestId,
+          durationMinutes: activity.duration_minutes,
+          minStart: maxDate(minStart, activityBounds.start),
+          existingItems: workingItems,
+          bufferMinutes,
+          maxEnd: activityBounds.end
+        });
+        candidates.push({ activity, originalIndex, slot });
+      } catch (error) {
+        firstError ||= error;
+      }
     });
+    if (candidates.length === 0)
+      throw firstError || scheduleError("No open activity time remains.");
+
+    candidates.sort(
+      (left, right) =>
+        left.slot.start - right.slot.start || left.originalIndex - right.originalIndex
+    );
+    const { activity, originalIndex, slot } = candidates[0];
     const item = {
       activity_id: activity.id,
       guest_id: guestId,
@@ -224,12 +254,16 @@ export function scheduleActivities({
       alarm_enabled: activity.alarm_enabled ? 1 : 0,
       alarm_minutes_before: activity.alarm_minutes_before || 5,
       status: "Waiting",
-      sort_order: index + 1
+      sort_order: scheduled.length + 1
     };
     scheduled.push(item);
     workingItems.push(item);
     minStart = addMinutes(slot.end, bufferMinutes);
-  });
+    remaining.splice(
+      remaining.findIndex((candidate) => candidate.originalIndex === originalIndex),
+      1
+    );
+  }
 
   return scheduled;
 }
@@ -406,74 +440,64 @@ export function compactScheduleAfterFinalStatus({
         }
       : { ...item }
   );
-  const repaired = new Map();
-  const laneEnd = new Map();
-  const guestEnd = new Map();
+  return rebalanceWaitingSchedule({
+    items: normalized,
+    bufferMinutes,
+    settings,
+    now: actualEnd
+  });
+}
 
-  function reserve(item, end) {
-    laneEnd.set(
-      Number(item.activity_id),
-      maxDate(laneEnd.get(Number(item.activity_id)) || workdayStart, end)
+export function rebalanceWaitingSchedule({
+  items,
+  bufferMinutes = 0,
+  settings = {},
+  now = new Date()
+}) {
+  const timedItems = items.filter((item) => Boolean(item.is_timed));
+  const { start: workdayStart, end: workdayEnd } = getWorkdayBounds(now, settings);
+  const scheduleFloor = maxDate(roundUpToFiveMinutes(now), workdayStart);
+  const repaired = new Map();
+  const normalized = timedItems.map((item) => ({ ...item }));
+  const fixedItems = normalized.filter((item) => item.status !== "Waiting");
+  fixedItems.forEach((item) => repaired.set(Number(item.id), item));
+  const workingItems = fixedItems.filter((item) => item.status === "In Progress");
+  const waiting = normalized.filter((item) => item.status === "Waiting");
+
+  while (waiting.length > 0) {
+    const candidates = waiting.map((item) => {
+      const itemBounds = requireActivityWindow(now, item, settings);
+      const itemCheckIn = roundUpToFiveMinutes(parseStoredDate(item.checked_in_at));
+      const slot = findEarliestSlot({
+        activityId: item.activity_id,
+        guestId: item.guest_id,
+        durationMinutes: item.duration_minutes,
+        minStart: maxDate(scheduleFloor, itemBounds.start, itemCheckIn),
+        existingItems: workingItems,
+        bufferMinutes,
+        maxEnd: minDate(workdayEnd, itemBounds.end)
+      });
+      return { item, slot };
+    });
+    candidates.sort(
+      (left, right) =>
+        left.slot.start - right.slot.start ||
+        parseStoredDate(left.item.scheduled_start) - parseStoredDate(right.item.scheduled_start) ||
+        Number(left.item.sort_order || 0) - Number(right.item.sort_order || 0)
     );
-    guestEnd.set(
-      Number(item.guest_id),
-      maxDate(guestEnd.get(Number(item.guest_id)) || workdayStart, end)
+    const { item, slot } = candidates[0];
+    const rescheduled = {
+      ...item,
+      scheduled_start: slot.start.toISOString(),
+      scheduled_end: slot.end.toISOString()
+    };
+    workingItems.push(rescheduled);
+    repaired.set(Number(item.id), rescheduled);
+    waiting.splice(
+      waiting.findIndex((candidate) => Number(candidate.id) === Number(item.id)),
+      1
     );
   }
-
-  normalized
-    .filter((item) => FINAL_ITEM_STATUSES.has(item.status))
-    .toSorted((a, b) => parseStoredDate(a.scheduled_end) - parseStoredDate(b.scheduled_end))
-    .forEach((item) => {
-      reserve(item, minDate(parseStoredDate(item.scheduled_end), actualEnd));
-      repaired.set(Number(item.id), item);
-    });
-
-  normalized
-    .filter((item) => item.status === "In Progress")
-    .toSorted((a, b) => parseStoredDate(a.scheduled_start) - parseStoredDate(b.scheduled_start))
-    .forEach((item) => {
-      const start = parseStoredDate(item.scheduled_start);
-      const end = parseStoredDate(item.scheduled_end);
-      reserve(item, start <= actualEnd ? maxDate(end, actualEnd) : end);
-      repaired.set(Number(item.id), item);
-    });
-
-  normalized
-    .filter((item) => item.status === "Waiting")
-    .toSorted(
-      (a, b) =>
-        parseStoredDate(a.scheduled_start) - parseStoredDate(b.scheduled_start) ||
-        Number(a.sort_order || 0) - Number(b.sort_order || 0)
-    )
-    .forEach((item) => {
-      const itemBounds = requireActivityWindow(actualEnd, item, settings);
-      const itemCheckIn = roundUpToFiveMinutes(parseStoredDate(item.checked_in_at));
-      const laneAvailable = laneEnd.get(Number(item.activity_id)) || workdayStart;
-      const guestAvailable = guestEnd.has(Number(item.guest_id))
-        ? addMinutes(guestEnd.get(Number(item.guest_id)), bufferMinutes)
-        : workdayStart;
-      const start = maxDate(
-        actualEnd,
-        workdayStart,
-        itemBounds.start,
-        itemCheckIn,
-        laneAvailable,
-        guestAvailable
-      );
-      const end = addMinutes(start, item.duration_minutes);
-      if (end > minDate(workdayEnd, itemBounds.end)) {
-        throw scheduleError(
-          "That status change would push an activity past its configured end time."
-        );
-      }
-      reserve(item, end);
-      repaired.set(Number(item.id), {
-        ...item,
-        scheduled_start: start.toISOString(),
-        scheduled_end: end.toISOString()
-      });
-    });
 
   return [...repaired.values()].toSorted(
     (a, b) => parseStoredDate(a.scheduled_start) - parseStoredDate(b.scheduled_start)

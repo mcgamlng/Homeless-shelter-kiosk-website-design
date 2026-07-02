@@ -9,6 +9,8 @@ const hmongAudioCache = new Map();
 const MAX_SPANISH_CACHE_ITEMS = 120;
 const MAX_HMONG_CACHE_ITEMS = 120;
 const MAX_SPEECH_TEXT_LENGTH = 350;
+const HMONG_CROSSFADE_MILLISECONDS = 85;
+const HMONG_BOUNDARY_THRESHOLD = 1800;
 const hmongCompoundWords = {
   sijhawm: ["sij", "hawm"]
 };
@@ -130,7 +132,16 @@ export function createHmongSpeechAudio(text) {
   if (hmongAudioCache.has(cleanText)) return hmongAudioCache.get(cleanText);
 
   const plan = createHmongSpeechPlan(cleanText);
-  const clips = plan.tokens.map((token) => readWaveClip(getHmongSyllablePath(token)));
+  const clips = plan.tokens.map((token, index) => {
+    const clip = readWaveClip(getHmongSyllablePath(token));
+    return {
+      ...clip,
+      data: trimHmongBoundary(clip, {
+        isFirst: index === 0,
+        isFinal: index === plan.tokens.length - 1
+      })
+    };
+  });
   const first = clips[0];
   const audioData = clips.slice(1).reduce((joined, clip) => {
     assertMatchingWaveFormat(first, clip);
@@ -142,6 +153,46 @@ export function createHmongSpeechAudio(text) {
     hmongAudioCache.delete(hmongAudioCache.keys().next().value);
   }
   return audio;
+}
+
+function trimHmongBoundary(clip, { isFirst, isFinal }) {
+  if (clip.bitsPerSample !== 16) return clip.data;
+  const totalFrames = Math.floor(clip.data.length / clip.blockAlign);
+  let firstActiveFrame = 0;
+  if (!isFirst) {
+    for (let frame = 0; frame < totalFrames; frame += 1) {
+      if (framePeak(clip, frame) >= HMONG_BOUNDARY_THRESHOLD) {
+        firstActiveFrame = frame;
+        break;
+      }
+    }
+  }
+  let lastActiveFrame = totalFrames - 1;
+  if (!isFinal) {
+    for (let frame = totalFrames - 1; frame >= 0; frame -= 1) {
+      if (framePeak(clip, frame) >= HMONG_BOUNDARY_THRESHOLD) {
+        lastActiveFrame = frame;
+        break;
+      }
+    }
+  }
+  const attackFrames = Math.round(clip.sampleRate * 0.004);
+  const releaseFrames = Math.round(clip.sampleRate * 0.006);
+  const startFrame = Math.max(0, firstActiveFrame - attackFrames);
+  const endFrame = Math.min(totalFrames, lastActiveFrame + releaseFrames);
+  return clip.data.subarray(
+    startFrame * clip.blockAlign,
+    Math.max((startFrame + 1) * clip.blockAlign, endFrame * clip.blockAlign)
+  );
+}
+
+function framePeak(clip, frame) {
+  let peak = 0;
+  for (let channel = 0; channel < clip.channels; channel += 1) {
+    const sampleOffset = frame * clip.blockAlign + channel * 2;
+    peak = Math.max(peak, Math.abs(clip.data.readInt16LE(sampleOffset)));
+  }
+  return peak;
 }
 
 function readWaveClip(filePath) {
@@ -184,7 +235,10 @@ function crossfadePcm(left, right, format) {
     Math.floor(left.length / format.blockAlign / 4),
     Math.floor(right.length / format.blockAlign / 4)
   );
-  const overlapFrames = Math.min(Math.round(format.sampleRate * 0.018), maxFrames);
+  const overlapFrames = Math.min(
+    Math.round(format.sampleRate * (HMONG_CROSSFADE_MILLISECONDS / 1000)),
+    maxFrames
+  );
   if (overlapFrames < 2) return Buffer.concat([left, right]);
 
   const overlapBytes = overlapFrames * format.blockAlign;
@@ -193,12 +247,14 @@ function crossfadePcm(left, right, format) {
   left.copy(output, 0, 0, leftBodyLength);
 
   for (let frame = 0; frame < overlapFrames; frame += 1) {
-    const rightWeight = frame / (overlapFrames - 1);
+    const progress = frame / (overlapFrames - 1);
+    const leftWeight = Math.cos(progress * Math.PI * 0.5);
+    const rightWeight = Math.sin(progress * Math.PI * 0.5);
     for (let channel = 0; channel < format.channels; channel += 1) {
       const sampleOffset = frame * format.blockAlign + channel * 2;
       const leftSample = left.readInt16LE(leftBodyLength + sampleOffset);
       const rightSample = right.readInt16LE(sampleOffset);
-      const blended = Math.round(leftSample * (1 - rightWeight) + rightSample * rightWeight);
+      const blended = Math.round(leftSample * leftWeight + rightSample * rightWeight);
       output.writeInt16LE(
         Math.max(-32768, Math.min(32767, blended)),
         leftBodyLength + sampleOffset

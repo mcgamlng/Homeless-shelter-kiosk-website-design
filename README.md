@@ -28,6 +28,9 @@ medical details, or sensitive notes.
 - Read-aloud button for browsers that support built-in speech voices
 - Automatic translations for common shelter service/activity names
 - Timed activity calendar with automatic non-overlapping scheduling
+- Earliest-gap scheduling that backfills open service lanes when another selected activity is busy
+- Calendar blocks whose height matches the activity's real duration
+- Daily person numbers based on check-in order
 - Per-activity start and end hours inside the overall workday
 - Untimed service queue
 - Optional daily quantity limits for each activity
@@ -175,7 +178,15 @@ Untimed Service Queue.
 
 Open the Dashboard and press **Turn on staff alerts**. The browser may ask for notification
 permission. The setting is remembered on that staff device. The Staff Action Center stays above the
-calendar and shows each guest who is ready, their activity, and one-tap status controls.
+calendar and shows each guest who is ready, their daily person number, activity, scheduled start,
+scheduled end, and one-tap status controls.
+
+The scheduler compares every remaining activity after each appointment and uses the earliest legal
+opening. It may change the order of a guest's selected services to fill an otherwise empty lane. It
+still protects the activity lane, the guest's other appointments, the configured guest buffer,
+check-in time, activity hours, and the overall workday. Staff-directed reordering remains
+authoritative. Completing or skipping an activity ends it at that moment and repacks Waiting
+appointments when they can still fit before closing.
 
 Five minutes before an alarm-enabled activity starts, staff receive a start reminder so they can
 call the guest. When staff marks a timed activity
@@ -334,16 +345,17 @@ Manual checks:
 1. Create a new name-only sign-up.
 2. Confirm a duplicate sign-up is rejected.
 3. Confirm an unknown returning name is rejected.
-4. Select a timed activity and verify its calendar block.
-5. Select an untimed activity and verify the service queue.
-6. Reach a daily activity limit and verify the kiosk shows Full for today.
-7. Confirm the Staff Action Center shows due activities and its status buttons work.
-8. Turn on staff alerts and verify both a five-minute start reminder and an ending-time warning.
-9. Complete and skip activities.
-10. Reset the day and verify live totals return to zero.
-11. Open two dashboards and confirm real-time updates.
-12. Scan both About-page QR codes from a phone.
-13. Test the kiosk readout in all four languages, including a device with Hmong Daw speech support.
+4. Select several timed activities and verify they backfill the earliest legal activity lanes.
+5. Confirm a 60-minute calendar block is twice the height of a 30-minute block.
+6. Select an untimed activity and verify the service queue.
+7. Reach a daily activity limit and verify the kiosk shows Full for today.
+8. Confirm the Staff Action Center shows person number, start, end, and status controls.
+9. Turn on staff alerts and verify both a five-minute start reminder and an ending-time warning.
+10. Complete and skip activities, then verify Waiting blocks move forward where possible.
+11. Reset the day and verify live totals return to zero.
+12. Open two dashboards and confirm real-time updates.
+13. Scan all three About-page QR codes from a phone.
+14. Test the kiosk readout in all four languages and confirm Hmong plays as one continuous sentence.
 
 ## Project Structure
 

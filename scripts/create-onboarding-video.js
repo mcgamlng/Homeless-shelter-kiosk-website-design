@@ -14,73 +14,108 @@ const finalVideoPath = path.join(outputDir, "listening-house-onboarding-walkthro
 const scenes = [
   {
     image: "01-kiosk-welcome.png",
-    title: "Welcome: guests begin here",
+    title: "1. Welcome: guests begin here",
     caption:
-      "The tabletop kiosk gives guests a calm first step. They begin with only the information the system needs: first and last name.",
-    duration: 5
+      "The portrait-friendly kiosk gives guests a calm first step. The interface is large, centered, touch-friendly, and designed for a shelter entrance.",
+    duration: 10
   },
   {
     image: "02-name-entry.png",
-    title: "Sign in or sign up by name",
+    title: "2. Sign in or sign up by name",
     caption:
-      "New names are signed up automatically. Returning names are signed in, and duplicate same-day check-ins are stopped at this screen.",
-    duration: 6
+      "Guests enter only first and last name. New names are signed up automatically; saved names sign in, and repeat same-day check-ins are stopped here.",
+    duration: 12
   },
   {
-    image: "03-language.png",
-    title: "Choose a preferred language",
+    image: "03-language-selection.png",
+    title: "3. Choose a preferred language",
     caption:
-      "Guests choose the language they are most comfortable using. Common shelter service names translate automatically on the kiosk.",
-    duration: 5
+      "English, Spanish, Hmong, and Somali are built into the guest flow. Every screen also includes a visible Read Aloud control.",
+    duration: 10
   },
   {
-    image: "04-activities.png",
-    title: "Choose today's support",
+    image: "04-hmong-activities.png",
+    title: "4. Language accessibility",
     caption:
-      "Guests select one or more services, such as showers, meals, laundry, beds, private rooms, rest areas, or legal support.",
-    duration: 6
+      "Guest instructions and activity names change with the selected language. The Hmong readout now joins syllables into smoother sentence-level speech.",
+    duration: 13
   },
   {
-    image: "05-confirmation.png",
-    title: "Confirmation for the guest",
+    image: "05-activity-selection.png",
+    title: "5. Choose today's support",
     caption:
-      "The kiosk thanks the guest and asks them to wait for their name to be called. It does not show scheduled times to guests.",
-    duration: 5
+      "Guests choose one or more available services. Administrators control service names, translations, icons, hours, limits, timers, and availability.",
+    duration: 13
   },
   {
-    image: "06-dashboard-calendar.png",
-    title: "Staff dashboard calendar",
+    image: "06-guest-confirmation.png",
+    title: "6. A private guest confirmation",
     caption:
-      "The dashboard updates instantly on phones, tablets, laptops, and desktops on the same local network as the Raspberry Pi server.",
-    duration: 6
+      "The guest is thanked and asked to wait for their name to be called. Staff schedule times remain private, and the kiosk resets automatically.",
+    duration: 10
   },
   {
-    image: "07-dashboard-detail.png",
-    title: "Staff manage progress",
+    image: "07-dashboard-action-center.png",
+    title: "7. Who needs attention next",
     caption:
-      "Staff can tap a guest activity block to see options, mark work waiting, in progress, completed, or skipped, and move schedule blocks.",
-    duration: 6
+      "Staff see each guest's daily number, name, activity, status, scheduled start, and scheduled end. One tap updates Waiting, In Progress, Completed, or Skipped.",
+    duration: 15
   },
   {
-    image: "08-admin-customization.png",
-    title: "Admin customization",
+    image: "08-dashboard-calendar.png",
+    title: "8. A calendar that reflects real time",
     caption:
-      "Admins can rename the kiosk, adjust guest-facing words, change colors, and preview each kiosk screen before saving.",
-    duration: 6
+      "Calendar blocks use their real duration. A 60-minute shower fills a full hour, a 45-minute laundry visit is shorter, and brief services stay compact.",
+    duration: 15
   },
   {
-    image: "09-admin-analytics.png",
-    title: "Data and analytics",
+    image: "09-calendar-detail.png",
+    title: "9. Staff schedule controls",
     caption:
-      "The system keeps daily name and activity history in SQLite, so staff can export reports by day, week, month, or year.",
-    duration: 6
+      "Selecting a calendar block reveals status, movement, exact-time, and guest-order controls. The schedule automatically protects guests from overlapping services.",
+    duration: 14
   },
   {
-    image: "10-about.png",
-    title: "Local network system",
+    image: "10-tablet-alarm.png",
+    title: "10. Tablet and phone timer alerts",
     caption:
-      "The Raspberry Pi acts as the local server. Other devices only need a browser and the same building Wi-Fi network.",
-    duration: 6
+      "Staff can enable timer alerts on a phone or tablet. The warning identifies the activity and guest, and the visible Stop Alarm button silences it immediately.",
+    duration: 15
+  },
+  {
+    image: "11-admin-activities.png",
+    title: "11. Flexible activity administration",
+    caption:
+      "Each service can independently use calendar time, a daily quantity limit, a timer alert, available hours, monthly dates, yearly dates, or any combination.",
+    duration: 15
+  },
+  {
+    image: "12-admin-customization.png",
+    title: "12. Customize the kiosk",
+    caption:
+      "The guided admin area changes the shelter name, guest-facing words, colors, and screen previews, allowing another shelter to adapt the same system.",
+    duration: 14
+  },
+  {
+    image: "13-admin-analytics.png",
+    title: "13. Data and analytics",
+    caption:
+      "SQLite keeps daily guest and activity history. Staff can review names and service use, then export reports organized by day, week, month, or year.",
+    duration: 14
+  },
+  {
+    image: "14-about-qr.png",
+    title: "14. Open or install on any device",
+    caption:
+      "The About page provides separate QR codes for a browser, iPhone or iPad installation, and the Android app. The configured server address stays consistent.",
+    duration: 13
+  },
+  {
+    image: "15-tablet-dashboard.png",
+    title: "15. Built for the staff's working day",
+    caption:
+      "The responsive dashboard works on tablets, phones, laptops, and desktops while the Raspberry Pi provides lightweight local storage and live updates.",
+    duration: 12
   }
 ];
 
@@ -192,17 +227,24 @@ function createClip(scene, index, fontPath) {
 }
 
 function createStoryboard() {
+  let elapsedSeconds = 0;
   const storyboard = [
     "# Shelter Check-In System Onboarding Video",
     "",
     "This editable storyboard matches `listening-house-onboarding-walkthrough.mp4`.",
     "",
-    "| Scene | Screen | On-screen message | Voiceover / explanation |",
-    "| --- | --- | --- | --- |"
+    "| Scene | Time | Screen | On-screen message | Voiceover / explanation |",
+    "| --- | --- | --- | --- | --- |"
   ];
 
   scenes.forEach((scene, index) => {
-    storyboard.push(`| ${index + 1} | ${scene.image} | ${scene.title} | ${scene.caption} |`);
+    const start = elapsedSeconds;
+    elapsedSeconds += scene.duration;
+    const formatTime = (seconds) =>
+      `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+    storyboard.push(
+      `| ${index + 1} | ${formatTime(start)}-${formatTime(elapsedSeconds)} | ${scene.image} | ${scene.title} | ${scene.caption} |`
+    );
   });
 
   fs.writeFileSync(path.join(outputDir, "STORYBOARD.md"), `${storyboard.join("\n")}\n`, "utf8");
@@ -217,6 +259,7 @@ function createStoryboard() {
   scenes.forEach((scene, index) => {
     narration.push(`## Scene ${index + 1}: ${scene.title}`);
     narration.push(scene.caption);
+    narration.push(`Suggested voiceover window: ${scene.duration} seconds.`);
     narration.push("");
   });
 
@@ -238,6 +281,8 @@ function createStoryboard() {
       "- `NARRATION_SCRIPT.md`: voiceover script",
       "- `raw-screens/`: captured app screens used in the video",
       "- `clips/`: temporary video clips used to assemble the final MP4",
+      "",
+      "The walkthrough intentionally holds each screen for 10-15 seconds so a presenter can add commentary without rushing.",
       "",
       "Regenerate the video after refreshing the screenshots:",
       "",

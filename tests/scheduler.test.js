@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   compactScheduleAfterFinalStatus,
+  rebalanceWaitingSchedule,
   repairScheduleAfterMove,
   scheduleActivities
 } from "../server/scheduler.js";
@@ -96,6 +97,91 @@ test("schedules one guest without overlapping their timed activities", () => {
   for (let index = 1; index < result.length; index += 1) {
     assert.ok(new Date(result[index].scheduled_start) >= new Date(result[index - 1].scheduled_end));
   }
+});
+
+test("uses an earlier open activity lane instead of preserving selection order", () => {
+  const now = new Date("2026-06-23T22:30:00.000Z");
+  const eveningSettings = { workday_start: "17:30", workday_end: "23:00" };
+  const activities = [
+    {
+      ...timedActivity(1, "Shower", 30),
+      availability_start: "17:30",
+      availability_end: "23:00"
+    },
+    {
+      ...timedActivity(2, "Legal Support", 60),
+      availability_start: "17:30",
+      availability_end: "23:00"
+    },
+    {
+      ...timedActivity(3, "Private Room", 30),
+      availability_start: "17:30",
+      availability_end: "23:00"
+    }
+  ];
+  const firstGuest = scheduleActivities({
+    activities,
+    guestId: 6,
+    existingItems: [],
+    bufferMinutes: 5,
+    now,
+    settings: eveningSettings
+  });
+  const secondGuest = scheduleActivities({
+    activities,
+    guestId: 7,
+    existingItems: firstGuest,
+    bufferMinutes: 5,
+    now,
+    settings: eveningSettings
+  });
+
+  assert.equal(firstGuest[1].activity_name, "Legal Support");
+  assert.equal(secondGuest[0].activity_name, "Private Room");
+  assert.equal(secondGuest[0].scheduled_start, "2026-06-23T22:30:00.000Z");
+  assert.equal(secondGuest[1].activity_name, "Shower");
+  assert.equal(secondGuest[2].activity_name, "Legal Support");
+});
+
+test("rebalances waiting appointments into the earliest legal gaps", () => {
+  const result = rebalanceWaitingSchedule({
+    items: [
+      scheduledItem({
+        id: 1,
+        guest_id: 6,
+        activity_id: 1,
+        activity_name: "Shower",
+        checked_in_at: "2026-06-23T22:30:00.000Z",
+        scheduled_start: "2026-06-23T22:30:00.000Z",
+        scheduled_end: "2026-06-23T23:00:00.000Z"
+      }),
+      scheduledItem({
+        id: 2,
+        guest_id: 6,
+        activity_id: 2,
+        activity_name: "Legal Support",
+        duration_minutes: 60,
+        checked_in_at: "2026-06-23T22:30:00.000Z",
+        scheduled_start: "2026-06-23T23:15:00.000Z",
+        scheduled_end: "2026-06-24T00:15:00.000Z"
+      }),
+      scheduledItem({
+        id: 3,
+        guest_id: 7,
+        activity_id: 3,
+        activity_name: "Private Room",
+        checked_in_at: "2026-06-23T22:30:00.000Z",
+        scheduled_start: "2026-06-24T00:20:00.000Z",
+        scheduled_end: "2026-06-24T00:50:00.000Z"
+      })
+    ],
+    bufferMinutes: 5,
+    settings: { workday_start: "17:30", workday_end: "23:00" },
+    now: new Date("2026-06-23T22:30:00.000Z")
+  });
+
+  assert.equal(result.find((item) => item.id === 3).scheduled_start, "2026-06-23T22:30:00.000Z");
+  assert.equal(result.find((item) => item.id === 2).scheduled_start, "2026-06-23T23:05:00.000Z");
 });
 
 test("untimed activities are not placed on the calendar", () => {

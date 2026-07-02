@@ -5,6 +5,7 @@ import {
   compactScheduleAfterFinalStatus,
   getActivityBounds,
   parseStoredDate,
+  rebalanceWaitingSchedule,
   repairScheduleAfterMove,
   roundUpToFiveMinutes,
   scheduleActivities
@@ -743,6 +744,31 @@ function getScheduledItemsForActiveCheckIns() {
   ).filter((row) => isInCurrentDashboardDay(row, dashboardDayStart, checkInIdFloor));
 }
 
+export function rebalanceActiveWaitingSchedule(now = new Date()) {
+  ensureCurrentDashboardDay();
+  const settings = getSettings();
+  const repairedItems = rebalanceWaitingSchedule({
+    items: getScheduledItemsForActiveCheckIns(),
+    bufferMinutes: settings.buffer_minutes,
+    settings,
+    now
+  });
+  const transaction = db.transaction(() => {
+    const update = db.prepare(
+      `UPDATE scheduled_activity_items
+       SET scheduled_start = ?, scheduled_end = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = 'Waiting'`
+    );
+    repairedItems.forEach((item) => {
+      if (item.status === "Waiting") {
+        update.run(item.scheduled_start, item.scheduled_end, item.id);
+      }
+    });
+  });
+  transaction();
+  return repairedItems;
+}
+
 function validateDailyLimits(activities) {
   const usage = activityUsageCounts();
   activities.forEach((activity) => {
@@ -877,7 +903,9 @@ export function createCheckIn({ activityIds, language, signIn }) {
     return checkInId;
   });
 
-  return getCheckIn(transaction());
+  const checkInId = transaction();
+  rebalanceActiveWaitingSchedule();
+  return getCheckIn(checkInId);
 }
 
 export function getCheckIn(id) {
@@ -910,6 +938,23 @@ function normalizeScheduledItem(item) {
 export function getDashboardData() {
   ensureCurrentDashboardDay();
   const { dashboardDayStart, checkInIdFloor } = getCurrentDashboardDayContext();
+  const dailyNumberRows =
+    checkInIdFloor > 0
+      ? rows(
+          `SELECT id, checked_in_at
+           FROM check_ins
+           WHERE id > ?
+           ORDER BY datetime(checked_in_at), id`,
+          [checkInIdFloor]
+        )
+      : rows(
+          `SELECT id, checked_in_at
+           FROM check_ins
+           WHERE checked_in_at >= ?
+           ORDER BY datetime(checked_in_at), id`,
+          [formatSqliteUtcTimestamp(dashboardDayStart)]
+        );
+  const dailyNumbers = new Map(dailyNumberRows.map((row, index) => [Number(row.id), index + 1]));
   const activeCheckIns = rows(
     `SELECT ci.*, g.first_name, g.last_name
      FROM check_ins ci
@@ -920,6 +965,7 @@ export function getDashboardData() {
     .filter((row) => isInCurrentDashboardDay(row, dashboardDayStart, checkInIdFloor))
     .map((checkIn) => ({
       ...attachGuestSummary(checkIn),
+      daily_number: dailyNumbers.get(Number(checkIn.id)),
       items: rows(
         `SELECT * FROM scheduled_activity_items
          WHERE check_in_id = ?
@@ -939,7 +985,10 @@ export function getDashboardData() {
      ORDER BY sai.is_timed DESC, datetime(sai.scheduled_start), sai.sort_order`
   )
     .filter((row) => isInCurrentDashboardDay(row, dashboardDayStart, checkInIdFloor))
-    .map((row) => normalizeScheduledItem(attachGuestSummary(row)));
+    .map((row) => ({
+      ...normalizeScheduledItem(attachGuestSummary(row)),
+      daily_number: dailyNumbers.get(Number(row.check_in_id))
+    }));
 
   return {
     activeCheckIns,
@@ -1130,6 +1179,7 @@ export function reorderCheckInItems(checkInId, orderedIds) {
     existingItems: otherActiveItems,
     bufferMinutes: settings.buffer_minutes,
     now: new Date(Math.max(firstStart.getTime(), Date.now())),
+    preserveOrder: true,
     settings
   });
   const transaction = db.transaction(() => {
@@ -1234,7 +1284,7 @@ export function getDailyTotals() {
   const { dashboardDayStart, checkInIdFloor } = getCurrentDashboardDayContext();
   const currentDayWhere = checkInIdFloor > 0 ? "ci.id > ?" : "ci.checked_in_at >= ?";
   const currentDayParameter =
-    checkInIdFloor > 0 ? checkInIdFloor : formatDateKey(dashboardDayStart);
+    checkInIdFloor > 0 ? checkInIdFloor : formatSqliteUtcTimestamp(dashboardDayStart);
   const checkInsToday = rows(
     `SELECT ci.id, ci.status, ci.checked_in_at, g.first_name, g.last_name
      FROM check_ins ci
@@ -1269,7 +1319,10 @@ export function getDailyTotals() {
 
 export function getAnalyticsReport({ period = "day", date } = {}) {
   const bounds = getReportBounds(period, date);
-  const rangeParameters = [formatDateKey(bounds.start), formatDateKey(bounds.end)];
+  const rangeParameters = [
+    formatSqliteUtcTimestamp(bounds.start),
+    formatSqliteUtcTimestamp(bounds.end)
+  ];
   const details = rows(
     `SELECT
        sai.id, sai.activity_name, sai.status, sai.scheduled_start, sai.scheduled_end,
@@ -1731,6 +1784,10 @@ function formatDateKey(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatSqliteUtcTimestamp(date) {
+  return date.toISOString().slice(0, 19).replace("T", " ");
 }
 
 function formatLocalDateOnly(date) {

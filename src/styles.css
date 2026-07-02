@@ -1264,6 +1264,7 @@ main {
 .guest-name-badge {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   max-width: 100%;
   padding: 5px 10px;
   background: var(--lh-purple);
@@ -1272,6 +1273,20 @@ main {
   font-weight: 950;
   line-height: 1.1;
   overflow-wrap: anywhere;
+}
+
+.daily-person-number {
+  flex: 0 0 auto;
+  width: 25px;
+  height: 25px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--lh-golden-yellow);
+  color: var(--lh-navy) !important;
+  font-size: 0.78rem;
+  font-weight: 950;
+  line-height: 1;
 }
 
 .confirmation-panel h1 {
@@ -1546,6 +1561,61 @@ main {
   height: auto !important;
   min-height: 198px;
   overflow: visible;
+}
+
+.calendar-block.is-short {
+  gap: 0;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.calendar-block.is-short .calendar-block-activity,
+.calendar-block.is-short .calendar-time,
+.calendar-block.is-short .activity-timer {
+  display: none;
+}
+
+.calendar-block.is-tiny {
+  padding: 0 4px;
+  border-left-width: 4px;
+  box-shadow: none;
+}
+
+.calendar-block.is-tiny .calendar-block-head {
+  height: 100%;
+}
+
+.calendar-block.is-tiny .guest-name-badge {
+  gap: 3px;
+  padding: 0;
+  background: transparent;
+  color: var(--lh-navy);
+}
+
+.calendar-block.is-tiny .guest-name-badge > span:last-child,
+.calendar-block.is-tiny .status-badge {
+  display: none;
+}
+
+.calendar-block.is-tiny .daily-person-number {
+  width: 15px;
+  height: 15px;
+  font-size: 0.58rem;
+}
+
+.calendar-block.is-open .calendar-block-activity,
+.calendar-block.is-open .calendar-time,
+.calendar-block.is-open .activity-timer,
+.calendar-block.is-open .status-badge,
+.calendar-block.is-open .guest-name-badge > span:last-child {
+  display: inline-flex;
+}
+
+.calendar-block.is-open .guest-name-badge {
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--lh-purple);
+  color: white;
 }
 
 .calendar-block:focus-visible {
@@ -4200,6 +4270,9 @@ main {
 }
 
 .staff-action-person > strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--lh-navy);
   font-size: 1.08rem;
 }
@@ -4214,6 +4287,28 @@ main {
 
 .staff-action-time > strong {
   color: var(--lh-purple);
+}
+
+.staff-action-window {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.staff-action-window span {
+  min-height: 28px;
+  padding: 4px 7px;
+  background: var(--lh-soft-green);
+  color: var(--lh-navy);
+  font-size: 0.82rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.untimed-request-card > div:first-child strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .staff-action-buttons {
@@ -5013,7 +5108,7 @@ main {
     text-align: right;
   }
 
-  .staff-action-time span {
+  .staff-action-window {
     justify-content: flex-end;
   }
 

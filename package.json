@@ -19,6 +19,7 @@
     "network:windows:allow-phone": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/allow-phone-access.ps1",
     "public:tunnel:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/windows/start-public-tunnel.ps1",
     "onboarding:video": "node scripts/create-onboarding-video.js",
+    "demo:prepare-video": "node scripts/prepare-demo-video-data.js",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node --test"

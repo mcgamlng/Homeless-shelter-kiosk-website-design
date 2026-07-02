@@ -30,6 +30,15 @@ test("daily reset clears active names and zeroes live totals", async () => {
     const before = repository.getDashboardData();
     assert.equal(before.totals.guestsCheckedIn, 2);
     assert.deepEqual(before.totals.activeGuests.toSorted(), ["Ari Lee", "Maya Johnson"]);
+    assert.equal(
+      before.activeCheckIns.find((checkIn) => checkIn.guest_name === "Maya Johnson").daily_number,
+      1
+    );
+    assert.equal(
+      before.activeCheckIns.find((checkIn) => checkIn.guest_name === "Ari Lee").daily_number,
+      2
+    );
+    assert.deepEqual(before.scheduledItems.map((item) => item.daily_number).toSorted(), [1, 2]);
 
     const after = repository.resetDailyData();
     assert.equal(after.totals.guestsCheckedIn, 0);
@@ -43,7 +52,9 @@ test("daily reset clears active names and zeroes live totals", async () => {
       signIn: { mode: "sign_in", firstName: "Maya", lastName: "Johnson" }
     });
     assert.equal(returning.guest_name, "Maya Johnson");
-    assert.deepEqual(repository.getDashboardData().totals.activeGuests, ["Maya Johnson"]);
+    const nextDay = repository.getDashboardData();
+    assert.deepEqual(nextDay.totals.activeGuests, ["Maya Johnson"]);
+    assert.equal(nextDay.activeCheckIns[0].daily_number, 1);
   } finally {
     if (database?.open) database.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

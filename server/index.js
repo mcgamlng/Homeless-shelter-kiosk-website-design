@@ -20,6 +20,7 @@ import {
   getSettings,
   inspectNameCheckIn,
   moveScheduledItem,
+  rebalanceActiveWaitingSchedule,
   reorderCheckInItems,
   rescheduleScheduledItem,
   resetDailyData,
@@ -575,6 +576,11 @@ io.on("connection", (socket) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Listening House Guest Check-In System running at http://localhost:${PORT}`);
+  try {
+    rebalanceActiveWaitingSchedule();
+  } catch (error) {
+    console.warn(`Schedule compaction skipped: ${error.message}`);
+  }
   repairEnglishActivityTranslations().catch((error) => {
     console.warn(`Activity translation repair skipped: ${error.message}`);
   });

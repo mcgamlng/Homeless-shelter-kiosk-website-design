@@ -167,7 +167,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
         url: `/api/speech/hmong?text=${encodeURIComponent(segment)}`,
         pauseAfter: pauseMs
       }));
-      playAudioQueue(queue, runId, 0, 1);
+      playAudioQueue(queue, runId, 0, 1.1);
       return;
     }
     if (language === "es") {

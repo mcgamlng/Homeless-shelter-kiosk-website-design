@@ -31,6 +31,7 @@ medical details, or sensitive notes.
 - Earliest-gap scheduling that backfills open service lanes when another selected activity is busy
 - Calendar blocks whose height matches the activity's real duration
 - Daily person numbers based on check-in order
+- Live current-time clock above the Staff Action Center
 - Per-activity start and end hours inside the overall workday
 - Untimed service queue
 - Optional daily quantity limits for each activity
@@ -59,6 +60,9 @@ Measured storage, live-day, and report results are in
 [`PERFORMANCE_AND_CAPACITY.md`](PERFORMANCE_AND_CAPACITY.md). A detailed explanation of startup,
 manual operation, architecture, data flow, and the purpose of the main code files is in
 [`SYSTEM_GUIDE.md`](SYSTEM_GUIDE.md).
+
+The narrated beginner code course, complete transcript, and chapter index are in
+[`code-walkthrough/`](code-walkthrough/README.md).
 
 ## Physical Kiosk Enclosure
 
@@ -356,6 +360,19 @@ Manual checks:
 12. Open two dashboards and confirm real-time updates.
 13. Scan all three About-page QR codes from a phone.
 14. Test the kiosk readout in all four languages and confirm Hmong plays as one continuous sentence.
+
+## Code Walkthrough Video
+
+Generate the detailed narrated code course on Windows:
+
+```powershell
+npm run code:video -- --rebuild
+```
+
+The course explains the full request flow, frontend, server, database, scheduling, Admin settings,
+languages, alarms, Android app, networking, startup, testing, deployment, privacy, and GitHub
+maintenance. Its complete accessible transcript is kept in
+[`code-walkthrough/NARRATION_SCRIPT.md`](code-walkthrough/NARRATION_SCRIPT.md).
 
 ## Project Structure
 

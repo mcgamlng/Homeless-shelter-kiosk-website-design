@@ -623,6 +623,7 @@ export default function Dashboard() {
 
 function StaffActionCenter({ items, nowMs, onStatus }) {
   const inProgressCount = items.filter((item) => item.status === "In Progress").length;
+  const currentTime = new Date(nowMs);
   return (
     <section className="staff-action-center" aria-label="Activities needing staff attention">
       <div className="staff-action-heading">
@@ -634,10 +635,36 @@ function StaffActionCenter({ items, nowMs, onStatus }) {
           <h2>Who needs attention next</h2>
           <p>Call the guest when their service is ready, then update their status here.</p>
         </div>
-        <span className="staff-action-count">
-          {items.length} ready
-          {inProgressCount ? ` / ${inProgressCount} in progress` : ""}
-        </span>
+        <div className="staff-action-heading-tools">
+          <time
+            className="staff-live-clock"
+            dateTime={currentTime.toISOString()}
+            title="Current local time"
+          >
+            <span>
+              <Clock3 size={18} />
+              Current time
+            </span>
+            <strong>
+              {currentTime.toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit"
+              })}
+            </strong>
+            <small>
+              {currentTime.toLocaleDateString([], {
+                weekday: "short",
+                month: "short",
+                day: "numeric"
+              })}
+            </small>
+          </time>
+          <span className="staff-action-count">
+            {items.length} ready
+            {inProgressCount ? ` / ${inProgressCount} in progress` : ""}
+          </span>
+        </div>
       </div>
       {items.length === 0 ? (
         <div className="staff-action-empty">

@@ -21,3 +21,5 @@ onboarding-video/*
 !onboarding-video/README.md
 !onboarding-video/STORYBOARD.md
 !onboarding-video/NARRATION_SCRIPT.md
+code-walkthrough/generated/
+code-walkthrough/*.mp4

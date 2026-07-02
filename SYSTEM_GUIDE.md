@@ -56,6 +56,7 @@ guest submits the selected activities.
 `src/pages/Dashboard.jsx` shows:
 
 - Staff action center
+- Live current local time with seconds and date
 - Timed activity calendar
 - Untimed queue
 - Search and activity filtering

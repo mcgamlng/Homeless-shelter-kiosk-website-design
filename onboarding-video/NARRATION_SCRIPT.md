@@ -1,6 +1,6 @@
 # Narration Script
 
-Use this if you want to record a human voiceover later.
+This is the accessible transcript for the narrated walkthrough.
 
 ## Scene 1: 1. Welcome: guests begin here
 

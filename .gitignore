@@ -21,5 +21,5 @@ onboarding-video/*
 !onboarding-video/README.md
 !onboarding-video/STORYBOARD.md
 !onboarding-video/NARRATION_SCRIPT.md
+!onboarding-video/listening-house-onboarding-walkthrough.mp4
 code-walkthrough/generated/
-code-walkthrough/*.mp4

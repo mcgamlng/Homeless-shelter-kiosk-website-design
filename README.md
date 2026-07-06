@@ -61,8 +61,9 @@ Measured storage, live-day, and report results are in
 manual operation, architecture, data flow, and the purpose of the main code files is in
 [`SYSTEM_GUIDE.md`](SYSTEM_GUIDE.md).
 
-The narrated beginner code course, complete transcript, and chapter index are in
-[`code-walkthrough/`](code-walkthrough/README.md).
+Watch the [narrated website walkthrough](onboarding-video/listening-house-onboarding-walkthrough.mp4)
+or the [beginner code course](code-walkthrough/listening-house-code-walkthrough.mp4). Their complete
+transcripts and chapter indexes are stored beside each video.
 
 ## Physical Kiosk Enclosure
 
@@ -366,6 +367,7 @@ Manual checks:
 Generate the detailed narrated code course on Windows:
 
 ```powershell
+py -m pip install edge-tts==7.2.8
 npm run code:video -- --rebuild
 ```
 
@@ -373,6 +375,8 @@ The course explains the full request flow, frontend, server, database, schedulin
 languages, alarms, Android app, networking, startup, testing, deployment, privacy, and GitHub
 maintenance. Its complete accessible transcript is kept in
 [`code-walkthrough/NARRATION_SCRIPT.md`](code-walkthrough/NARRATION_SCRIPT.md).
+The video generator uses the friendly British `en-GB-RyanNeural` voice and falls back to an
+installed Windows voice when the online neural voice is unavailable.
 
 ## Project Structure
 

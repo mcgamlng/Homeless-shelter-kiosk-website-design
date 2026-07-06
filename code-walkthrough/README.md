@@ -13,4 +13,6 @@ Generate the video on Windows:
 npm run code:video -- --rebuild
 ```
 
-The generator uses the installed Windows narration voice and the project's existing FFmpeg dependency.
+The generator uses the friendly British `en-GB-RyanNeural` voice when internet access is available.
+Install its small speech helper once with `py -m pip install edge-tts==7.2.8`.
+If the neural voice is unavailable, the generator falls back to an installed Windows voice.

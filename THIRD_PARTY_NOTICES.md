@@ -17,3 +17,18 @@ them from Yuhalu's official website for local use. Organizations should review Y
 terms before deployment, especially for commercial use.
 
 The Listening House project is not affiliated with or endorsed by Yuhalu.
+
+## edge-tts
+
+The optional walkthrough-video generator can use
+[edge-tts](https://github.com/rany2/edge-tts) version 7.2.8 to create a more natural British
+English narration track.
+
+- Author: rany2 and edge-tts contributors
+- License: GNU General Public License version 3
+- Use in this project: optional build-time command-line tool; it is not bundled into the kiosk
+  application or required when running the shelter system
+- Network: narration generation requires internet access to the Microsoft Edge speech service
+
+The generated MP4 files are committed for convenient viewing. The Python package itself is installed
+separately and remains governed by its own license and service terms.

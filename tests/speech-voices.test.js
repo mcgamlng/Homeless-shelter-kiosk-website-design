@@ -14,6 +14,15 @@ test("selects a voice that matches the kiosk language", () => {
   assert.equal(preferredSpeechLanguage("hmn"), "hmn-US");
 });
 
+test("prefers the same natural British voice used by the walkthrough videos", () => {
+  const britishVoices = [
+    { name: "Microsoft Libby Online (Natural)", lang: "en-GB" },
+    { name: "Microsoft Ryan Online (Natural)", lang: "en-GB" },
+    { name: "Microsoft David Desktop", lang: "en-US" }
+  ];
+  assert.equal(chooseSpeechVoice(britishVoices, "en")?.name, britishVoices[1].name);
+});
+
 test("never falls back to an English voice for a non-English readout", () => {
   assert.equal(chooseSpeechVoice(voices, "hmn"), null);
 });

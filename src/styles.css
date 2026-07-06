@@ -4330,6 +4330,15 @@ main {
   color: var(--lh-charcoal);
 }
 
+.staff-action-person .daily-person-number {
+  display: inline-grid;
+  place-items: center;
+  justify-content: center;
+  padding: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .staff-action-time > strong {
   color: var(--lh-purple);
 }

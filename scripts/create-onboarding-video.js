@@ -9,7 +9,9 @@ const outputDir = path.join(projectRoot, "onboarding-video");
 const rawDir = path.join(outputDir, "raw-screens");
 const clipDir = path.join(outputDir, "clips");
 const captionDir = path.join(outputDir, "captions");
+const audioDir = path.join(outputDir, "audio");
 const finalVideoPath = path.join(outputDir, "listening-house-onboarding-walkthrough.mp4");
+const speechScript = path.join(projectRoot, "scripts", "windows", "synthesize-narration.ps1");
 
 const scenes = [
   {
@@ -123,6 +125,7 @@ function ensureDirectories() {
   fs.mkdirSync(outputDir, { recursive: true });
   fs.mkdirSync(clipDir, { recursive: true });
   fs.mkdirSync(captionDir, { recursive: true });
+  fs.mkdirSync(audioDir, { recursive: true });
 }
 
 function wrapText(text, width = 74) {
@@ -177,6 +180,41 @@ function runFfmpeg(args, label) {
   }
 }
 
+function createNarration(scene, index) {
+  const prefix = String(index + 1).padStart(2, "0");
+  const narrationPath = writeTextFile(`${prefix}-narration.txt`, scene.caption);
+  const audioPath = path.join(audioDir, `${prefix}-narration.wav`);
+  const result = spawnSync(
+    "powershell",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      speechScript,
+      "-TextPath",
+      narrationPath,
+      "-OutputPath",
+      audioPath,
+      "-FfmpegPath",
+      ffmpegPath,
+      "-VoiceName",
+      "en-GB-RyanNeural"
+    ],
+    {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    }
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `Creating narration for ${scene.image} failed.\n\n${result.stderr || result.stdout || "No speech output."}`
+    );
+  }
+  return audioPath;
+}
+
 function createClip(scene, index, fontPath) {
   const imagePath = path.join(rawDir, scene.image);
   if (!fs.existsSync(imagePath)) {
@@ -188,6 +226,7 @@ function createClip(scene, index, fontPath) {
     `${String(index + 1).padStart(2, "0")}-caption.txt`,
     wrapText(scene.caption)
   );
+  const audioPath = createNarration(scene, index);
   const clipPath = path.join(clipDir, `${String(index + 1).padStart(2, "0")}-${scene.image}.mp4`);
 
   const font = filterPath(fontPath);
@@ -206,18 +245,29 @@ function createClip(scene, index, fontPath) {
       "-y",
       "-loop",
       "1",
-      "-t",
-      String(scene.duration),
       "-i",
       imagePath,
+      "-i",
+      audioPath,
       "-vf",
       filter,
+      "-af",
+      "apad=pad_dur=3",
+      "-shortest",
       "-r",
-      "30",
+      "2",
       "-c:v",
       "libx264",
+      "-preset",
+      "ultrafast",
+      "-tune",
+      "stillimage",
       "-pix_fmt",
       "yuv420p",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
       clipPath
     ],
     `Creating clip ${scene.image}`
@@ -252,7 +302,7 @@ function createStoryboard() {
   const narration = [
     "# Narration Script",
     "",
-    "Use this if you want to record a human voiceover later.",
+    "This is the accessible transcript for the narrated walkthrough.",
     ""
   ];
 
@@ -276,17 +326,19 @@ function createStoryboard() {
       "",
       "Files in this folder:",
       "",
-      "- `listening-house-onboarding-walkthrough.mp4`: captioned onboarding video",
+      "- `listening-house-onboarding-walkthrough.mp4`: captioned and narrated onboarding video",
       "- `STORYBOARD.md`: editable scene-by-scene plan",
       "- `NARRATION_SCRIPT.md`: voiceover script",
       "- `raw-screens/`: captured app screens used in the video",
       "- `clips/`: temporary video clips used to assemble the final MP4",
       "",
-      "The walkthrough intentionally holds each screen for 10-15 seconds so a presenter can add commentary without rushing.",
+      "The walkthrough uses the same friendly British neural voice family preferred by the English kiosk readout.",
+      "Each narrated scene includes a short pause so a presenter can stop and add commentary.",
       "",
       "Regenerate the video after refreshing the screenshots:",
       "",
-      "```bash",
+      "```powershell",
+      "py -m pip install edge-tts==7.2.8",
       "npm run onboarding:video",
       "```",
       ""
@@ -297,6 +349,9 @@ function createStoryboard() {
 
 function createVideo() {
   ensureDirectories();
+  if (!fs.existsSync(speechScript)) {
+    throw new Error(`Missing narration helper: ${speechScript}`);
+  }
   const fontPath = getFontPath();
   if (!fontPath) throw new Error("Could not find a Windows font for video captions.");
 

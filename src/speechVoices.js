@@ -4,7 +4,18 @@ const speechLanguageCodes = {
   hmn: ["hmn-US", "hmn", "mww-US", "mww"],
   so: ["so-SO", "so"]
 };
-const britishVoiceHints = ["british", "uk", "england", "daniel", "george", "sonia", "google uk"];
+const britishVoicePreferences = [
+  "ryan",
+  "sonia",
+  "libby",
+  "google uk",
+  "daniel",
+  "george",
+  "british",
+  "united kingdom",
+  "england",
+  "uk"
+];
 const naturalVoiceHints = ["natural", "neural", "premium", "enhanced", "google", "microsoft"];
 const multilingualVoiceHints = ["multilingual", "multi-language", "multi language"];
 
@@ -20,6 +31,12 @@ function includesHint(value, hints) {
   return hints.some((hint) => cleanValue.includes(hint));
 }
 
+function preferenceIndex(value, preferences) {
+  const cleanValue = String(value || "").toLowerCase();
+  const index = preferences.findIndex((preference) => cleanValue.includes(preference));
+  return index === -1 ? preferences.length : index;
+}
+
 export function chooseSpeechVoice(voices = [], currentLanguage = "en") {
   const languageCodes = speechLanguageCodes[currentLanguage] || speechLanguageCodes.en;
   const matchingVoices = voices.filter((voice) =>
@@ -30,9 +47,18 @@ export function chooseSpeechVoice(voices = [], currentLanguage = "en") {
     )
   );
   if (currentLanguage === "en") {
-    const britishVoice = matchingVoices.find((voice) =>
-      includesHint(voice.name, britishVoiceHints)
-    );
+    const britishVoice = matchingVoices
+      .filter(
+        (voice) =>
+          String(voice.lang || "")
+            .toLowerCase()
+            .startsWith("en-gb") || includesHint(voice.name, britishVoicePreferences)
+      )
+      .toSorted(
+        (left, right) =>
+          preferenceIndex(left.name, britishVoicePreferences) -
+          preferenceIndex(right.name, britishVoicePreferences)
+      )[0];
     if (britishVoice) return britishVoice;
   }
   const naturalVoice = matchingVoices.find((voice) => includesHint(voice.name, naturalVoiceHints));

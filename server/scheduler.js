@@ -188,6 +188,58 @@ export function findEarliestSlot({
   throw scheduleError("The schedule could not find an open time for this activity.");
 }
 
+function getSlotFitScore({
+  slot,
+  activityId,
+  guestId,
+  durationMinutes,
+  existingItems,
+  bufferMinutes,
+  activityEnd
+}) {
+  const nextBlockingStart = existingItems
+    .filter(isActiveTimedItem)
+    .flatMap((item) => {
+      const blocksGuest = sameGuest(item, guestId);
+      const blocksLane = Number(item.activity_id) === Number(activityId);
+      if (!blocksGuest && !blocksLane) return [];
+      const range = itemRange(item);
+      const usableStart = blocksGuest ? addMinutes(range.start, -bufferMinutes) : range.start;
+      return usableStart >= slot.end ? [usableStart] : [];
+    })
+    .reduce(
+      (earliest, candidate) => (candidate < earliest ? candidate : earliest),
+      new Date(8.64e15)
+    );
+  const gapSlackMinutes = Number.isFinite(nextBlockingStart.getTime())
+    ? Math.max(0, (nextBlockingStart - slot.end) / 60_000)
+    : Number.POSITIVE_INFINITY;
+
+  return {
+    gapSlackMinutes,
+    windowSlackMinutes: Math.max(0, (activityEnd - slot.end) / 60_000),
+    durationMinutes
+  };
+}
+
+function compareAutomaticCandidates(left, right) {
+  const startDifference = left.slot.start - right.slot.start;
+  if (startDifference !== 0) return startDifference;
+
+  const leftHasClosingGap = Number.isFinite(left.fit.gapSlackMinutes);
+  const rightHasClosingGap = Number.isFinite(right.fit.gapSlackMinutes);
+  if (leftHasClosingGap !== rightHasClosingGap) return leftHasClosingGap ? -1 : 1;
+
+  return (
+    left.fit.gapSlackMinutes - right.fit.gapSlackMinutes ||
+    left.fit.windowSlackMinutes - right.fit.windowSlackMinutes ||
+    right.fit.durationMinutes - left.fit.durationMinutes ||
+    Number(left.activityId) - Number(right.activityId) ||
+    Number(left.guestId) - Number(right.guestId) ||
+    Number(left.itemId || 0) - Number(right.itemId || 0)
+  );
+}
+
 export function scheduleActivities({
   activities,
   guestId,
@@ -227,7 +279,22 @@ export function scheduleActivities({
           bufferMinutes,
           maxEnd: activityBounds.end
         });
-        candidates.push({ activity, originalIndex, slot });
+        candidates.push({
+          activity,
+          activityId: activity.id,
+          guestId,
+          originalIndex,
+          slot,
+          fit: getSlotFitScore({
+            slot,
+            activityId: activity.id,
+            guestId,
+            durationMinutes: activity.duration_minutes,
+            existingItems: workingItems,
+            bufferMinutes,
+            activityEnd: activityBounds.end
+          })
+        });
       } catch (error) {
         firstError ||= error;
       }
@@ -235,10 +302,7 @@ export function scheduleActivities({
     if (candidates.length === 0)
       throw firstError || scheduleError("No open activity time remains.");
 
-    candidates.sort(
-      (left, right) =>
-        left.slot.start - right.slot.start || left.originalIndex - right.originalIndex
-    );
+    candidates.sort(preserveOrder ? () => 0 : compareAutomaticCandidates);
     const { activity, originalIndex, slot } = candidates[0];
     const item = {
       activity_id: activity.id,
@@ -477,14 +541,24 @@ export function rebalanceWaitingSchedule({
         bufferMinutes,
         maxEnd: minDate(workdayEnd, itemBounds.end)
       });
-      return { item, slot };
+      return {
+        item,
+        activityId: item.activity_id,
+        guestId: item.guest_id,
+        itemId: item.id,
+        slot,
+        fit: getSlotFitScore({
+          slot,
+          activityId: item.activity_id,
+          guestId: item.guest_id,
+          durationMinutes: item.duration_minutes,
+          existingItems: workingItems,
+          bufferMinutes,
+          activityEnd: minDate(workdayEnd, itemBounds.end)
+        })
+      };
     });
-    candidates.sort(
-      (left, right) =>
-        left.slot.start - right.slot.start ||
-        parseStoredDate(left.item.scheduled_start) - parseStoredDate(right.item.scheduled_start) ||
-        Number(left.item.sort_order || 0) - Number(right.item.sort_order || 0)
-    );
+    candidates.sort(compareAutomaticCandidates);
     const { item, slot } = candidates[0];
     const rescheduled = {
       ...item,

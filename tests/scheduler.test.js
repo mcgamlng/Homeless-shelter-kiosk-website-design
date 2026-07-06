@@ -136,11 +136,70 @@ test("uses an earlier open activity lane instead of preserving selection order",
     settings: eveningSettings
   });
 
-  assert.equal(firstGuest[1].activity_name, "Legal Support");
-  assert.equal(secondGuest[0].activity_name, "Private Room");
+  assert.equal(firstGuest[0].activity_name, "Legal Support");
+  assert.equal(secondGuest[0].activity_name, "Shower");
   assert.equal(secondGuest[0].scheduled_start, "2026-06-23T22:30:00.000Z");
-  assert.equal(secondGuest[1].activity_name, "Shower");
+  assert.equal(secondGuest[1].activity_name, "Private Room");
   assert.equal(secondGuest[2].activity_name, "Legal Support");
+});
+
+test("automatic scheduling does not depend on the order activities were selected", () => {
+  const now = new Date("2026-06-23T14:00:00.000Z");
+  const activities = [
+    timedActivity(1, "Shower", 30),
+    timedActivity(2, "Legal Support", 60),
+    timedActivity(3, "Private Room", 20)
+  ];
+  const schedule = (selectedActivities) =>
+    scheduleActivities({
+      activities: selectedActivities,
+      guestId: 24,
+      existingItems: [],
+      bufferMinutes: 5,
+      now,
+      settings
+    })
+      .map((item) => ({
+        activity: item.activity_name,
+        start: item.scheduled_start,
+        end: item.scheduled_end
+      }))
+      .toSorted((left, right) => left.activity.localeCompare(right.activity));
+
+  assert.deepEqual(schedule(activities), schedule(activities.toReversed()));
+});
+
+test("daily rebalance fills independent activity lanes before moving later", () => {
+  const activities = [
+    { id: 1, name: "Shower", duration: 30 },
+    { id: 2, name: "Legal Support", duration: 60 },
+    { id: 3, name: "Private Room", duration: 30 }
+  ];
+  const items = [6, 7, 8].flatMap((guestId) =>
+    activities.map((activity, activityIndex) =>
+      scheduledItem({
+        id: guestId * 10 + activity.id,
+        guest_id: guestId,
+        activity_id: activity.id,
+        activity_name: activity.name,
+        duration_minutes: activity.duration,
+        checked_in_at: "2026-06-23T22:30:00.000Z",
+        scheduled_start: `2026-06-2${activityIndex + 3}T22:30:00.000Z`,
+        scheduled_end: `2026-06-2${activityIndex + 3}T23:00:00.000Z`
+      })
+    )
+  );
+  const result = rebalanceWaitingSchedule({
+    items,
+    bufferMinutes: 5,
+    settings: { workday_start: "17:30", workday_end: "23:00" },
+    now: new Date("2026-06-23T22:30:00.000Z")
+  });
+  const startingNow = result.filter((item) => item.scheduled_start === "2026-06-23T22:30:00.000Z");
+
+  assert.equal(startingNow.length, 3);
+  assert.equal(new Set(startingNow.map((item) => item.activity_id)).size, 3);
+  assert.equal(new Set(startingNow.map((item) => item.guest_id)).size, 3);
 });
 
 test("rebalances waiting appointments into the earliest legal gaps", () => {
@@ -181,7 +240,8 @@ test("rebalances waiting appointments into the earliest legal gaps", () => {
   });
 
   assert.equal(result.find((item) => item.id === 3).scheduled_start, "2026-06-23T22:30:00.000Z");
-  assert.equal(result.find((item) => item.id === 2).scheduled_start, "2026-06-23T23:05:00.000Z");
+  assert.equal(result.find((item) => item.id === 2).scheduled_start, "2026-06-23T22:30:00.000Z");
+  assert.equal(result.find((item) => item.id === 1).scheduled_start, "2026-06-23T23:35:00.000Z");
 });
 
 test("untimed activities are not placed on the calendar", () => {

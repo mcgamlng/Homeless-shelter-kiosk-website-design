@@ -12,6 +12,7 @@ import {
 } from "../i18n.js";
 import { chooseSpeechVoice, preferredSpeechLanguage, speechProfile } from "../speechVoices.js";
 import { getCustomizedKioskText, getKioskCssVariables } from "../../shared/kioskCustomization.js";
+import "../kioskActivityLayout.css";
 
 const STEPS = {
   WELCOME: "welcome",
@@ -526,7 +527,11 @@ export default function Kiosk({ settings: shellSettings = null }) {
             <div className="kiosk-panel wide">
               <h1>{t.needToday}</h1>
               <p>{t.chooseSupport}</p>
-              <div className="activity-grid">
+              <div
+                className={`activity-grid activity-count-${
+                  activities.length >= 6 ? "many" : activities.length
+                }`}
+              >
                 {activities.map((activity) => {
                   const selected = selectedIds.includes(activity.id);
                   const unavailable = activity.is_full || activity.is_unavailable;

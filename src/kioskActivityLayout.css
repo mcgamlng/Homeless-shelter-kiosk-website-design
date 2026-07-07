@@ -1,0 +1,47 @@
+.kiosk-page .activity-grid {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+  gap: clamp(10px, 1.4vw, 16px) !important;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+}
+
+.kiosk-page .activity-grid.activity-count-1 {
+  grid-template-columns: minmax(min(100%, 280px), 460px) !important;
+}
+
+.kiosk-page .activity-grid.activity-count-2 {
+  grid-template-columns: repeat(2, minmax(min(100%, 220px), 360px)) !important;
+}
+
+.kiosk-page .activity-grid.activity-count-3 {
+  grid-template-columns: repeat(3, minmax(170px, 1fr)) !important;
+}
+
+.kiosk-page .activity-grid.activity-count-4 {
+  grid-template-columns: repeat(4, minmax(150px, 1fr)) !important;
+}
+
+.kiosk-page .activity-grid.activity-count-5,
+.kiosk-page .activity-grid.activity-count-many {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)) !important;
+}
+
+.kiosk-page .activity-choice {
+  height: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .kiosk-page .activity-grid,
+  .kiosk-page .activity-grid.activity-count-1,
+  .kiosk-page .activity-grid.activity-count-2,
+  .kiosk-page .activity-grid.activity-count-3,
+  .kiosk-page .activity-grid.activity-count-4,
+  .kiosk-page .activity-grid.activity-count-5,
+  .kiosk-page .activity-grid.activity-count-many {
+    grid-template-columns: 1fr !important;
+  }
+}

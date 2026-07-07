@@ -35,8 +35,9 @@ import { createAccessInfo, getWifiName, normalizeServerBaseUrl } from "./network
 import { enrichActivityTranslations, translateActivityLabel } from "./translationService.js";
 import { buildActivityTranslations } from "../shared/activityTranslations.js";
 import {
-  createHmongSpeechAudio,
+  createHmongSpeechAudioResult,
   createHmongSpeechPlan,
+  createLocalSpeechAudio,
   getHmongSyllablePath,
   getSpanishSpeechAudio,
   getSpeechStatus
@@ -221,10 +222,12 @@ app.get(
 app.get(
   "/api/speech/hmong",
   handleRoute((req, res) => {
-    const audio = createHmongSpeechAudio(req.query.text);
+    const result = createHmongSpeechAudioResult(req.query.text, { key: req.query.key });
     res.setHeader("Content-Type", "audio/wav");
     res.setHeader("Cache-Control", "private, max-age=86400");
-    res.send(audio);
+    res.setHeader("X-Hmong-Speech-Source", result.source);
+    if (result.phraseKey) res.setHeader("X-Hmong-Phrase-Key", result.phraseKey);
+    res.send(result.audio);
   })
 );
 
@@ -244,6 +247,16 @@ app.get(
   handleRoute(async (req, res) => {
     const audio = await getSpanishSpeechAudio(req.query.text);
     res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(audio);
+  })
+);
+
+app.get(
+  "/api/speech/local",
+  handleRoute((req, res) => {
+    const audio = createLocalSpeechAudio(req.query.text, req.query.language || "en");
+    res.setHeader("Content-Type", "audio/wav");
     res.setHeader("Cache-Control", "private, max-age=86400");
     res.send(audio);
   })

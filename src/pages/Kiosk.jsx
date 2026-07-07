@@ -164,7 +164,10 @@ export default function Kiosk({ settings: shellSettings = null }) {
         return;
       }
       const queue = segments.map((segment) => ({
-        url: `/api/speech/hmong?text=${encodeURIComponent(segment)}`,
+        url: `/api/speech/hmong?${new URLSearchParams({
+          text: readoutSegmentText(segment),
+          ...(readoutSegmentKey(segment) ? { key: readoutSegmentKey(segment) } : {})
+        }).toString()}`,
         pauseAfter: pauseMs
       }));
       playAudioQueue(queue, runId, 0, 1.1);
@@ -172,26 +175,51 @@ export default function Kiosk({ settings: shellSettings = null }) {
     }
     if (language === "es") {
       if (!("Audio" in window)) {
-        stopReadout(t.readoutUnavailable);
+        startBrowserSpeechFallback(segments, runId, pauseMs);
         return;
       }
       const queue = segments.map((segment) => ({
-        url: `/api/speech/spanish?text=${encodeURIComponent(segment)}`,
+        url: `/api/speech/spanish?text=${encodeURIComponent(readoutSegmentText(segment))}`,
         pauseAfter: pauseMs
       }));
-      playAudioQueue(queue, runId, 0, 1);
+      playAudioQueue(queue, runId, 0, 1, () => {
+        playServerSpeechQueue(segments, runId, pauseMs, language, () =>
+          startBrowserSpeechFallback(segments, runId, pauseMs)
+        );
+      });
       return;
     }
-    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-      stopReadout(t.readoutUnavailable);
+
+    if ("Audio" in window && ["en", "so"].includes(language)) {
+      playServerSpeechQueue(segments, runId, pauseMs, language, () =>
+        startBrowserSpeechFallback(segments, runId, pauseMs)
+      );
       return;
     }
-    await refreshSpeechVoices();
-    const voice = chooseSpeechVoice(speechVoicesRef.current, language);
-    speakSegments(segments, runId, pauseMs, voice);
+
+    startBrowserSpeechFallback(segments, runId, pauseMs);
   }
 
-  function playAudioQueue(queue, runId, index, playbackRate) {
+  function serverSpeechUrl(segment, currentLanguage) {
+    return `/api/speech/local?${new URLSearchParams({
+      language: currentLanguage,
+      text: readoutSegmentText(segment)
+    }).toString()}`;
+  }
+
+  function playServerSpeechQueue(segments, runId, pauseMs, currentLanguage, onFailure) {
+    if (!("Audio" in window)) {
+      onFailure?.();
+      return;
+    }
+    const queue = segments.map((segment) => ({
+      url: serverSpeechUrl(segment, currentLanguage),
+      pauseAfter: pauseMs
+    }));
+    playAudioQueue(queue, runId, 0, 1, onFailure);
+  }
+
+  function playAudioQueue(queue, runId, index, playbackRate, onFailure = null) {
     if (runId !== speechRunRef.current) return;
     if (index >= queue.length) {
       speechAudioRef.current = null;
@@ -207,39 +235,39 @@ export default function Kiosk({ settings: shellSettings = null }) {
       if (runId !== speechRunRef.current) return;
       speechAudioRef.current = null;
       speechTimerRef.current = window.setTimeout(
-        () => playAudioQueue(queue, runId, index + 1, playbackRate),
+        () => playAudioQueue(queue, runId, index + 1, playbackRate, onFailure),
         queue[index].pauseAfter
       );
     };
-    audio.onerror = () => {
+    const handleAudioFailure = () => {
       if (runId !== speechRunRef.current) return;
       speechAudioRef.current = null;
-      if (language === "es" && "speechSynthesis" in window) {
-        refreshSpeechVoices().then(() => {
-          if (runId !== speechRunRef.current) return;
-          const fallbackVoice = chooseSpeechVoice(speechVoicesRef.current, language);
-          speakSegments(
-            buildReadoutSegments(),
-            runId,
-            step === STEPS.ACTIVITIES ? 1000 : 250,
-            fallbackVoice
-          );
-        });
+      if (onFailure) {
+        onFailure();
         return;
       }
       setSpeaking(false);
       setReadoutMessage(language === "hmn" ? t.readoutVoiceMissing : t.readoutUnavailable);
     };
-    audio.play().catch(() => {
-      if (runId !== speechRunRef.current) return;
-      setSpeaking(false);
-      setReadoutMessage(t.readoutUnavailable);
-    });
+    audio.onerror = handleAudioFailure;
+    audio.play().catch(handleAudioFailure);
+  }
+
+  async function startBrowserSpeechFallback(segments, runId, pauseMs) {
+    if (runId !== speechRunRef.current) return;
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+      stopReadout(t.readoutUnavailable);
+      return;
+    }
+    await refreshSpeechVoices();
+    if (runId !== speechRunRef.current) return;
+    const voice = chooseSpeechVoice(speechVoicesRef.current, language);
+    speakSegments(segments, runId, pauseMs, voice);
   }
 
   function speakSegments(segments, runId, pauseMs, voice, index = 0) {
     if (runId !== speechRunRef.current) return;
-    const utterance = new window.SpeechSynthesisUtterance(segments[index]);
+    const utterance = new window.SpeechSynthesisUtterance(readoutSegmentText(segments[index]));
     const profile = speechProfile(language);
     if (voice) utterance.voice = voice;
     utterance.lang = preferredSpeechLanguage(language);
@@ -282,23 +310,32 @@ export default function Kiosk({ settings: shellSettings = null }) {
   }
 
   function buildReadoutSegments() {
-    const withError = (text) => (error ? `${text} ${error}` : text);
+    const segment = (key, text) => ({ key, text });
+    const withError = (key, text) => (error ? { text: `${text} ${error}` } : segment(key, text));
     if (step === STEPS.WELCOME) {
-      return [`${t.welcome}. ${t.kioskPurpose}. ${t.checkInButton}.`];
+      return [segment("welcome_screen", `${t.welcome}. ${t.kioskPurpose}. ${t.checkInButton}.`)];
     }
     if (step === STEPS.IDENTITY) {
-      return [withError(`${t.nameEntryTitle}. ${t.nameEntryHelp}. ${t.firstName}. ${t.lastName}.`)];
+      return [
+        withError(
+          "identity_screen",
+          `${t.nameEntryTitle}. ${t.nameEntryHelp}. ${t.firstName}. ${t.lastName}.`
+        )
+      ];
     }
     if (step === STEPS.LANGUAGE) {
       return [
-        `${t.chooseLanguage} ${t.readoutLanguageOptions}: ${languageOptions
-          .map((option) => option.label)
-          .join(", ")}.`
+        segment(
+          "language_screen",
+          `${t.chooseLanguage} ${t.readoutLanguageOptions}: ${languageOptions
+            .map((option) => option.label)
+            .join(", ")}.`
+        )
       ];
     }
     if (step === STEPS.ACTIVITIES) {
       return [
-        `${t.needToday}. ${t.chooseSupport}.`,
+        segment("activities_intro", `${t.needToday}. ${t.chooseSupport}.`),
         ...activities.map((activity) => {
           const timing = activity.time_limit_enabled
             ? formatActivityDurationForSpeech(activity.duration_minutes, language)
@@ -316,14 +353,13 @@ export default function Kiosk({ settings: shellSettings = null }) {
                 : "";
           return `${translateActivityName(activity, language)}, ${timing}. ${availability}`;
         }),
-        withError(t.continue)
+        withError("continue_button", t.continue)
       ];
     }
     if (step === STEPS.CONFIRMATION && confirmation) {
       return [
-        `${t.checkedIn}. ${t.staffWillCall}. ${confirmation.items
-          .map((item) => translateActivityName(item, language))
-          .join(". ")}`
+        segment("confirmation_base", `${t.checkedIn}. ${t.staffWillCall}.`),
+        ...confirmation.items.map((item) => translateActivityName(item, language))
       ];
     }
     return [];
@@ -571,4 +607,12 @@ function formatAvailabilityWindow(activity, text, language) {
   return text.availableHours
     .replace("{start}", formatActivityClock(activity.availability_start, language))
     .replace("{end}", formatActivityClock(activity.availability_end, language));
+}
+
+function readoutSegmentText(segment) {
+  return typeof segment === "string" ? segment : segment?.text || "";
+}
+
+function readoutSegmentKey(segment) {
+  return typeof segment === "string" ? "" : segment?.key || "";
 }

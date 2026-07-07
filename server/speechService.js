@@ -1,22 +1,33 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultHmongVoicePath = path.join(projectRoot, "data", "hmong-voice", "Kong");
+const defaultHmongPhrasePath = path.join(projectRoot, "data", "hmong-phrases");
 const spanishAudioCache = new Map();
 const hmongAudioCache = new Map();
+const localSpeechCache = new Map();
 const MAX_SPANISH_CACHE_ITEMS = 120;
 const MAX_HMONG_CACHE_ITEMS = 120;
+const MAX_LOCAL_SPEECH_CACHE_ITEMS = 160;
 const MAX_SPEECH_TEXT_LENGTH = 350;
-const HMONG_CROSSFADE_MILLISECONDS = 85;
-const HMONG_BOUNDARY_THRESHOLD = 1800;
+const HMONG_CROSSFADE_MILLISECONDS = 120;
+const HMONG_BOUNDARY_THRESHOLD = 900;
 const hmongCompoundWords = {
   sijhawm: ["sij", "hawm"]
+};
+const localSpeechVoices = {
+  en: "en-gb",
+  es: "es",
+  so: "so"
 };
 
 let hmongVoiceIndex = null;
 let indexedHmongVoicePath = "";
+let hmongPhraseCatalog = null;
+let indexedHmongPhrasePath = "";
 
 function cleanSpeechText(text) {
   return String(text || "")
@@ -27,6 +38,10 @@ function cleanSpeechText(text) {
 
 function hmongVoicePath() {
   return path.resolve(process.env.HMONG_VOICE_PATH || defaultHmongVoicePath);
+}
+
+function hmongPhrasePath() {
+  return path.resolve(process.env.HMONG_PHRASE_PATH || defaultHmongPhrasePath);
 }
 
 function loadHmongVoiceIndex() {
@@ -40,6 +55,71 @@ function loadHmongVoiceIndex() {
     hmongVoiceIndex.add(path.basename(filename, ".wav").toLowerCase());
   }
   return hmongVoiceIndex;
+}
+
+function normalizeHmongPhraseText(text) {
+  return normalizeHmongText(text)
+    .normalize("NFKD")
+    .replace(/[^\p{Letter}\p{Number}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function safePhraseFilePath(basePath, filename) {
+  const cleanFilename = String(filename || "").replaceAll("\\", "/");
+  if (!cleanFilename || cleanFilename.includes("..") || path.isAbsolute(cleanFilename)) {
+    return "";
+  }
+  if (!cleanFilename.toLowerCase().endsWith(".wav")) return "";
+  const filePath = path.resolve(basePath, cleanFilename);
+  return filePath === basePath || filePath.startsWith(`${basePath}${path.sep}`) ? filePath : "";
+}
+
+function loadHmongPhraseCatalog() {
+  const phrasePath = hmongPhrasePath();
+  if (hmongPhraseCatalog && indexedHmongPhrasePath === phrasePath) return hmongPhraseCatalog;
+  indexedHmongPhrasePath = phrasePath;
+  const catalog = {
+    entries: [],
+    byKey: new Map(),
+    byText: new Map(),
+    manifestPath: path.join(phrasePath, "manifest.json"),
+    errors: []
+  };
+  hmongPhraseCatalog = catalog;
+  if (!fs.existsSync(catalog.manifestPath)) return catalog;
+
+  try {
+    const manifest = JSON.parse(fs.readFileSync(catalog.manifestPath, "utf8"));
+    const entries = Array.isArray(manifest?.phrases) ? manifest.phrases : [];
+    for (const entry of entries) {
+      const key = String(entry.key || "").trim();
+      const text = cleanSpeechText(entry.text);
+      const filePath = safePhraseFilePath(phrasePath, entry.file);
+      if (!key || !text || !filePath) {
+        catalog.errors.push(`Skipped incomplete phrase entry: ${key || entry.file || "unknown"}`);
+        continue;
+      }
+      if (!fs.existsSync(filePath)) {
+        catalog.errors.push(`Missing Hmong phrase file: ${entry.file}`);
+        continue;
+      }
+      const cleanEntry = {
+        key,
+        text,
+        normalizedText: normalizeHmongPhraseText(text),
+        file: filePath,
+        filename: entry.file
+      };
+      catalog.entries.push(cleanEntry);
+      catalog.byKey.set(key, cleanEntry);
+      catalog.byText.set(cleanEntry.normalizedText, cleanEntry);
+    }
+  } catch (error) {
+    catalog.errors.push(`Could not read Hmong phrase manifest: ${error.message}`);
+  }
+
+  return catalog;
 }
 
 function hmongNumberWords(value) {
@@ -74,11 +154,29 @@ function resolveHmongToken(token, voiceIndex) {
 
 export function getSpeechStatus() {
   const voiceIndex = loadHmongVoiceIndex();
+  const phraseCatalog = loadHmongPhraseCatalog();
+  const phraseCount = phraseCatalog.entries.length;
+  const fallbackReady = voiceIndex.size > 1000;
+  const localSpeech = inspectLocalSpeech();
   return {
-    hmongVoiceReady: voiceIndex.size > 1000,
+    hmongSpeechMode: phraseCount
+      ? "phrase-first"
+      : fallbackReady
+        ? "fallback-syllable"
+        : "not-installed",
+    hmongPhraseReady: phraseCount > 0,
+    hmongPhraseCount: phraseCount,
+    hmongPhrasePath: hmongPhrasePath(),
+    hmongPhraseManifestPath: phraseCatalog.manifestPath,
+    hmongPhraseErrors: phraseCatalog.errors,
+    hmongVoiceReady: fallbackReady,
     hmongVoiceSamples: voiceIndex.size,
     hmongVoicePath: hmongVoicePath(),
-    spanishVoiceReady: true
+    spanishVoiceReady: true,
+    serverSpeechReady: localSpeech.ready,
+    serverSpeechCommand: localSpeech.command,
+    serverSpeechLanguages: Object.keys(localSpeechVoices),
+    serverSpeechError: localSpeech.error
   };
 }
 
@@ -128,8 +226,25 @@ export function getHmongSyllablePath(token) {
 }
 
 export function createHmongSpeechAudio(text) {
+  return createHmongSpeechAudioResult(text).audio;
+}
+
+export function createHmongSpeechAudioResult(text, options = {}) {
   const cleanText = cleanSpeechText(text);
-  if (hmongAudioCache.has(cleanText)) return hmongAudioCache.get(cleanText);
+  const phrase = findHmongPhrase(cleanText, options.key);
+  if (phrase) {
+    return {
+      audio: fs.readFileSync(phrase.file),
+      source: "phrase",
+      phraseKey: phrase.key,
+      filename: phrase.filename
+    };
+  }
+
+  const cacheKey = `fallback:${cleanText}`;
+  if (hmongAudioCache.has(cacheKey)) {
+    return { audio: hmongAudioCache.get(cacheKey), source: "fallback-syllable" };
+  }
 
   const plan = createHmongSpeechPlan(cleanText);
   const clips = plan.tokens.map((token, index) => {
@@ -148,11 +263,20 @@ export function createHmongSpeechAudio(text) {
     return crossfadePcm(joined, clip.data, first);
   }, Buffer.from(first.data));
   const audio = buildWaveFile(first, audioData);
-  hmongAudioCache.set(cleanText, audio);
+  hmongAudioCache.set(cacheKey, audio);
   if (hmongAudioCache.size > MAX_HMONG_CACHE_ITEMS) {
     hmongAudioCache.delete(hmongAudioCache.keys().next().value);
   }
-  return audio;
+  return { audio, source: "fallback-syllable", missing: plan.missing };
+}
+
+function findHmongPhrase(text, key) {
+  const catalog = loadHmongPhraseCatalog();
+  if (!catalog.entries.length) return null;
+  const normalizedText = normalizeHmongPhraseText(text);
+  const keyedPhrase = key ? catalog.byKey.get(String(key)) : null;
+  if (keyedPhrase?.normalizedText === normalizedText) return keyedPhrase;
+  return catalog.byText.get(normalizedText) || null;
 }
 
 function trimHmongBoundary(clip, { isFirst, isFinal }) {
@@ -176,8 +300,8 @@ function trimHmongBoundary(clip, { isFirst, isFinal }) {
       }
     }
   }
-  const attackFrames = Math.round(clip.sampleRate * 0.004);
-  const releaseFrames = Math.round(clip.sampleRate * 0.006);
+  const attackFrames = Math.round(clip.sampleRate * 0.002);
+  const releaseFrames = Math.round(clip.sampleRate * 0.003);
   const startFrame = Math.max(0, firstActiveFrame - attackFrames);
   const endFrame = Math.min(totalFrames, lastActiveFrame + releaseFrames);
   return clip.data.subarray(
@@ -322,4 +446,60 @@ export async function getSpanishSpeechAudio(text, fetchImpl = fetch) {
     spanishAudioCache.delete(spanishAudioCache.keys().next().value);
   }
   return audio;
+}
+
+export function createLocalSpeechAudio(text, language = "en", { spawnImpl = spawnSync } = {}) {
+  const cleanText = cleanSpeechText(text);
+  if (!cleanText) {
+    const error = new Error("Speech text is required.");
+    error.status = 400;
+    throw error;
+  }
+  const voice = localSpeechVoices[language];
+  if (!voice) {
+    const error = new Error("Server speech is not configured for this language.");
+    error.status = 422;
+    throw error;
+  }
+
+  const cacheKey = `${language}:${cleanText}`;
+  if (localSpeechCache.has(cacheKey)) return localSpeechCache.get(cacheKey);
+
+  const command = localSpeechCommand();
+  const result = spawnImpl(command, ["--stdout", "-v", voice, "-s", "145", "-p", "42", cleanText], {
+    encoding: "buffer",
+    maxBuffer: 1024 * 1024 * 4
+  });
+
+  if (result.error || result.status !== 0 || !result.stdout?.length) {
+    const error = new Error(
+      "Server speech is not installed. On Raspberry Pi, install it with: sudo apt-get install -y espeak-ng"
+    );
+    error.status = 503;
+    throw error;
+  }
+
+  const audio = Buffer.from(result.stdout);
+  localSpeechCache.set(cacheKey, audio);
+  if (localSpeechCache.size > MAX_LOCAL_SPEECH_CACHE_ITEMS) {
+    localSpeechCache.delete(localSpeechCache.keys().next().value);
+  }
+  return audio;
+}
+
+function localSpeechCommand() {
+  return process.env.ESPEAK_NG_BIN || "espeak-ng";
+}
+
+function inspectLocalSpeech() {
+  const command = localSpeechCommand();
+  const result = spawnSync(command, ["--version"], {
+    encoding: "utf8",
+    timeout: 2000
+  });
+  return {
+    command,
+    ready: !result.error && result.status === 0,
+    error: result.error ? result.error.message : result.status === 0 ? "" : result.stderr || ""
+  };
 }

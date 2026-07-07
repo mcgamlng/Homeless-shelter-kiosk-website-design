@@ -5,7 +5,9 @@ import path from "node:path";
 import test from "node:test";
 import {
   createHmongSpeechAudio,
+  createHmongSpeechAudioResult,
   createHmongSpeechPlan,
+  createLocalSpeechAudio,
   getHmongSyllablePath,
   getSpanishSpeechAudio
 } from "../server/speechService.js";
@@ -59,6 +61,57 @@ test("builds one continuous playable Hmong wave file", () => {
     else process.env.HMONG_VOICE_PATH = previousPath;
     fs.rmSync(voicePath, { recursive: true, force: true });
   }
+});
+
+test("prefers native Hmong phrase audio when the manifest text matches", () => {
+  const phrasePath = fs.mkdtempSync(path.join(os.tmpdir(), "lh-hmong-phrases-"));
+  const previousPath = process.env.HMONG_PHRASE_PATH;
+  process.env.HMONG_PHRASE_PATH = phrasePath;
+  try {
+    const phraseAudio = createTestWave();
+    fs.writeFileSync(path.join(phrasePath, "welcome.wav"), phraseAudio);
+    fs.writeFileSync(
+      path.join(phrasePath, "manifest.json"),
+      JSON.stringify({
+        phrases: [
+          {
+            key: "welcome_screen",
+            text: "Zoo siab txais tos.",
+            file: "welcome.wav"
+          }
+        ]
+      })
+    );
+    const result = createHmongSpeechAudioResult("Zoo siab txais tos.", {
+      key: "welcome_screen"
+    });
+    assert.equal(result.source, "phrase");
+    assert.equal(result.phraseKey, "welcome_screen");
+    assert.deepEqual(result.audio, phraseAudio);
+  } finally {
+    if (previousPath === undefined) delete process.env.HMONG_PHRASE_PATH;
+    else process.env.HMONG_PHRASE_PATH = previousPath;
+    fs.rmSync(phrasePath, { recursive: true, force: true });
+  }
+});
+
+test("creates local server speech audio with espeak-ng compatible arguments", () => {
+  const expected = createTestWave();
+  const calls = [];
+  const audio = createLocalSpeechAudio("Welcome to Listening House.", "en", {
+    spawnImpl(command, args) {
+      calls.push({ command, args });
+      return { status: 0, stdout: expected };
+    }
+  });
+  assert.deepEqual(audio, expected);
+  assert.equal(calls[0].command, process.env.ESPEAK_NG_BIN || "espeak-ng");
+  assert.deepEqual(calls[0].args.slice(0, 4), ["--stdout", "-v", "en-gb", "-s"]);
+  assert.ok(calls[0].args.includes("Welcome to Listening House."));
+});
+
+test("local server speech rejects unsupported languages", () => {
+  assert.throws(() => createLocalSpeechAudio("Hello", "hmn"), /not configured/);
 });
 
 function createTestWave() {

@@ -21,12 +21,71 @@ npm --version
 
 ## Install and Build
 
+### Copy the GitHub HTTPS link
+
+This is the exact repository address the Raspberry Pi needs:
+
+```text
+https://github.com/mcgamlng/Homeless-shelter-kiosk-website-design.git
+```
+
+If you are looking at the GitHub page in a browser:
+
+1. Open the repository page.
+2. Press the green **Code** button.
+3. Choose **HTTPS**.
+4. Copy the address that ends in `.git`.
+
+Do not copy only `mcgamlng/Homeless-shelter-kiosk-website-design.git`. The Raspberry Pi needs the
+full `https://github.com/...` address.
+
+### Clone the project onto the Raspberry Pi
+
+Run this exact command block on the Raspberry Pi:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git unzip
+cd /home/pi
+git clone https://github.com/mcgamlng/Homeless-shelter-kiosk-website-design.git listening-house-project
+cd listening-house-project
+```
+
+What this does:
+
+- `cd /home/pi` moves you to the Pi user's home folder.
+- `git clone ... listening-house-project` copies the GitHub project into a new folder named
+  `listening-house-project`.
+- `cd listening-house-project` opens that new folder.
+
+Most setup commands after this point should be typed inside the `listening-house-project` folder.
+
+If the Pi says the folder already exists, do not clone again. Use:
+
+```bash
+cd /home/pi/listening-house-project
+git pull
+```
+
+If you are not using Git yet, copy the project folder to the Pi, then open a terminal inside that
+folder.
+
 ```bash
 cd /path/to/listening-house-project
 npm install
 npm run build
 npm run speech:install-hmong
 ```
+
+For Raspberry Pi read-aloud support, also install the lightweight local speech package:
+
+```bash
+sudo apt-get install -y espeak-ng
+```
+
+This gives the kiosk a server-side voice fallback when Chromium says read aloud is not available in
+the browser. English, Spanish fallback, and Somali can use this package. Hmong still uses the
+separate Hmong phrase or fallback voice setup.
 
 Create `.env`:
 
@@ -41,6 +100,16 @@ Start:
 ```bash
 npm start
 ```
+
+Manual operation without auto boot:
+
+1. Open a terminal on the Pi.
+2. Go to the project folder.
+3. Run `npm start`.
+4. Open Chromium to `http://localhost:3000/kiosk`.
+
+Stopping that terminal process stops the server. Staff phones and tablets can only connect while the
+server is running.
 
 ## Open the System
 
@@ -91,11 +160,49 @@ chmod +x scripts/raspberry-pi/*.sh
 sudo ./scripts/raspberry-pi/install-autostart.sh
 ```
 
+The installer:
+
+- Installs `espeak-ng` for read-aloud fallback.
+- Installs Chromium if it is missing.
+- Creates the `listening-house.service` server service.
+- Creates the kiosk launcher in the real desktop user's startup folder, such as
+  `/home/ruben/.config/autostart/listening-house-kiosk.desktop`.
+- Starts the server service immediately.
+
 Remove it:
 
 ```bash
 sudo ./scripts/raspberry-pi/remove-autostart.sh
 ```
+
+## Updating From GitHub
+
+Codex does not need to be installed on the Raspberry Pi for the kiosk to run. The easiest workflow is:
+
+1. Edit and test the code on your laptop with Codex.
+2. Push the finished code to GitHub.
+3. On the Raspberry Pi, pull the latest code and restart the kiosk server.
+
+Run this from the project folder on the Pi:
+
+```bash
+chmod +x scripts/raspberry-pi/*.sh
+./scripts/raspberry-pi/update-from-github.sh
+```
+
+The update helper:
+
+- Stops the server service if it is running.
+- Backs up `data/listening-house.sqlite` into `data/backups`.
+- Pulls the latest GitHub code.
+- Installs dependencies.
+- Rebuilds the website.
+- Installs the lightweight `espeak-ng` speech fallback.
+- Installs the Hmong fallback voice pack if missing.
+- Restarts the service and checks `http://127.0.0.1:3000/api/health`.
+
+If you still want Codex on the Pi for development, install Codex CLI separately and sign in with
+ChatGPT device-code login or an API key. Do not make Codex part of the production startup service.
 
 ## systemd Example
 
@@ -135,8 +242,9 @@ sudo systemctl status listening-house
 5. Confirm untimed services appear in the queue.
 6. Test daily quantity limits.
 7. Turn on dashboard alarms and test an In Progress activity.
-8. Scan the About-page QR codes from a phone.
-9. Restart the Pi and confirm the server and kiosk return automatically.
+8. Open Admin and confirm Read Aloud Voice Status shows the expected Hmong mode.
+9. Scan the About-page QR codes from a phone.
+10. Restart the Pi and confirm the server and kiosk return automatically.
 
 ## Backup
 

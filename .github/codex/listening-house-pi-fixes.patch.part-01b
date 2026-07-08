@@ -1,0 +1,210 @@
+-    const insertActivity = database.prepare(
+-      `INSERT INTO activities
+-       (name, name_es, name_hmn, name_so,
+-        duration_minutes, time_limit_enabled, availability_window_enabled,
+-        availability_start, availability_end,
+-        monthly_window_enabled, monthly_start_day, monthly_end_day,
+-        yearly_window_enabled, yearly_start, yearly_end,
+-        daily_limit_enabled, daily_limit,
+-        alarm_enabled, alarm_minutes_before, icon, active, sort_order)
+-       VALUES (?, ?, ?, ?, ?, 1, 0, '08:00', '16:00',
+-               0, 1, 31, 0, '01-01', '12-31',
+-               0, NULL, 0, 5, ?, 1, ?)`
+-    );
+-    const insertActivities = database.transaction(() => {
+-      DEFAULT_ACTIVITIES.forEach(([name, minutes, icon], index) => {
+-        const translations = buildActivityTranslations(name);
+-        insertActivity.run(
+-          name,
+-          translations.name_es,
+-          translations.name_hmn,
+-          translations.name_so,
+-          minutes,
+-          icon,
+-          index + 1
+-        );
+-      });
++    replaceWithDefaultActivities(database);
++    setActivityPresetVersion(database);
++    return;
++  }
++
++  const storedPresetVersion = database
++    .prepare("SELECT value FROM settings WHERE key = 'activity_preset_version'")
++    .get()?.value;
++  if (!storedPresetVersion && usesLegacyDefaultActivities(database)) {
++    replaceWithDefaultActivities(database);
++    setActivityPresetVersion(database);
++  }
++}
++
++export function replaceWithDefaultActivities(database) {
++  const existing = database.prepare("SELECT id FROM activities ORDER BY sort_order, id").all();
++  const updateActivity = database.prepare(
++    `UPDATE activities
++     SET name = ?, name_es = ?, name_hmn = ?, name_so = ?,
++         duration_minutes = ?, time_limit_enabled = ?,
++         availability_window_enabled = 0,
++         availability_start = '08:00', availability_end = '16:00',
++         monthly_window_enabled = 0, monthly_start_day = 1, monthly_end_day = 31,
++         yearly_window_enabled = 0, yearly_start = '01-01', yearly_end = '12-31',
++         daily_limit_enabled = 0, daily_limit = NULL,
++         alarm_enabled = 0, alarm_minutes_before = 5,
++         icon = ?, active = 1, sort_order = ?, updated_at = CURRENT_TIMESTAMP
++     WHERE id = ?`
++  );
++  const insertActivity = database.prepare(
++    `INSERT INTO activities
++     (name, name_es, name_hmn, name_so,
++      duration_minutes, time_limit_enabled, availability_window_enabled,
++      availability_start, availability_end,
++      monthly_window_enabled, monthly_start_day, monthly_end_day,
++      yearly_window_enabled, yearly_start, yearly_end,
++      daily_limit_enabled, daily_limit,
++      alarm_enabled, alarm_minutes_before, icon, active, sort_order)
++     VALUES (?, ?, ?, ?, ?, ?, 0, '08:00', '16:00',
++             0, 1, 31, 0, '01-01', '12-31',
++             0, NULL, 0, 5, ?, 1, ?)`
++  );
++  const deactivateExtra = database.prepare(
++    `UPDATE activities
++     SET active = 0, sort_order = ?, updated_at = CURRENT_TIMESTAMP
++     WHERE id = ?`
++  );
++  const transaction = database.transaction(() => {
++    DEFAULT_ACTIVITIES.forEach((activity, index) => {
++      const translations = buildActivityTranslations(activity.name);
++      const params = [
++        activity.name,
++        translations.name_es,
++        translations.name_hmn,
++        translations.name_so,
++        activity.minutes,
++        activity.timed ? 1 : 0,
++        activity.icon,
++        index + 1
++      ];
++      const existingRow = existing[index];
++      if (existingRow) {
++        updateActivity.run(...params, existingRow.id);
++      } else {
++        insertActivity.run(...params);
++      }
+     });
+-    insertActivities();
+-  }
++    existing.slice(DEFAULT_ACTIVITIES.length).forEach((row, index) => {
++      deactivateExtra.run(DEFAULT_ACTIVITIES.length + index + 1, row.id);
++    });
++    setActivityPresetVersion(database);
++  });
++  transaction();
++}
++
++function usesLegacyDefaultActivities(database) {
++  const names = database
++    .prepare("SELECT name FROM activities ORDER BY sort_order, id")
++    .all()
++    .map((row) => normalizePresetName(row.name));
++  if (names.length !== LEGACY_DEFAULT_ACTIVITY_NAMES.length) return false;
++  return LEGACY_DEFAULT_ACTIVITY_NAMES.every(
++    (name, index) => names[index] === normalizePresetName(name)
++  );
++}
++
++function setActivityPresetVersion(database) {
++  database
++    .prepare(
++      `INSERT INTO settings (key, value, updated_at)
++       VALUES ('activity_preset_version', ?, CURRENT_TIMESTAMP)
++       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
++    )
++    .run(DEFAULT_ACTIVITY_PRESET_VERSION);
++}
++
++function normalizePresetName(value) {
++  return String(value || "")
++    .trim()
++    .toLowerCase()
++    .replace(/\s+/g, " ");
+ }
+ 
+ export function getDatabasePath() {
+
+diff --git a/server/schema.sql b/server/schema.sql
+--- a/server/schema.sql
++++ b/server/schema.sql
+@@ -90,6 +90,18 @@
+   FOREIGN KEY (scheduled_item_id) REFERENCES scheduled_activity_items(id) ON DELETE CASCADE
+ );
+ 
++CREATE TABLE IF NOT EXISTS daily_export_archives (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  report_date TEXT NOT NULL UNIQUE,
++  filename TEXT NOT NULL,
++  file_path TEXT NOT NULL,
++  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
++  emailed_at TEXT,
++  email_recipient TEXT,
++  email_status TEXT NOT NULL DEFAULT 'not_configured',
++  error_message TEXT
++);
++
+ CREATE INDEX IF NOT EXISTS idx_check_ins_status ON check_ins(status);
+ CREATE INDEX IF NOT EXISTS idx_check_ins_guest ON check_ins(guest_id);
+ CREATE INDEX IF NOT EXISTS idx_check_ins_checked_in_at ON check_ins(checked_in_at);
+@@ -99,3 +111,5 @@
+ CREATE INDEX IF NOT EXISTS idx_scheduled_status ON scheduled_activity_items(status);
+ CREATE INDEX IF NOT EXISTS idx_scheduled_start ON scheduled_activity_items(scheduled_start);
+ CREATE INDEX IF NOT EXISTS idx_status_history_changed_at ON status_history(changed_at);
++CREATE INDEX IF NOT EXISTS idx_daily_export_archives_report_date
++  ON daily_export_archives(report_date);
+
+diff --git a/server/repository.js b/server/repository.js
+--- a/server/repository.js
++++ b/server/repository.js
+@@ -1,5 +1,5 @@
+ import crypto from "node:crypto";
+-import { db } from "./db.js";
++import { db, replaceWithDefaultActivities } from "./db.js";
+ import {
+   addMinutes,
+   compactScheduleAfterFinalStatus,
+@@ -32,6 +32,10 @@
+ const KIOSK_COLOR_KEY_SET = new Set(KIOSK_COLOR_KEYS);
+ const KIOSK_CUSTOMIZATION_KEY_SET = new Set(KIOSK_CUSTOMIZATION_KEYS);
+ const NETWORK_URL_KEYS = new Set(["preferred_local_url", "public_base_url"]);
++const DAILY_EXPORT_EMAIL_KEYS = new Set([
++  "daily_export_sender_email",
++  "daily_export_recipient_email"
++]);
+ const LOCAL_DATE_FORMATTER = new Intl.DateTimeFormat([], {
+   year: "numeric",
+   month: "long",
+@@ -81,6 +85,30 @@
+     return String(value || "")
+       .trim()
+       .slice(0, 300);
++  }
++  if (key === "daily_export_enabled") {
++    return value === false || String(value) === "0" || String(value).toLowerCase() === "false"
++      ? "0"
++      : "1";
++  }
++  if (key === "daily_export_time") {
++    return normalizeClockTime(value, "03:00");
++  }
++  if (key === "daily_export_retention_days") {
++    return String(Math.max(7, Math.min(365, Number(value) || 7)));
++  }
++  if (DAILY_EXPORT_EMAIL_KEYS.has(key)) {
++    return String(value || "")
++      .trim()
++      .slice(0, 220);
++  }
++  if (key === "daily_export_app_password") {
++    return String(value || "")
++      .trim()
++      .slice(0, 220);
++  }
++  if (key === "daily_export_last_run_date") {

@@ -1,0 +1,420 @@
++    return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : "";
+   }
+   return value;
+ }
+@@ -334,6 +362,167 @@
+   });
+   transaction();
+   return getSettings();
++}
++
++export function getDailyExportSettings({ includeSecret = false } = {}) {
++  const appPassword = getSettingValue("daily_export_app_password");
++  return {
++    enabled: getSettingValue("daily_export_enabled") !== "0",
++    export_time: normalizeClockTime(getSettingValue("daily_export_time"), "03:00"),
++    retention_days: Math.max(7, Number(getSettingValue("daily_export_retention_days") || 7)),
++    sender_email: getSettingValue("daily_export_sender_email"),
++    recipient_email: getSettingValue("daily_export_recipient_email"),
++    has_app_password: Boolean(appPassword),
++    last_run_date: getSettingValue("daily_export_last_run_date"),
++    ...(includeSecret ? { app_password: appPassword } : {})
++  };
++}
++
++export function updateDailyExportSettings(settings = {}) {
++  const next = {
++    daily_export_enabled: settings.enabled,
++    daily_export_time: settings.export_time,
++    daily_export_retention_days: settings.retention_days,
++    daily_export_sender_email: settings.sender_email,
++    daily_export_recipient_email: settings.recipient_email
++  };
++  if (Object.hasOwn(settings, "app_password")) {
++    next.daily_export_app_password = settings.app_password;
++  }
++  if (settings.clear_app_password) {
++    next.daily_export_app_password = "";
++  }
++  updateSettings(next);
++  return getDailyExportSettings();
++}
++
++export function setDailyExportLastRunDate(dateKey) {
++  updateSetting("daily_export_last_run_date", dateKey);
++}
++
++export function listDailyExportArchives({ limit = 21 } = {}) {
++  return rows(
++    `SELECT id, report_date, filename, file_path, created_at, emailed_at,
++            email_recipient, email_status, error_message
++     FROM daily_export_archives
++     ORDER BY report_date DESC
++     LIMIT ?`,
++    [Math.max(1, Math.min(100, Number(limit) || 21))]
++  ).map(normalizeDailyExportArchive);
++}
++
++export function getDailyExportArchive(id) {
++  return normalizeDailyExportArchive(
++    one(
++      `SELECT id, report_date, filename, file_path, created_at, emailed_at,
++              email_recipient, email_status, error_message
++       FROM daily_export_archives
++       WHERE id = ?`,
++      [id]
++    )
++  );
++}
++
++export function getDailyExportArchiveByDate(reportDate) {
++  return normalizeDailyExportArchive(
++    one(
++      `SELECT id, report_date, filename, file_path, created_at, emailed_at,
++              email_recipient, email_status, error_message
++       FROM daily_export_archives
++       WHERE report_date = ?`,
++      [reportDate]
++    )
++  );
++}
++
++export function upsertDailyExportArchive(archive) {
++  const cleanArchive = {
++    reportDate: cleanDateKey(archive.reportDate),
++    filename: cleanText(archive.filename, 220),
++    filePath: String(archive.filePath || "").trim(),
++    emailStatus: cleanText(archive.emailStatus || "not_configured", 40),
++    emailRecipient: cleanText(archive.emailRecipient || "", 220),
++    errorMessage: cleanText(archive.errorMessage || "", 500)
++  };
++  if (!cleanArchive.reportDate || !cleanArchive.filename || !cleanArchive.filePath) {
++    const error = new Error("Daily export archive is missing required metadata.");
++    error.status = 400;
++    throw error;
++  }
++  db.prepare(
++    `INSERT INTO daily_export_archives
++       (report_date, filename, file_path, email_status, email_recipient, error_message)
++     VALUES (?, ?, ?, ?, ?, ?)
++     ON CONFLICT(report_date) DO UPDATE SET
++       filename = excluded.filename,
++       file_path = excluded.file_path,
++       created_at = CURRENT_TIMESTAMP,
++       email_status = excluded.email_status,
++       email_recipient = excluded.email_recipient,
++       error_message = excluded.error_message`
++  ).run(
++    cleanArchive.reportDate,
++    cleanArchive.filename,
++    cleanArchive.filePath,
++    cleanArchive.emailStatus,
++    cleanArchive.emailRecipient,
++    cleanArchive.errorMessage
++  );
++  return getDailyExportArchiveByDate(cleanArchive.reportDate);
++}
++
++export function updateDailyExportEmailStatus(id, status) {
++  db.prepare(
++    `UPDATE daily_export_archives
++     SET email_status = ?,
++         emailed_at = CASE WHEN ? = 'sent' THEN CURRENT_TIMESTAMP ELSE emailed_at END,
++         email_recipient = ?,
++         error_message = ?,
++         created_at = created_at
++     WHERE id = ?`
++  ).run(
++    cleanText(status.emailStatus || "not_configured", 40),
++    cleanText(status.emailStatus || "not_configured", 40),
++    cleanText(status.emailRecipient || "", 220),
++    cleanText(status.errorMessage || "", 500),
++    id
++  );
++  return getDailyExportArchive(id);
++}
++
++export function purgeArchivedRawData({ retentionDays = 7, now = new Date() } = {}) {
++  const cutoff = new Date(now);
++  cutoff.setHours(0, 0, 0, 0);
++  cutoff.setDate(cutoff.getDate() - Math.max(7, Number(retentionDays) || 7));
++  const cutoffKey = formatDateKey(cutoff);
++  const archives = rows(
++    `SELECT report_date
++     FROM daily_export_archives
++     WHERE report_date < ?
++       AND file_path <> ''`,
++    [cutoffKey]
++  );
++  let deletedCheckIns = 0;
++  const transaction = db.transaction(() => {
++    archives.forEach((archive) => {
++      const bounds = getDayBoundsFromDateKey(archive.report_date);
++      const info = db
++        .prepare(
++          `DELETE FROM check_ins
++           WHERE checked_in_at >= ?
++             AND checked_in_at < ?`
++        )
++        .run(formatSqliteUtcTimestamp(bounds.start), formatSqliteUtcTimestamp(bounds.end));
++      deletedCheckIns += info.changes || 0;
++    });
++  });
++  transaction();
++  return { deletedCheckIns, cutoffDate: cutoffKey };
++}
++
++export function restoreListeningHouseDefaultActivities() {
++  replaceWithDefaultActivities(db);
++  return getDashboardData();
+ }
+ 
+ export function verifyAdminPin(pin, fallbackPin = "2468") {
+@@ -1251,19 +1440,19 @@
+       firstName: "Maya",
+       lastName: "Johnson",
+       language: "en",
+-      activities: ["Meal / Snacks", "Mail Pickup", "Rest Area"]
++      activities: ["Coffee / Tea / Meals", "On-Site Phones", "Social Support / Engagement"]
+     },
+     {
+       firstName: "Ari",
+       lastName: "Lee",
+       language: "en",
+-      activities: ["Shower", "Meal / Snacks", "Phone Charging"]
++      activities: ["Bathrooms / Showers", "Coffee / Tea / Meals", "Cell Phone Charging"]
+     },
+     {
+       firstName: "Samira",
+       lastName: "Ahmed",
+       language: "so",
+-      activities: ["Laundry", "Clothing / Fresh Clothes", "Housing Help"]
++      activities: ["Clothing Room", "Housing / Outreach Help", "Basic Hygiene Items"]
+     }
+   ];
+   samples.forEach((sample) => {
+@@ -1760,6 +1949,34 @@
+   return date;
+ }
+ 
++function cleanDateKey(value) {
++  const parsed = parseRequestedReportDate(value);
++  return parsed ? formatDateKey(parsed) : "";
++}
++
++function getDayBoundsFromDateKey(dateKey) {
++  const start = parseRequestedReportDate(dateKey) || new Date();
++  start.setHours(0, 0, 0, 0);
++  const end = new Date(start);
++  end.setDate(end.getDate() + 1);
++  return { start, end };
++}
++
++function normalizeDailyExportArchive(row) {
++  if (!row) return null;
++  return {
++    id: row.id,
++    report_date: row.report_date,
++    filename: row.filename,
++    file_path: row.file_path,
++    created_at: row.created_at,
++    emailed_at: row.emailed_at || "",
++    email_recipient: row.email_recipient || "",
++    email_status: row.email_status || "not_configured",
++    error_message: row.error_message || ""
++  };
++}
++
+ function enumerateReportDates(bounds) {
+   const dates = [];
+   const cursor = new Date(bounds.start);
+
+diff --git a/server/dailyExports.js b/server/dailyExports.js
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/server/dailyExports.js
+@@ -0,0 +1,226 @@
++import fs from "node:fs";
++import os from "node:os";
++import path from "node:path";
++import { fileURLToPath } from "node:url";
++import nodemailer from "nodemailer";
++import {
++  createAnalyticsWorkbook,
++  getDailyExportArchive,
++  getDailyExportArchiveByDate,
++  getDailyExportSettings,
++  listDailyExportArchives,
++  purgeArchivedRawData,
++  setDailyExportLastRunDate,
++  updateDailyExportEmailStatus,
++  upsertDailyExportArchive
++} from "./repository.js";
++
++const __dirname = path.dirname(fileURLToPath(import.meta.url));
++const projectRoot = path.resolve(__dirname, "..");
++const defaultExportDir = path.join(projectRoot, "data", "exports");
++const schedulerState = {
++  timer: null,
++  running: false
++};
++
++export function getDailyExports() {
++  return listDailyExportArchives();
++}
++
++export function getDailyExportFile(id) {
++  const archive = getDailyExportArchive(id);
++  if (!archive) {
++    const error = new Error("Daily export was not found.");
++    error.status = 404;
++    throw error;
++  }
++  if (!archive.file_path || !fs.existsSync(archive.file_path)) {
++    const error = new Error("The saved spreadsheet file is missing on this Raspberry Pi.");
++    error.status = 404;
++    throw error;
++  }
++  return archive;
++}
++
++export async function runDailyExport({
++  reportDate = previousDateKey(),
++  force = false,
++  transporterFactory = createGmailTransport
++} = {}) {
++  const settings = getDailyExportSettings({ includeSecret: true });
++  const existing = getDailyExportArchiveByDate(reportDate);
++  if (existing && !force) {
++    return existing;
++  }
++
++  const workbook = createAnalyticsWorkbook({ period: "day", date: reportDate });
++  const exportDir = process.env.DAILY_EXPORT_DIR || defaultExportDir;
++  fs.mkdirSync(exportDir, { recursive: true });
++  const filename = safeSpreadsheetFilename(workbook.filename, reportDate);
++  const filePath = path.join(exportDir, filename);
++  fs.writeFileSync(filePath, workbook.buffer);
++
++  let archive = upsertDailyExportArchive({
++    reportDate,
++    filename,
++    filePath,
++    emailStatus: emailCanSend(settings) ? "pending" : "not_configured",
++    emailRecipient: settings.recipient_email
++  });
++
++  if (!settings.enabled) {
++    archive = updateDailyExportEmailStatus(archive.id, {
++      emailStatus: "disabled",
++      emailRecipient: settings.recipient_email
++    });
++  } else if (emailCanSend(settings)) {
++    archive = await sendDailyExportEmail({
++      archive,
++      workbook,
++      settings,
++      transporterFactory
++    });
++  }
++
++  purgeArchivedRawData({ retentionDays: settings.retention_days });
++  return archive;
++}
++
++export async function testDailyExportEmail({ transporterFactory = createGmailTransport } = {}) {
++  const settings = getDailyExportSettings({ includeSecret: true });
++  if (!emailCanSend(settings)) {
++    const error = new Error(
++      "Enter Gmail, app password, and recipient before sending a test email."
++    );
++    error.status = 400;
++    throw error;
++  }
++  const transporter = transporterFactory(settings);
++  await transporter.sendMail({
++    from: settings.sender_email,
++    to: settings.recipient_email,
++    subject: "Listening House daily export test",
++    text: "This is a test from the Listening House kiosk. If you can read this, the Pi can email daily spreadsheets."
++  });
++  return { ok: true, recipient_email: settings.recipient_email };
++}
++
++export function startDailyExportScheduler({ intervalMs = 60 * 1000 } = {}) {
++  if (schedulerState.timer) return schedulerState.timer;
++  const tick = () => {
++    dailyExportTick().catch((error) => {
++      console.error("Daily export failed:", error);
++    });
++  };
++  schedulerState.timer = setInterval(tick, intervalMs);
++  schedulerState.timer.unref?.();
++  setTimeout(tick, 5000).unref?.();
++  return schedulerState.timer;
++}
++
++export function stopDailyExportScheduler() {
++  if (!schedulerState.timer) return;
++  clearInterval(schedulerState.timer);
++  schedulerState.timer = null;
++}
++
++export async function dailyExportTick({ now = new Date() } = {}) {
++  if (schedulerState.running) return null;
++  const settings = getDailyExportSettings({ includeSecret: true });
++  if (!settings.enabled) return null;
++  const today = formatDateKey(now);
++  if (settings.last_run_date === today) return null;
++  if (!isAtOrAfterExportTime(now, settings.export_time)) return null;
++
++  schedulerState.running = true;
++  try {
++    const archive = await runDailyExport({ reportDate: previousDateKey(now) });
++    setDailyExportLastRunDate(today);
++    return archive;
++  } finally {
++    schedulerState.running = false;
++  }
++}
++
++async function sendDailyExportEmail({ archive, workbook, settings, transporterFactory }) {
++  try {
++    const transporter = transporterFactory(settings);
++    await transporter.sendMail({
++      from: settings.sender_email,
++      to: settings.recipient_email,
++      subject: `Listening House daily spreadsheet - ${archive.report_date}`,
++      text: `Attached is the Listening House daily spreadsheet for ${archive.report_date}.`,
++      attachments: [
++        {
++          filename: archive.filename,
++          content: workbook.buffer,
++          contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
++        }
++      ]
++    });
++    return updateDailyExportEmailStatus(archive.id, {
++      emailStatus: "sent",
++      emailRecipient: settings.recipient_email
++    });
++  } catch (error) {
++    return updateDailyExportEmailStatus(archive.id, {
++      emailStatus: "failed",
++      emailRecipient: settings.recipient_email,
++      errorMessage: error.message || "Email failed."
++    });
++  }
++}
++
++function createGmailTransport(settings) {
++  return nodemailer.createTransport({
++    service: "gmail",
++    auth: {
++      user: settings.sender_email,
++      pass: settings.app_password
++    }
++  });
++}
++

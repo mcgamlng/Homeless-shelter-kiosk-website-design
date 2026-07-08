@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { tts as edgeTts } from "edge-tts/out/index.js";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultHmongVoicePath = path.join(projectRoot, "data", "hmong-voice", "Kong");
@@ -9,9 +10,13 @@ const defaultHmongPhrasePath = path.join(projectRoot, "data", "hmong-phrases");
 const spanishAudioCache = new Map();
 const hmongAudioCache = new Map();
 const localSpeechCache = new Map();
+const naturalSpeechCache = new Map();
+const cloudSpeechCache = new Map();
 const MAX_SPANISH_CACHE_ITEMS = 120;
 const MAX_HMONG_CACHE_ITEMS = 120;
 const MAX_LOCAL_SPEECH_CACHE_ITEMS = 160;
+const MAX_NATURAL_SPEECH_CACHE_ITEMS = 120;
+const MAX_CLOUD_SPEECH_CACHE_ITEMS = 120;
 const MAX_SPEECH_TEXT_LENGTH = 350;
 const HMONG_CROSSFADE_MILLISECONDS = 120;
 const HMONG_BOUNDARY_THRESHOLD = 900;
@@ -22,6 +27,16 @@ const localSpeechVoices = {
   en: "en-gb",
   es: "es",
   so: "so"
+};
+const naturalSpeechVoices = {
+  en: "en-GB-RyanNeural",
+  es: "es-US-AlonsoNeural",
+  so: "so-SO-UbaxNeural"
+};
+const cloudSpeechLanguages = {
+  es: "es-US",
+  so: "so",
+  hmn: "hmn"
 };
 
 let hmongVoiceIndex = null;
@@ -158,6 +173,7 @@ export function getSpeechStatus() {
   const phraseCount = phraseCatalog.entries.length;
   const fallbackReady = voiceIndex.size > 1000;
   const localSpeech = inspectLocalSpeech();
+  const naturalSpeech = inspectNaturalSpeech();
   return {
     hmongSpeechMode: phraseCount
       ? "phrase-first"
@@ -173,6 +189,10 @@ export function getSpeechStatus() {
     hmongVoiceSamples: voiceIndex.size,
     hmongVoicePath: hmongVoicePath(),
     spanishVoiceReady: true,
+    naturalSpeechReady: naturalSpeech.ready,
+    naturalSpeechVoices,
+    naturalSpeechError: naturalSpeech.error,
+    cloudSpeechLanguages: Object.keys(cloudSpeechLanguages),
     serverSpeechReady: localSpeech.ready,
     serverSpeechCommand: localSpeech.command,
     serverSpeechLanguages: Object.keys(localSpeechVoices),
@@ -414,19 +434,63 @@ function buildWaveFile(format, data) {
   return Buffer.concat([header, data]);
 }
 
-export async function getSpanishSpeechAudio(text, fetchImpl = fetch) {
+export async function getNaturalSpeechAudio(text, language = "en", { ttsImpl = edgeTts } = {}) {
   const cleanText = cleanSpeechText(text);
   if (!cleanText) {
     const error = new Error("Speech text is required.");
     error.status = 400;
     throw error;
   }
-  if (spanishAudioCache.has(cleanText)) return spanishAudioCache.get(cleanText);
+  const voice = naturalSpeechVoices[language];
+  if (!voice) {
+    const error = new Error("Natural speech is not configured for this language.");
+    error.status = 422;
+    throw error;
+  }
+  const cacheKey = `${language}:${cleanText}`;
+  if (naturalSpeechCache.has(cacheKey)) return naturalSpeechCache.get(cacheKey);
+
+  try {
+    const audio = Buffer.from(
+      await ttsImpl(cleanText, {
+        voice,
+        rate: "-8%",
+        pitch: "-2Hz"
+      })
+    );
+    if (!audio.length) throw new Error("Natural speech returned no audio.");
+    naturalSpeechCache.set(cacheKey, audio);
+    if (naturalSpeechCache.size > MAX_NATURAL_SPEECH_CACHE_ITEMS) {
+      naturalSpeechCache.delete(naturalSpeechCache.keys().next().value);
+    }
+    return audio;
+  } catch (error) {
+    const wrapped = new Error(`Natural speech is temporarily unavailable: ${error.message}`);
+    wrapped.status = 502;
+    throw wrapped;
+  }
+}
+
+export async function getCloudSpeechAudio(text, language = "es", fetchImpl = fetch) {
+  const cleanText = cleanSpeechText(text);
+  if (!cleanText) {
+    const error = new Error("Speech text is required.");
+    error.status = 400;
+    throw error;
+  }
+  const targetLanguage = cloudSpeechLanguages[language];
+  if (!targetLanguage) {
+    const error = new Error("Cloud speech is not configured for this language.");
+    error.status = 422;
+    throw error;
+  }
+  const cacheKey = `${language}:${cleanText}`;
+  if (cloudSpeechCache.has(cacheKey)) return cloudSpeechCache.get(cacheKey);
 
   const url = new URL("https://translate.google.com/translate_tts");
   url.searchParams.set("ie", "UTF-8");
   url.searchParams.set("client", "tw-ob");
-  url.searchParams.set("tl", "es-US");
+  url.searchParams.set("tl", targetLanguage);
   url.searchParams.set("q", cleanText);
   const response = await fetchImpl(url, {
     headers: {
@@ -436,12 +500,22 @@ export async function getSpanishSpeechAudio(text, fetchImpl = fetch) {
     signal: AbortSignal.timeout(8000)
   });
   if (!response.ok || !String(response.headers.get("content-type") || "").includes("audio")) {
-    const error = new Error("The Spanish speech service is temporarily unavailable.");
+    const error = new Error("The cloud speech service is temporarily unavailable.");
     error.status = 502;
     throw error;
   }
   const audio = Buffer.from(await response.arrayBuffer());
-  spanishAudioCache.set(cleanText, audio);
+  cloudSpeechCache.set(cacheKey, audio);
+  if (cloudSpeechCache.size > MAX_CLOUD_SPEECH_CACHE_ITEMS) {
+    cloudSpeechCache.delete(cloudSpeechCache.keys().next().value);
+  }
+  return audio;
+}
+
+export async function getSpanishSpeechAudio(text, fetchImpl = fetch) {
+  if (spanishAudioCache.has(text)) return spanishAudioCache.get(text);
+  const audio = await getCloudSpeechAudio(text, "es", fetchImpl);
+  spanishAudioCache.set(text, audio);
   if (spanishAudioCache.size > MAX_SPANISH_CACHE_ITEMS) {
     spanishAudioCache.delete(spanishAudioCache.keys().next().value);
   }
@@ -501,5 +575,12 @@ function inspectLocalSpeech() {
     command,
     ready: !result.error && result.status === 0,
     error: result.error ? result.error.message : result.status === 0 ? "" : result.stderr || ""
+  };
+}
+
+function inspectNaturalSpeech() {
+  return {
+    ready: true,
+    error: ""
   };
 }

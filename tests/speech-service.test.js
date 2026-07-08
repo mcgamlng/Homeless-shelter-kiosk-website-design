@@ -7,8 +7,10 @@ import {
   createHmongSpeechAudio,
   createHmongSpeechAudioResult,
   createHmongSpeechPlan,
+  getCloudSpeechAudio,
   createLocalSpeechAudio,
   getHmongSyllablePath,
+  getNaturalSpeechAudio,
   getSpanishSpeechAudio
 } from "../server/speechService.js";
 
@@ -112,6 +114,34 @@ test("creates local server speech audio with espeak-ng compatible arguments", ()
 
 test("local server speech rejects unsupported languages", () => {
   assert.throws(() => createLocalSpeechAudio("Hello", "hmn"), /not configured/);
+});
+
+test("natural speech uses the configured British English voice", async () => {
+  const expected = Buffer.from("natural-audio");
+  const calls = [];
+  const audio = await getNaturalSpeechAudio("Welcome.", "en", {
+    async ttsImpl(text, options) {
+      calls.push({ text, options });
+      return expected;
+    }
+  });
+  assert.deepEqual(audio, expected);
+  assert.equal(calls[0].options.voice, "en-GB-RyanNeural");
+});
+
+test("cloud speech routes Somali and Hmong to language-specific targets", async () => {
+  const requestedLanguages = [];
+  const response = async (url) => {
+    requestedLanguages.push(new URL(url).searchParams.get("tl"));
+    return {
+      ok: true,
+      headers: new Headers({ "content-type": "audio/mpeg" }),
+      arrayBuffer: async () => Buffer.from("cloud-audio")
+    };
+  };
+  await getCloudSpeechAudio("Soo dhawoow.", "so", response);
+  await getCloudSpeechAudio("Zoo siab txais tos.", "hmn", response);
+  assert.deepEqual(requestedLanguages, ["so", "hmn"]);
 });
 
 function createTestWave() {

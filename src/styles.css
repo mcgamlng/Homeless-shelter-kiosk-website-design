@@ -651,7 +651,10 @@ main {
 }
 
 .activity-grid {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
   gap: 10px;
   margin-top: 16px;
   width: 100%;
@@ -666,6 +669,8 @@ main {
   align-items: center;
   gap: 10px 14px;
   min-height: 78px;
+  width: clamp(150px, calc((100% - 40px) / 5), 200px);
+  flex: 0 1 clamp(150px, calc((100% - 40px) / 5), 200px);
   padding: 12px;
   font-size: clamp(0.98rem, 1.25vw, 1.22rem);
   text-align: center;
@@ -2766,6 +2771,91 @@ main {
   color: var(--lh-navy);
   font-weight: 950;
   text-decoration: none;
+}
+
+.daily-export-panel {
+  margin-bottom: 18px;
+}
+
+.daily-export-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.daily-export-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--lh-navy);
+  font-weight: 900;
+}
+
+.daily-export-clear {
+  align-self: end;
+  min-height: 48px;
+}
+
+.daily-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.daily-export-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.daily-export-list h3,
+.daily-export-list p {
+  margin: 0;
+}
+
+.daily-export-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--lh-aqua);
+  border-left: 6px solid var(--lh-purple);
+}
+
+.daily-export-row div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.daily-export-row span,
+.daily-export-row small {
+  overflow-wrap: anywhere;
+}
+
+.email-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--lh-warm-white);
+  color: var(--lh-navy);
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.email-status.is-sent {
+  background: var(--lh-navy);
+  color: white;
+}
+
+.email-status.is-failed {
+  background: var(--lh-coral);
+  color: white;
 }
 
 .period-tabs {
@@ -4951,6 +5041,71 @@ main {
   font-weight: 850;
 }
 
+.speech-status-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.speech-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.speech-status-card {
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+  padding: 16px;
+  border: 2px solid var(--lh-border);
+  background: var(--lh-aqua);
+  color: var(--lh-charcoal);
+}
+
+.speech-status-card span {
+  font-size: 0.82rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  color: var(--lh-muted-brown);
+}
+
+.speech-status-card strong {
+  color: var(--lh-navy);
+  font-size: 1.32rem;
+  line-height: 1.05;
+}
+
+.speech-status-card p {
+  margin: 0;
+  color: var(--lh-charcoal);
+  font-weight: 750;
+}
+
+.speech-status-card.is-ready {
+  border-color: #71ad45;
+  background: #e6f4dd;
+}
+
+.speech-status-card.is-warning {
+  border-color: var(--lh-purple);
+  background: #f3e8f7;
+}
+
+.speech-status-card.is-checking {
+  border-color: var(--lh-border);
+  background: var(--lh-warm-white);
+}
+
+.speech-status-errors {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-left: 6px solid var(--lh-purple);
+  background: #fff3f6;
+  color: var(--lh-navy);
+  font-weight: 850;
+}
+
 .access-qr-heading {
   display: flex;
   align-items: center;
@@ -4967,6 +5122,7 @@ main {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
+  align-items: stretch;
 }
 
 .install-page {
@@ -5056,15 +5212,19 @@ main {
 
 .qr-access-card {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
-  align-items: center;
-  gap: 20px;
+  grid-template-columns: 1fr;
+  align-content: start;
+  justify-items: center;
+  gap: 14px;
   padding: 18px;
   background: var(--lh-cream);
   border: 1px solid var(--lh-border);
+  min-width: 0;
+  text-align: center;
 }
 
 .qr-image-frame {
+  width: clamp(112px, 13vw, 168px);
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -5089,6 +5249,9 @@ main {
   margin-top: 12px;
   color: var(--lh-muted-brown);
   overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  max-width: 100%;
 }
 
 .ios-install-note {
@@ -5100,7 +5263,9 @@ main {
   .activity-option-grid,
   .activity-translation-grid,
   .access-qr-grid,
-  .install-platform-grid {
+  .daily-export-grid,
+  .install-platform-grid,
+  .speech-status-grid {
     grid-template-columns: 1fr;
   }
 
@@ -5109,7 +5274,7 @@ main {
   }
 
   .qr-access-card {
-    grid-template-columns: minmax(140px, 190px) minmax(0, 1fr);
+    grid-template-columns: 1fr;
   }
 }
 
@@ -5194,6 +5359,7 @@ main {
 
   .network-current,
   .network-mode-picker,
+  .daily-export-row,
   .install-connection-banner {
     grid-template-columns: 1fr;
   }

@@ -25,8 +25,9 @@ medical details, or sensitive notes.
 
 - Required first-and-last-name sign-up and returning sign-in
 - English, Spanish, Hmong, and Somali kiosk structure
-- Read-aloud button for browsers that support built-in speech voices
+- Read-aloud button with phrase-first Hmong support and language-specific fallbacks
 - Automatic translations for common shelter service/activity names
+- Listening House 18-service default activity preset with safe Admin re-apply button
 - Timed activity calendar with automatic non-overlapping scheduling
 - Earliest-gap scheduling that backfills open service lanes when another selected activity is busy
 - Calendar blocks whose height matches the activity's real duration
@@ -42,6 +43,7 @@ medical details, or sensitive notes.
 - Real-time Socket.IO updates on every open dashboard
 - SQLite persistence
 - Day, week, month, and year spreadsheet reports
+- Nightly daily spreadsheet archive with optional Gmail SMTP email
 - Admin PIN protection
 - Kiosk wording and color customization
 - Browser and Android download QR codes on the About page
@@ -142,12 +144,15 @@ alternative translation endpoint.
 The kiosk uses a different speech path for each language so it does not force unsupported languages
 through an English voice:
 
-- English and Somali use the best matching natural system voice.
-- Spanish uses a smoother online Spanish audio service. If the internet is unavailable, it falls
-  back to the best Spanish voice installed on the device.
-- Hmong uses a local native-recorded White Hmong RPA voice pack. It works without internet and does
-  not depend on browser or operating-system Hmong support. The server joins the recorded syllables
-  into one sentence with a short crossfade instead of pausing between every word.
+- English tries the natural British neural voice `en-GB-RyanNeural` through the server when internet
+  is available, then falls back to local Pi speech and browser speech.
+- Spanish and Somali try natural/cloud server speech first. If internet is unavailable, they fall
+  back to local Pi speech and browser speech.
+- Hmong tries cloud speech first, then checks for approved native phrase recordings in
+  `data/hmong-phrases`. When a matching
+  full phrase exists, the kiosk plays that human-recorded sentence. If no phrase recording exists,
+  it falls back to the local native-recorded White Hmong RPA syllable pack. The fallback works
+  without internet and does not depend on browser or operating-system Hmong support.
 
 Install the Hmong voice once on each server:
 
@@ -159,6 +164,11 @@ The download is about 248 MB and installs 6,200+ speech samples under the ignore
 On Raspberry Pi OS, install `unzip` first with `sudo apt install unzip`. The voice pack is downloaded
 from Yuhalu and remains subject to Yuhalu's separate non-commercial terms; it is not part of this
 project's MIT-licensed source code. See `THIRD_PARTY_NOTICES.md`.
+
+For the most natural Hmong readout, record native phrase audio and copy it into
+`data/hmong-phrases` on the server. Use `data/hmong-phrases/manifest.example.json` as the template
+for the local `manifest.json`. Admin shows **Read Aloud Voice Status** so staff can confirm whether
+Hmong is using phrase recordings, the fallback syllable voice pack, or neither.
 
 The confirmation readout does not send or speak the guest's name.
 
@@ -312,6 +322,11 @@ check-ins, requested activities, visit dates, and first and last check-in times.
 Day** sheet includes every date in the requested period, including zero-activity days, with names
 and daily totals.
 
+Admin can also configure a daily archive. By default, the Pi checks at 3:00 a.m., saves the previous
+calendar day's `.xlsx` file into `data/exports`, and emails it through Gmail SMTP when a Gmail sender,
+app password, and recipient are saved. If the Pi is off at the scheduled time, the server catches up
+on the next startup. Raw rows are kept for at least seven days and are not purged when email fails.
+
 ## Automatic Startup
 
 Windows:
@@ -326,6 +341,21 @@ Raspberry Pi:
 chmod +x scripts/raspberry-pi/*.sh
 sudo ./scripts/raspberry-pi/install-autostart.sh
 ```
+
+Recommended update workflow after the Raspberry Pi is installed:
+
+1. Make code changes on the laptop with Codex.
+2. Push the project to GitHub.
+3. On the Raspberry Pi, pull and restart with:
+
+```bash
+chmod +x scripts/raspberry-pi/*.sh
+./scripts/raspberry-pi/update-from-github.sh
+```
+
+Codex does not need to run on the Raspberry Pi for the kiosk to work. The Pi only needs Git, Node.js,
+the project files, and the local database. If you choose to install Codex CLI on the Pi, treat it as
+a developer tool, not part of the production kiosk startup.
 
 Chromium kiosk command:
 
@@ -360,7 +390,20 @@ Manual checks:
 11. Reset the day and verify live totals return to zero.
 12. Open two dashboards and confirm real-time updates.
 13. Scan all three About-page QR codes from a phone.
-14. Test the kiosk readout in all four languages and confirm Hmong plays as one continuous sentence.
+14. Test the kiosk readout in all four languages and confirm Hmong reports phrase-first mode when
+    phrase recordings are installed.
+
+## Website Walkthrough Video
+
+Generate the narrated website walkthrough on Windows:
+
+```powershell
+py -m pip install edge-tts==7.2.8
+npm run onboarding:video
+```
+
+The video renders at 1920x1080. Screenshots stay in a safe upper area and captions stay in a
+separate lower band, so the app interface is not covered by the narration text.
 
 ## Code Walkthrough Video
 

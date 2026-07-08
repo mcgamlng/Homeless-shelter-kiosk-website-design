@@ -12,20 +12,48 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultDatabasePath = path.join(__dirname, "..", "data", "listening-house.sqlite");
 const databasePath = path.resolve(process.env.DATABASE_PATH || defaultDatabasePath);
 
+export const OLD_DEFAULT_ACTIVITY_NAMES = [
+  "Shower",
+  "Laundry",
+  "Meal / Snacks",
+  "Clothing / Fresh Clothes",
+  "Case Management",
+  "Computer / Wi-Fi Access",
+  "Phone Charging",
+  "Mail Pickup",
+  "Rest Area",
+  "Hygiene Kit",
+  "Housing Help",
+  "Medical / Health Support",
+  "Counseling / Partner Support"
+];
+
 export const DEFAULT_ACTIVITIES = [
-  ["Shower", 30, "shower"],
-  ["Laundry", 45, "laundry"],
-  ["Meal / Snacks", 20, "utensils"],
-  ["Clothing / Fresh Clothes", 25, "shirt"],
-  ["Case Management", 35, "clipboard"],
-  ["Computer / Wi-Fi Access", 30, "monitor"],
-  ["Phone Charging", 20, "battery"],
-  ["Mail Pickup", 10, "mail"],
-  ["Rest Area", 30, "sofa"],
-  ["Hygiene Kit", 10, "heart-hand"],
-  ["Housing Help", 40, "home"],
-  ["Medical / Health Support", 30, "stethoscope"],
-  ["Counseling / Partner Support", 35, "message-heart"]
+  { name: "Housing / Outreach Help", minutes: 45, icon: "housing-plus", timed: true },
+  { name: "ID Help", minutes: 30, icon: "id-card", timed: true },
+  { name: "Hygiene Items", minutes: 10, icon: "hygiene", timed: false },
+  { name: "Bus Tokens", minutes: 10, icon: "bus", timed: false },
+  { name: "Clothing Room", minutes: 25, icon: "shirt", timed: true },
+  { name: "Computers / Wi-Fi", minutes: 30, icon: "monitor", timed: true },
+  { name: "Meals / Snacks", minutes: 20, icon: "utensils", timed: false },
+  {
+    name: "Bathrooms / Showers",
+    minutes: 30,
+    icon: "shower",
+    timed: true,
+    alarmEnabled: true,
+    alarmMinutesBefore: 5
+  },
+  { name: "Sleeping / Rest Area", minutes: 45, icon: "bed", timed: true },
+  { name: "Phones", minutes: 15, icon: "phone", timed: false },
+  { name: "Phone Charging", minutes: 20, icon: "battery", timed: false },
+  { name: "Government Phone Program", minutes: 20, icon: "public-office", timed: false },
+  { name: "OTC Meds / Vitamins", minutes: 10, icon: "heart-pulse", timed: false },
+  { name: "Employment Readiness", minutes: 45, icon: "case-legal", timed: true },
+  { name: "Social Support", minutes: 30, icon: "message-heart", timed: false },
+  { name: "Lockers / Storage", minutes: 10, icon: "lockers", timed: false },
+  { name: "First Aid", minutes: 15, icon: "stethoscope", timed: false },
+  { name: "Staff / Volunteers Ready to Listen", minutes: 20, icon: "heart-hand", timed: false }
 ];
 
 export function createDatabase(filename = databasePath) {
@@ -139,6 +167,7 @@ function migrateDatabase(database) {
     CREATE INDEX IF NOT EXISTS idx_scheduled_status ON scheduled_activity_items(status);
     CREATE INDEX IF NOT EXISTS idx_scheduled_start ON scheduled_activity_items(scheduled_start);
     CREATE INDEX IF NOT EXISTS idx_status_history_changed_at ON status_history(changed_at);
+    CREATE INDEX IF NOT EXISTS idx_daily_exports_report_date ON daily_export_archives(report_date);
   `);
   database
     .prepare(
@@ -369,13 +398,71 @@ export function seedBaseData(database) {
   insertSetting.run("network_mode", "local");
   insertSetting.run("preferred_local_url", "");
   insertSetting.run("public_base_url", "");
+  insertSetting.run("daily_export_time", "03:00");
+  insertSetting.run("daily_export_recipient", "");
+  insertSetting.run("daily_export_gmail_sender", "");
+  insertSetting.run("daily_export_gmail_app_password", "");
+  insertSetting.run("daily_export_raw_retention_days", "7");
   Object.entries(DEFAULT_KIOSK_CUSTOMIZATION).forEach(([key, value]) => {
     insertSetting.run(key, value);
   });
 
   const activityCount = database.prepare("SELECT COUNT(*) AS count FROM activities").get().count;
   if (activityCount === 0) {
-    const insertActivity = database.prepare(
+    applyListeningHouseActivityPreset(database, { replaceStockDefaults: true });
+  } else if (hasOnlyOldStockActivities(database)) {
+    applyListeningHouseActivityPreset(database, { replaceStockDefaults: true });
+  }
+}
+
+export function applyListeningHouseActivityPreset(database, { replaceStockDefaults = false } = {}) {
+  const activityRows = database
+    .prepare("SELECT id, name FROM activities ORDER BY sort_order, id")
+    .all();
+  const transaction = database.transaction(() => {
+    if (replaceStockDefaults) {
+      DEFAULT_ACTIVITIES.forEach((activity, index) => {
+        const existing = activityRows[index];
+        if (existing) {
+          updatePresetActivity(database, existing.id, activity, index + 1);
+        } else {
+          insertPresetActivity(database, activity, index + 1);
+        }
+      });
+      return;
+    }
+
+    const existingNames = new Set(activityRows.map((row) => normalizePresetName(row.name)));
+    const maxSort =
+      database.prepare("SELECT COALESCE(MAX(sort_order), 0) AS sort_order FROM activities").get()
+        .sort_order || 0;
+    let inserted = 0;
+    DEFAULT_ACTIVITIES.forEach((activity, index) => {
+      if (existingNames.has(normalizePresetName(activity.name))) return;
+      insertPresetActivity(database, activity, maxSort + index + 1);
+      inserted += 1;
+    });
+    return inserted;
+  });
+  transaction();
+  return true;
+}
+
+function hasOnlyOldStockActivities(database) {
+  const names = database
+    .prepare("SELECT name FROM activities ORDER BY sort_order, id")
+    .all()
+    .map((row) => normalizePresetName(row.name));
+  return (
+    names.length === OLD_DEFAULT_ACTIVITY_NAMES.length &&
+    names.every((name, index) => name === normalizePresetName(OLD_DEFAULT_ACTIVITY_NAMES[index]))
+  );
+}
+
+function insertPresetActivity(database, activity, sortOrder) {
+  const translations = buildActivityTranslations(activity.name);
+  database
+    .prepare(
       `INSERT INTO activities
        (name, name_es, name_hmn, name_so,
         duration_minutes, time_limit_enabled, availability_window_enabled,
@@ -384,26 +471,70 @@ export function seedBaseData(database) {
         yearly_window_enabled, yearly_start, yearly_end,
         daily_limit_enabled, daily_limit,
         alarm_enabled, alarm_minutes_before, icon, active, sort_order)
-       VALUES (?, ?, ?, ?, ?, 1, 0, '08:00', '16:00',
+       VALUES (?, ?, ?, ?, ?, ?, 0, '08:00', '16:00',
                0, 1, 31, 0, '01-01', '12-31',
-               0, NULL, 0, 5, ?, 1, ?)`
+               0, NULL, ?, ?, ?, 1, ?)`
+    )
+    .run(
+      activity.name,
+      translations.name_es,
+      translations.name_hmn,
+      translations.name_so,
+      activity.minutes,
+      activity.timed === false ? 0 : 1,
+      activity.alarmEnabled ? 1 : 0,
+      activity.alarmMinutesBefore || 5,
+      activity.icon,
+      sortOrder
     );
-    const insertActivities = database.transaction(() => {
-      DEFAULT_ACTIVITIES.forEach(([name, minutes, icon], index) => {
-        const translations = buildActivityTranslations(name);
-        insertActivity.run(
-          name,
-          translations.name_es,
-          translations.name_hmn,
-          translations.name_so,
-          minutes,
-          icon,
-          index + 1
-        );
-      });
-    });
-    insertActivities();
-  }
+}
+
+function updatePresetActivity(database, id, activity, sortOrder) {
+  const translations = buildActivityTranslations(activity.name);
+  database
+    .prepare(
+      `UPDATE activities
+       SET name = ?, name_es = ?, name_hmn = ?, name_so = ?,
+           duration_minutes = ?, time_limit_enabled = ?,
+           availability_window_enabled = 0,
+           availability_start = '08:00',
+           availability_end = '16:00',
+           monthly_window_enabled = 0,
+           monthly_start_day = 1,
+           monthly_end_day = 31,
+           yearly_window_enabled = 0,
+           yearly_start = '01-01',
+           yearly_end = '12-31',
+           daily_limit_enabled = 0,
+           daily_limit = NULL,
+           alarm_enabled = ?,
+           alarm_minutes_before = ?,
+           icon = ?,
+           active = 1,
+           sort_order = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    )
+    .run(
+      activity.name,
+      translations.name_es,
+      translations.name_hmn,
+      translations.name_so,
+      activity.minutes,
+      activity.timed === false ? 0 : 1,
+      activity.alarmEnabled ? 1 : 0,
+      activity.alarmMinutesBefore || 5,
+      activity.icon,
+      sortOrder,
+      id
+    );
+}
+
+function normalizePresetName(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 export function getDatabasePath() {

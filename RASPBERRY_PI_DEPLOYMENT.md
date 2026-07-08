@@ -83,15 +83,16 @@ For Raspberry Pi read-aloud support, also install the lightweight local speech p
 sudo apt-get install -y espeak-ng
 ```
 
-This gives the kiosk a server-side voice fallback when Chromium says read aloud is not available in
-the browser. English, Spanish fallback, and Somali can use this package. Hmong still uses the
-separate Hmong phrase or fallback voice setup.
+The kiosk now tries natural online speech first, including the British English voice
+`en-GB-RyanNeural`. If internet speech is not available, it falls back to cloud language speech and
+then to the local `espeak-ng` emergency voice. Hmong can also use cloud speech first, then the local
+Hmong phrase or syllable pack.
 
 Create `.env`:
 
 ```env
 PORT=3000
-ADMIN_PIN=1717
+ADMIN_PIN=2468
 DATABASE_PATH=./data/listening-house.sqlite
 ```
 
@@ -166,7 +167,7 @@ The installer:
 - Installs Chromium if it is missing.
 - Creates the `listening-house.service` server service.
 - Creates the kiosk launcher in the real desktop user's startup folder, such as
-  `/home/ruben/.config/autostart/listening-house-kiosk.desktop`.
+  `/home/pi/.config/autostart/listening-house-kiosk.desktop`.
 - Starts the server service immediately.
 
 Remove it:
@@ -197,9 +198,34 @@ The update helper:
 - Pulls the latest GitHub code.
 - Installs dependencies.
 - Rebuilds the website.
+- Installs new Node dependencies such as speech and email packages when they are added.
 - Installs the lightweight `espeak-ng` speech fallback.
 - Installs the Hmong fallback voice pack if missing.
 - Restarts the service and checks `http://127.0.0.1:3000/api/health`.
+
+## Daily Spreadsheet Archive and Gmail Email
+
+The server can save yesterday's spreadsheet every morning and email it through Gmail SMTP.
+
+In Admin, open **Daily Spreadsheet Archive** and enter:
+
+- Export time, default `03:00`
+- Recipient email
+- Gmail sender address
+- Gmail app password
+- Raw row retention, minimum `7` days
+
+Use a Gmail app password, not the normal Gmail login password. Press **Send test email** before
+leaving it running overnight. If the Pi is off at the scheduled time, the server catches up the next
+time it starts.
+
+Archives are saved in:
+
+```text
+data/exports
+```
+
+If email fails, the database rows are kept so staff can fix the settings and export again.
 
 If you still want Codex on the Pi for development, install Codex CLI separately and sign in with
 ChatGPT device-code login or an API key. Do not make Codex part of the production startup service.
@@ -244,7 +270,8 @@ sudo systemctl status listening-house
 7. Turn on dashboard alarms and test an In Progress activity.
 8. Open Admin and confirm Read Aloud Voice Status shows the expected Hmong mode.
 9. Scan the About-page QR codes from a phone.
-10. Restart the Pi and confirm the server and kiosk return automatically.
+10. Send a daily export test email from Admin.
+11. Restart the Pi and confirm the server and kiosk return automatically.
 
 ## Backup
 

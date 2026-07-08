@@ -1,5 +1,9 @@
 import crypto from "node:crypto";
-import { db } from "./db.js";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import nodemailer from "nodemailer";
+import { applyListeningHouseActivityPreset, db } from "./db.js";
 import {
   addMinutes,
   compactScheduleAfterFinalStatus,
@@ -44,6 +48,11 @@ const LOCAL_DATE_TIME_FORMATTER = new Intl.DateTimeFormat([], {
   hour: "numeric",
   minute: "2-digit"
 });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, "..");
+const exportDirectory = path.resolve(
+  process.env.EXPORTS_PATH || path.join(projectRoot, "data", "exports")
+);
 
 function rows(statement, params = []) {
   return db.prepare(statement).all(...params);
@@ -715,6 +724,11 @@ export function deleteActivity(id) {
   });
   transaction();
   return current;
+}
+
+export function applyDefaultActivities() {
+  applyListeningHouseActivityPreset(db, { replaceStockDefaults: false });
+  return getDashboardData();
 }
 
 export function getActiveScheduledItems() {
@@ -1701,6 +1715,341 @@ export function createAnalyticsWorkbook({ period = "day", date } = {}) {
       }
     ])
   };
+}
+
+export function getExportSettings() {
+  const appPassword = getSettingValue("daily_export_gmail_app_password");
+  return {
+    export_time: getSettingValue("daily_export_time") || "03:00",
+    recipient: getSettingValue("daily_export_recipient"),
+    gmail_sender: getSettingValue("daily_export_gmail_sender"),
+    gmail_app_password_configured: Boolean(appPassword),
+    raw_retention_days: Math.max(7, Number(getSettingValue("daily_export_raw_retention_days") || 7))
+  };
+}
+
+export function updateExportSettings(payload = {}) {
+  const transaction = db.transaction(() => {
+    if (payload.export_time !== undefined) {
+      setSettingValue("daily_export_time", normalizeClockTime(payload.export_time, "03:00"));
+    }
+    if (payload.recipient !== undefined) {
+      setSettingValue("daily_export_recipient", normalizeEmailList(payload.recipient));
+    }
+    if (payload.gmail_sender !== undefined) {
+      setSettingValue("daily_export_gmail_sender", cleanText(payload.gmail_sender, 300));
+    }
+    if (payload.gmail_app_password !== undefined) {
+      const password = normalizeGmailAppPassword(payload.gmail_app_password);
+      if (password) setSettingValue("daily_export_gmail_app_password", password);
+    }
+    if (payload.clear_gmail_app_password) {
+      setSettingValue("daily_export_gmail_app_password", "");
+    }
+    if (payload.raw_retention_days !== undefined) {
+      setSettingValue(
+        "daily_export_raw_retention_days",
+        String(Math.max(7, Number(payload.raw_retention_days || 7)))
+      );
+    }
+  });
+  transaction();
+  return getExportSettings();
+}
+
+export function listDailyExports() {
+  return rows(
+    `SELECT id, report_date, filename, created_at, emailed_at, email_status, recipient, error_message
+     FROM daily_export_archives
+     ORDER BY report_date DESC, id DESC
+     LIMIT 90`
+  );
+}
+
+export async function runDailyExportArchive({
+  date,
+  sendEmail = true,
+  force = false,
+  mailer = null,
+  now = new Date()
+} = {}) {
+  const reportDate = normalizeReportDateKey(date) || previousDateKey(now);
+  const existing = one("SELECT * FROM daily_export_archives WHERE report_date = ?", [reportDate]);
+  if (existing && !force) return normalizeExportArchive(existing);
+
+  fs.mkdirSync(exportDirectory, { recursive: true });
+  const workbook = createAnalyticsWorkbook({ period: "day", date: reportDate });
+  const filename = `listening-house-daily-${reportDate}.xlsx`;
+  const filePath = path.join(exportDirectory, filename);
+  fs.writeFileSync(filePath, workbook.buffer);
+
+  const archived = upsertDailyExportArchive({
+    reportDate,
+    filename,
+    filePath,
+    emailStatus: "not_configured",
+    recipient: "",
+    errorMessage: ""
+  });
+
+  let emailed = archived;
+  if (sendEmail) {
+    emailed = await emailDailyExportArchive(archived.id, { mailer });
+  }
+  if (emailed.email_status !== "failed") {
+    purgeArchivedRawRows();
+  }
+  return emailed;
+}
+
+export async function runDueDailyExports({ now = new Date(), mailer = null } = {}) {
+  const settings = getExportSettings();
+  const exportTime = normalizeClockTime(settings.export_time, "03:00");
+  const [hour, minute] = exportTime.split(":").map(Number);
+  const todayRunTime = new Date(now);
+  todayRunTime.setHours(hour, minute, 0, 0);
+  if (now < todayRunTime) return [];
+
+  const dueDates = rows(
+    `SELECT DISTINCT substr(checked_in_at, 1, 10) AS report_date
+     FROM check_ins
+     WHERE checked_in_at < date('now', 'localtime')
+     ORDER BY report_date`
+  )
+    .map((row) => row.report_date)
+    .filter(Boolean)
+    .filter((reportDate) => {
+      const archived = one("SELECT id FROM daily_export_archives WHERE report_date = ?", [
+        reportDate
+      ]);
+      return !archived;
+    });
+
+  const completed = [];
+  for (const reportDate of dueDates) {
+    completed.push(await runDailyExportArchive({ date: reportDate, sendEmail: true, mailer, now }));
+  }
+  return completed;
+}
+
+export async function sendDailyExportTestEmail({ mailer = null } = {}) {
+  const settings = getExportSettings();
+  const transporter = mailer || createGmailTransport(settings);
+  const recipient = settings.recipient;
+  if (!recipient) {
+    const error = new Error("Enter a recipient email for daily exports.");
+    error.status = 400;
+    throw error;
+  }
+  await transporter.sendMail({
+    from: settings.gmail_sender,
+    to: recipient,
+    subject: "Listening House daily export test",
+    text: "This is a test message from the Listening House kiosk system. Daily spreadsheets will be attached to future archive emails."
+  });
+  return { ok: true, recipient };
+}
+
+export function getDailyExportDownload(id) {
+  const archive = one("SELECT * FROM daily_export_archives WHERE id = ?", [id]);
+  if (!archive || !fs.existsSync(archive.file_path)) {
+    const error = new Error("That daily export file was not found.");
+    error.status = 404;
+    throw error;
+  }
+  return {
+    filename: archive.filename,
+    buffer: fs.readFileSync(archive.file_path)
+  };
+}
+
+async function emailDailyExportArchive(id, { mailer = null } = {}) {
+  const archive = one("SELECT * FROM daily_export_archives WHERE id = ?", [id]);
+  if (!archive) {
+    const error = new Error("Daily export archive not found.");
+    error.status = 404;
+    throw error;
+  }
+  const settings = getExportSettings();
+  if (!settings.recipient || !settings.gmail_sender || !isGmailConfigured()) {
+    return updateDailyExportEmailStatus(id, {
+      emailStatus: "not_configured",
+      recipient: settings.recipient,
+      errorMessage: "Gmail sender, app password, and recipient are required before emailing."
+    });
+  }
+
+  try {
+    const transporter = mailer || createGmailTransport(settings);
+    await transporter.sendMail({
+      from: settings.gmail_sender,
+      to: settings.recipient,
+      subject: `Listening House daily export for ${archive.report_date}`,
+      text: `Attached is the Listening House daily spreadsheet archive for ${archive.report_date}.`,
+      attachments: [
+        {
+          filename: archive.filename,
+          path: archive.file_path
+        }
+      ]
+    });
+    return updateDailyExportEmailStatus(id, {
+      emailStatus: "sent",
+      recipient: settings.recipient,
+      emailedAt: new Date().toISOString(),
+      errorMessage: ""
+    });
+  } catch (error) {
+    return updateDailyExportEmailStatus(id, {
+      emailStatus: "failed",
+      recipient: settings.recipient,
+      errorMessage: error.message
+    });
+  }
+}
+
+function createGmailTransport(settings) {
+  const password = getSettingValue("daily_export_gmail_app_password");
+  if (!settings.gmail_sender || !password) {
+    const error = new Error("Gmail sender and app password are required.");
+    error.status = 400;
+    throw error;
+  }
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: settings.gmail_sender,
+      pass: password
+    }
+  });
+}
+
+function isGmailConfigured() {
+  return Boolean(getSettingValue("daily_export_gmail_app_password"));
+}
+
+function upsertDailyExportArchive({
+  reportDate,
+  filename,
+  filePath,
+  emailStatus,
+  recipient,
+  errorMessage
+}) {
+  db.prepare(
+    `INSERT INTO daily_export_archives
+       (report_date, filename, file_path, created_at, email_status, recipient, error_message)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
+     ON CONFLICT(report_date) DO UPDATE SET
+       filename = excluded.filename,
+       file_path = excluded.file_path,
+       created_at = CURRENT_TIMESTAMP,
+       emailed_at = NULL,
+       email_status = excluded.email_status,
+       recipient = excluded.recipient,
+       error_message = excluded.error_message`
+  ).run(reportDate, filename, filePath, emailStatus, recipient, errorMessage);
+  return normalizeExportArchive(
+    one("SELECT * FROM daily_export_archives WHERE report_date = ?", [reportDate])
+  );
+}
+
+function updateDailyExportEmailStatus(
+  id,
+  { emailStatus, recipient, emailedAt = null, errorMessage }
+) {
+  db.prepare(
+    `UPDATE daily_export_archives
+     SET email_status = ?, recipient = ?, emailed_at = ?, error_message = ?
+     WHERE id = ?`
+  ).run(emailStatus, recipient || "", emailedAt, errorMessage || "", id);
+  return normalizeExportArchive(one("SELECT * FROM daily_export_archives WHERE id = ?", [id]));
+}
+
+function normalizeExportArchive(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    report_date: row.report_date,
+    filename: row.filename,
+    created_at: row.created_at,
+    emailed_at: row.emailed_at,
+    email_status: row.email_status,
+    recipient: row.recipient || "",
+    error_message: row.error_message || ""
+  };
+}
+
+function purgeArchivedRawRows() {
+  const retentionDays = Math.max(
+    7,
+    Number(getSettingValue("daily_export_raw_retention_days") || 7)
+  );
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - retentionDays);
+  const cutoffKey = formatDateKey(cutoff);
+  const archivedDates = rows(
+    `SELECT report_date, file_path
+     FROM daily_export_archives
+     WHERE report_date < ?`,
+    [cutoffKey]
+  ).filter((archive) => archive.file_path && fs.existsSync(archive.file_path));
+  if (!archivedDates.length) return 0;
+
+  const transaction = db.transaction(() => {
+    let deleted = 0;
+    for (const archive of archivedDates) {
+      const ids = rows("SELECT id FROM check_ins WHERE substr(checked_in_at, 1, 10) = ?", [
+        archive.report_date
+      ]).map((row) => row.id);
+      if (!ids.length) continue;
+      const placeholders = ids.map(() => "?").join(",");
+      db.prepare(
+        `DELETE FROM status_history
+         WHERE scheduled_item_id IN (
+           SELECT id FROM scheduled_activity_items WHERE check_in_id IN (${placeholders})
+         )`
+      ).run(...ids);
+      db.prepare(`DELETE FROM scheduled_activity_items WHERE check_in_id IN (${placeholders})`).run(
+        ...ids
+      );
+      const info = db.prepare(`DELETE FROM check_ins WHERE id IN (${placeholders})`).run(...ids);
+      deleted += info.changes;
+    }
+    db.prepare(
+      `DELETE FROM guests
+       WHERE id NOT IN (SELECT DISTINCT guest_id FROM check_ins)`
+    ).run();
+    return deleted;
+  });
+  return transaction();
+}
+
+function normalizeReportDateKey(value) {
+  return parseRequestedReportDate(value) ? formatDateKey(parseRequestedReportDate(value)) : "";
+}
+
+function previousDateKey(referenceDate = new Date()) {
+  const date = new Date(referenceDate);
+  date.setDate(date.getDate() - 1);
+  return formatDateKey(date);
+}
+
+function normalizeEmailList(value) {
+  return String(value || "")
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(", ")
+    .slice(0, 500);
+}
+
+function normalizeGmailAppPassword(value) {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .trim()
+    .slice(0, 80);
 }
 
 function formatSignInType(value) {

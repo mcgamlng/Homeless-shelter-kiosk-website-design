@@ -1,7 +1,11 @@
 node_modules/
 dist/
 dist-mobile/
-data/
+data/*
+!data/hmong-phrases/
+data/hmong-phrases/*
+!data/hmong-phrases/README.md
+!data/hmong-phrases/manifest.example.json
 data/*.sqlite
 data/*.sqlite-*
 .env
@@ -22,4 +26,9 @@ onboarding-video/*
 !onboarding-video/STORYBOARD.md
 !onboarding-video/NARRATION_SCRIPT.md
 !onboarding-video/listening-house-onboarding-walkthrough.mp4
+raspberry-pi-video/*
+!raspberry-pi-video/README.md
+!raspberry-pi-video/STORYBOARD.md
+!raspberry-pi-video/NARRATION_SCRIPT.md
+!raspberry-pi-video/listening-house-raspberry-pi-setup.mp4
 code-walkthrough/generated/

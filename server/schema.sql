@@ -90,6 +90,18 @@ CREATE TABLE IF NOT EXISTS status_history (
   FOREIGN KEY (scheduled_item_id) REFERENCES scheduled_activity_items(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS daily_export_archives (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  report_date TEXT NOT NULL UNIQUE,
+  filename TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  emailed_at TEXT,
+  email_status TEXT NOT NULL DEFAULT 'not_configured',
+  recipient TEXT,
+  error_message TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_check_ins_status ON check_ins(status);
 CREATE INDEX IF NOT EXISTS idx_check_ins_guest ON check_ins(guest_id);
 CREATE INDEX IF NOT EXISTS idx_check_ins_checked_in_at ON check_ins(checked_in_at);
@@ -99,3 +111,4 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_guest ON scheduled_activity_items(guest
 CREATE INDEX IF NOT EXISTS idx_scheduled_status ON scheduled_activity_items(status);
 CREATE INDEX IF NOT EXISTS idx_scheduled_start ON scheduled_activity_items(scheduled_start);
 CREATE INDEX IF NOT EXISTS idx_status_history_changed_at ON status_history(changed_at);
+CREATE INDEX IF NOT EXISTS idx_daily_exports_report_date ON daily_export_archives(report_date);

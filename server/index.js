@@ -9,22 +9,30 @@ import {
   clearActiveCheckIns,
   clearCheckIn,
   changeAdminPin,
+  applyDefaultActivities,
   createActivity,
   createAnalyticsWorkbook,
   createCheckIn,
   deleteActivity,
+  getDailyExportDownload,
   getAdminSecuritySettings,
   getAnalyticsReport,
   getActivities,
   getDashboardData,
+  getExportSettings,
   getSettings,
   inspectNameCheckIn,
+  listDailyExports,
   moveScheduledItem,
   rebalanceActiveWaitingSchedule,
   reorderCheckInItems,
+  runDailyExportArchive,
+  runDueDailyExports,
   rescheduleScheduledItem,
   resetDailyData,
+  sendDailyExportTestEmail,
   updateActivity,
+  updateExportSettings,
   updateScheduledItemStatus,
   updateSetting,
   updateSettings,
@@ -37,8 +45,10 @@ import { buildActivityTranslations } from "../shared/activityTranslations.js";
 import {
   createHmongSpeechAudioResult,
   createHmongSpeechPlan,
+  getCloudSpeechAudio,
   createLocalSpeechAudio,
   getHmongSyllablePath,
+  getNaturalSpeechAudio,
   getSpanishSpeechAudio,
   getSpeechStatus
 } from "./speechService.js";
@@ -59,6 +69,7 @@ const PUBLIC_URL = String(process.env.PUBLIC_URL || "").replace(/\/+$/, "");
 const adminSessions = new Map();
 const analyticsDownloads = new Map();
 const DOWNLOAD_TTL_MS = 10 * 60 * 1000;
+const DAILY_EXPORT_CHECK_MS = 15 * 60 * 1000;
 
 if (PUBLIC_URL) {
   updateSettings({
@@ -241,6 +252,26 @@ app.get("/api/speech/hmong-syllable/:token", (req, res) => {
   res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
   res.sendFile(filePath);
 });
+
+app.get(
+  "/api/speech/natural",
+  handleRoute(async (req, res) => {
+    const audio = await getNaturalSpeechAudio(req.query.text, req.query.language || "en");
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(audio);
+  })
+);
+
+app.get(
+  "/api/speech/cloud",
+  handleRoute(async (req, res) => {
+    const audio = await getCloudSpeechAudio(req.query.text, req.query.language || "es");
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.send(audio);
+  })
+);
 
 app.get(
   "/api/speech/spanish",
@@ -459,6 +490,61 @@ app.get(
   })
 );
 
+app.get(
+  "/api/admin/export-settings",
+  requireAdmin,
+  handleRoute((_req, res) => {
+    res.json(getExportSettings());
+  })
+);
+
+app.put(
+  "/api/admin/export-settings",
+  requireAdmin,
+  handleRoute((req, res) => {
+    res.json(updateExportSettings(req.body || {}));
+  })
+);
+
+app.get(
+  "/api/admin/daily-exports",
+  requireAdmin,
+  handleRoute((_req, res) => {
+    res.json(listDailyExports());
+  })
+);
+
+app.post(
+  "/api/admin/daily-exports/run",
+  requireAdmin,
+  handleRoute(async (req, res) => {
+    res.json(
+      await runDailyExportArchive({
+        date: req.body.date,
+        force: Boolean(req.body.force),
+        sendEmail: req.body.sendEmail !== false
+      })
+    );
+  })
+);
+
+app.post(
+  "/api/admin/daily-exports/test-email",
+  requireAdmin,
+  handleRoute(async (_req, res) => {
+    res.json(await sendDailyExportTestEmail());
+  })
+);
+
+app.get(
+  "/api/admin/daily-exports/:id/download",
+  requireAdminDownload,
+  handleRoute((req, res) => {
+    const workbook = getDailyExportDownload(req.params.id);
+    sendAnalyticsWorkbook(res, workbook);
+  })
+);
+
 app.post(
   "/api/admin/activities",
   requireAdmin,
@@ -466,6 +552,16 @@ app.post(
     const activity = createActivity(await enrichActivityTranslations(req.body));
     emitDashboard();
     res.status(201).json(activity);
+  })
+);
+
+app.post(
+  "/api/admin/activities/apply-listening-house-defaults",
+  requireAdmin,
+  handleRoute((_req, res) => {
+    const data = applyDefaultActivities();
+    emitDashboard();
+    res.json(data);
   })
 );
 
@@ -597,4 +693,13 @@ server.listen(PORT, "0.0.0.0", () => {
   repairEnglishActivityTranslations().catch((error) => {
     console.warn(`Activity translation repair skipped: ${error.message}`);
   });
+  runDueDailyExports().catch((error) => {
+    console.warn(`Daily export catch-up skipped: ${error.message}`);
+  });
 });
+
+setInterval(() => {
+  runDueDailyExports().catch((error) => {
+    console.warn(`Daily export check skipped: ${error.message}`);
+  });
+}, DAILY_EXPORT_CHECK_MS).unref();

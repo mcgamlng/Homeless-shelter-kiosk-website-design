@@ -164,41 +164,65 @@ export default function Kiosk({ settings: shellSettings = null }) {
         stopReadout(t.readoutUnavailable);
         return;
       }
-      const queue = segments.map((segment) => ({
-        url: `/api/speech/hmong?${new URLSearchParams({
-          text: readoutSegmentText(segment),
-          ...(readoutSegmentKey(segment) ? { key: readoutSegmentKey(segment) } : {})
-        }).toString()}`,
-        pauseAfter: pauseMs
-      }));
-      playAudioQueue(queue, runId, 0, 1.1);
+      playCloudSpeechQueue(segments, runId, pauseMs, language, () =>
+        playHmongSpeechQueue(segments, runId, pauseMs)
+      );
       return;
     }
-    if (language === "es") {
+    if (["en", "es", "so"].includes(language)) {
       if (!("Audio" in window)) {
         startBrowserSpeechFallback(segments, runId, pauseMs);
         return;
       }
-      const queue = segments.map((segment) => ({
-        url: `/api/speech/spanish?text=${encodeURIComponent(readoutSegmentText(segment))}`,
-        pauseAfter: pauseMs
-      }));
-      playAudioQueue(queue, runId, 0, 1, () => {
-        playServerSpeechQueue(segments, runId, pauseMs, language, () =>
-          startBrowserSpeechFallback(segments, runId, pauseMs)
-        );
+      playNaturalSpeechQueue(segments, runId, pauseMs, language, () => {
+        const nextFallback = () =>
+          playServerSpeechQueue(segments, runId, pauseMs, language, () =>
+            startBrowserSpeechFallback(segments, runId, pauseMs)
+          );
+        if (["es", "so"].includes(language)) {
+          playCloudSpeechQueue(segments, runId, pauseMs, language, nextFallback);
+        } else {
+          nextFallback();
+        }
       });
       return;
     }
 
-    if ("Audio" in window && ["en", "so"].includes(language)) {
-      playServerSpeechQueue(segments, runId, pauseMs, language, () =>
-        startBrowserSpeechFallback(segments, runId, pauseMs)
-      );
-      return;
-    }
-
     startBrowserSpeechFallback(segments, runId, pauseMs);
+  }
+
+  function speechRouteUrl(route, segment, currentLanguage) {
+    return `/api/speech/${route}?${new URLSearchParams({
+      language: currentLanguage,
+      text: readoutSegmentText(segment)
+    }).toString()}`;
+  }
+
+  function playNaturalSpeechQueue(segments, runId, pauseMs, currentLanguage, onFailure) {
+    const queue = segments.map((segment) => ({
+      url: speechRouteUrl("natural", segment, currentLanguage),
+      pauseAfter: pauseMs
+    }));
+    playAudioQueue(queue, runId, 0, 1, onFailure);
+  }
+
+  function playCloudSpeechQueue(segments, runId, pauseMs, currentLanguage, onFailure) {
+    const queue = segments.map((segment) => ({
+      url: speechRouteUrl("cloud", segment, currentLanguage),
+      pauseAfter: pauseMs
+    }));
+    playAudioQueue(queue, runId, 0, 1, onFailure);
+  }
+
+  function playHmongSpeechQueue(segments, runId, pauseMs) {
+    const queue = segments.map((segment) => ({
+      url: `/api/speech/hmong?${new URLSearchParams({
+        text: readoutSegmentText(segment),
+        ...(readoutSegmentKey(segment) ? { key: readoutSegmentKey(segment) } : {})
+      }).toString()}`,
+      pauseAfter: pauseMs
+    }));
+    playAudioQueue(queue, runId, 0, 1.1);
   }
 
   function serverSpeechUrl(segment, currentLanguage) {
@@ -531,6 +555,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
                 className={`activity-grid activity-count-${
                   activities.length >= 6 ? "many" : activities.length
                 }`}
+                data-activity-count={activities.length}
               >
                 {activities.map((activity) => {
                   const selected = selectedIds.includes(activity.id);

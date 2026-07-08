@@ -9,6 +9,7 @@ import {
   Link2,
   Lock,
   LogOut,
+  Mail,
   Palette,
   Plus,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
   ShieldCheck,
   Smartphone,
   Trash2,
+  Volume2,
   Wifi
 } from "lucide-react";
 import { api } from "../api.js";
@@ -176,6 +178,17 @@ function createNewActivityDraft() {
   };
 }
 
+function createExportSettingsDraft(settings = {}) {
+  return {
+    export_time: settings.export_time || "03:00",
+    recipient: settings.recipient || "",
+    gmail_sender: settings.gmail_sender || "",
+    gmail_app_password: "",
+    raw_retention_days: settings.raw_retention_days || 7,
+    clear_gmail_app_password: false
+  };
+}
+
 function updateActivityNameDraft(current, name) {
   return {
     ...current,
@@ -237,6 +250,15 @@ export default function Admin() {
   const [networkDraft, setNetworkDraft] = useState(createNetworkDraft);
   const [networkStatus, setNetworkStatus] = useState("");
   const [savingNetwork, setSavingNetwork] = useState(false);
+  const [speechStatus, setSpeechStatus] = useState(null);
+  const [speechStatusMessage, setSpeechStatusMessage] = useState("");
+  const [exportSettings, setExportSettings] = useState(null);
+  const [exportSettingsDraft, setExportSettingsDraft] = useState(createExportSettingsDraft);
+  const [dailyExports, setDailyExports] = useState([]);
+  const [dailyExportMessage, setDailyExportMessage] = useState("");
+  const [savingExportSettings, setSavingExportSettings] = useState(false);
+  const [runningDailyExport, setRunningDailyExport] = useState(false);
+  const [testingExportEmail, setTestingExportEmail] = useState(false);
   const kioskPreviewStyle = useMemo(
     () => getKioskCssVariables({ customization: customizationDraft }),
     [customizationDraft]
@@ -267,6 +289,7 @@ export default function Admin() {
   useEffect(() => {
     if (!signedIn) return;
     loadAnalytics(token);
+    loadDailyExportTools(token);
   }, [signedIn, token, analyticsPeriod, analyticsDate]);
 
   useEffect(() => {
@@ -278,6 +301,7 @@ export default function Admin() {
 
   useEffect(() => {
     refreshNetworkInfo(false);
+    refreshSpeechStatus(false);
   }, []);
 
   const mostRequested = useMemo(() => data?.totals.mostRequestedActivities || [], [data]);
@@ -436,6 +460,88 @@ export default function Admin() {
     }
   }
 
+  async function loadDailyExportTools(authToken = token) {
+    try {
+      const [settings, exportsList] = await Promise.all([
+        api.getExportSettings(authToken),
+        api.getDailyExports(authToken)
+      ]);
+      setExportSettings(settings);
+      setExportSettingsDraft(createExportSettingsDraft(settings));
+      setDailyExports(exportsList);
+    } catch (err) {
+      handleAdminError(err, authToken);
+    }
+  }
+
+  function updateExportSettingsDraft(key, value) {
+    setExportSettingsDraft((current) => ({
+      ...current,
+      [key]: value
+    }));
+  }
+
+  async function saveDailyExportSettings(event) {
+    event.preventDefault();
+    setDailyExportMessage("");
+    const authToken = currentAdminToken();
+    setSavingExportSettings(true);
+    try {
+      const nextSettings = await api.updateExportSettings(authToken, exportSettingsDraft);
+      setExportSettings(nextSettings);
+      setExportSettingsDraft(createExportSettingsDraft(nextSettings));
+      setDailyExportMessage("Daily export settings saved.");
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setDailyExportMessage(err.message);
+    } finally {
+      setSavingExportSettings(false);
+    }
+  }
+
+  async function runManualDailyExport() {
+    setDailyExportMessage("");
+    const authToken = currentAdminToken();
+    setRunningDailyExport(true);
+    try {
+      const nextSettings = await api.updateExportSettings(authToken, exportSettingsDraft);
+      setExportSettings(nextSettings);
+      setExportSettingsDraft(createExportSettingsDraft(nextSettings));
+      const archive = await api.runDailyExport(authToken, {
+        date: analyticsDate,
+        force: true,
+        sendEmail: true
+      });
+      setDailyExportMessage(
+        `Saved ${archive.filename}. Email status: ${formatEmailStatus(archive.email_status)}.`
+      );
+      setDailyExports(await api.getDailyExports(authToken));
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setDailyExportMessage(err.message);
+    } finally {
+      setRunningDailyExport(false);
+    }
+  }
+
+  async function sendTestDailyExportEmail() {
+    setDailyExportMessage("");
+    const authToken = currentAdminToken();
+    setTestingExportEmail(true);
+    try {
+      const nextSettings = await api.updateExportSettings(authToken, exportSettingsDraft);
+      setExportSettings(nextSettings);
+      setExportSettingsDraft(createExportSettingsDraft(nextSettings));
+      const result = await api.testDailyExportEmail(authToken);
+      setDailyExportMessage(`Test email sent to ${result.recipient}.`);
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setDailyExportMessage(err.message);
+    } finally {
+      setTestingExportEmail(false);
+    }
+  }
+
   async function exportAnalytics() {
     setMessage("");
     const authToken = currentAdminToken();
@@ -502,6 +608,23 @@ export default function Admin() {
     }
   }
 
+  async function applyListeningHouseDefaults() {
+    if (
+      !window.confirm("Add missing Listening House default services? Custom activities stay saved.")
+    ) {
+      return;
+    }
+    setMessage("");
+    const authToken = currentAdminToken();
+    try {
+      const nextData = await api.applyListeningHouseDefaults(authToken);
+      setData(nextData);
+      setMessage("Listening House default services are ready.");
+    } catch (err) {
+      handleAdminError(err, authToken);
+    }
+  }
+
   async function saveBuffer(value) {
     setMessage("");
     try {
@@ -543,6 +666,20 @@ export default function Admin() {
       return info;
     } catch (err) {
       setNetworkStatus(err.message);
+      return null;
+    }
+  }
+
+  async function refreshSpeechStatus(showMessage = true) {
+    try {
+      const status = await api.getSpeechStatus();
+      setSpeechStatus(status);
+      if (showMessage) {
+        setSpeechStatusMessage("Speech status refreshed.");
+      }
+      return status;
+    } catch (err) {
+      setSpeechStatusMessage(err.message);
       return null;
     }
   }
@@ -943,6 +1080,100 @@ export default function Admin() {
         {networkStatus ? <p className="network-status">{networkStatus}</p> : null}
       </form>
 
+      <section className="card-panel speech-status-panel">
+        <div className="analytics-heading">
+          <div>
+            <h2>
+              <Volume2 size={24} />
+              Read Aloud Voice Status
+            </h2>
+            <p>
+              Hmong reads best when native full-phrase recordings are installed. If they are not
+              present, the kiosk uses the local Hmong syllable voice pack as a fallback.
+            </p>
+          </div>
+          <button
+            className="secondary-button compact-button"
+            type="button"
+            onClick={() => refreshSpeechStatus(true)}
+          >
+            <RefreshCw size={18} />
+            Refresh voices
+          </button>
+        </div>
+
+        <div className="speech-status-grid">
+          <SpeechStatusCard
+            title="Hmong mode"
+            value={formatSpeechMode(speechStatus?.hmongSpeechMode)}
+            state={
+              !speechStatus
+                ? "checking"
+                : speechStatus.hmongSpeechMode === "phrase-first"
+                  ? "ready"
+                  : "warning"
+            }
+            detail={
+              !speechStatus
+                ? "Checking installed phrase and fallback voice files."
+                : speechStatus.hmongSpeechMode === "phrase-first"
+                  ? "Using native phrase recordings first."
+                  : speechStatus.hmongSpeechMode === "fallback-syllable"
+                    ? "Using the syllable voice pack until phrase recordings are added."
+                    : "Hmong voice files are not installed yet."
+            }
+          />
+          <SpeechStatusCard
+            title="Phrase recordings"
+            value={`${speechStatus?.hmongPhraseCount ?? 0} installed`}
+            state={speechStatus?.hmongPhraseReady ? "ready" : "warning"}
+            detail="Put approved native phrase WAV files in data/hmong-phrases and list them in manifest.json."
+          />
+          <SpeechStatusCard
+            title="Fallback voice pack"
+            value={`${speechStatus?.hmongVoiceSamples ?? 0} samples`}
+            state={speechStatus?.hmongVoiceReady ? "ready" : "warning"}
+            detail={
+              speechStatus?.hmongVoiceReady
+                ? "The offline Yuhalu syllable pack is available."
+                : "Run npm run speech:install-hmong on this server."
+            }
+          />
+          <SpeechStatusCard
+            title="Natural online speech"
+            value={speechStatus?.naturalSpeechReady ? "Ready" : "Unavailable"}
+            state={speechStatus?.naturalSpeechReady ? "ready" : "warning"}
+            detail="English prefers the British neural voice. Spanish and Somali use natural speech when the Pi has internet."
+          />
+          <SpeechStatusCard
+            title="Cloud language fallback"
+            value={speechStatus?.cloudSpeechLanguages?.length ? "Ready" : "Unavailable"}
+            state={speechStatus?.cloudSpeechLanguages?.length ? "ready" : "warning"}
+            detail="Spanish, Somali, and Hmong can try cloud speech before falling back to local options."
+          />
+          <SpeechStatusCard
+            title="Emergency local speech"
+            value={speechStatus?.serverSpeechReady ? "Ready" : "Unavailable"}
+            state={speechStatus?.serverSpeechReady ? "ready" : "warning"}
+            detail={
+              speechStatus?.serverSpeechReady
+                ? "espeak-ng is installed for offline emergency speech."
+                : "Run sudo apt-get install -y espeak-ng on the Raspberry Pi."
+            }
+          />
+        </div>
+
+        {speechStatus?.hmongPhraseErrors?.length ? (
+          <div className="speech-status-errors">
+            <strong>Phrase setup needs attention</strong>
+            {speechStatus.hmongPhraseErrors.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        ) : null}
+        {speechStatusMessage ? <p className="network-status">{speechStatusMessage}</p> : null}
+      </section>
+
       <form className="card-panel kiosk-customization-panel" onSubmit={saveKioskCustomization}>
         <div className="analytics-heading">
           <div>
@@ -1290,12 +1521,168 @@ export default function Admin() {
         ) : null}
       </div>
 
+      <form className="card-panel daily-export-panel" onSubmit={saveDailyExportSettings}>
+        <div className="analytics-heading">
+          <div>
+            <h2>
+              <Mail size={24} />
+              Daily Spreadsheet Archive
+            </h2>
+            <p>
+              At the selected time, the Raspberry Pi saves yesterday&apos;s spreadsheet and emails
+              it when Gmail is configured.
+            </p>
+          </div>
+          <button
+            className="primary-button compact-button"
+            type="submit"
+            disabled={!signedIn || savingExportSettings}
+          >
+            <Save size={18} />
+            {savingExportSettings ? "Saving..." : "Save daily export settings"}
+          </button>
+        </div>
+
+        <div className="daily-export-grid">
+          <label>
+            Export time
+            <input
+              type="time"
+              value={exportSettingsDraft.export_time}
+              disabled={!signedIn}
+              onInput={(event) =>
+                updateExportSettingsDraft("export_time", event.currentTarget.value)
+              }
+            />
+          </label>
+          <label>
+            Recipient email
+            <input
+              type="email"
+              value={exportSettingsDraft.recipient}
+              disabled={!signedIn}
+              placeholder="reports@example.org"
+              onChange={(event) => updateExportSettingsDraft("recipient", event.target.value)}
+            />
+          </label>
+          <label>
+            Gmail sender
+            <input
+              type="email"
+              value={exportSettingsDraft.gmail_sender}
+              disabled={!signedIn}
+              placeholder="sheltergmail@gmail.com"
+              onChange={(event) => updateExportSettingsDraft("gmail_sender", event.target.value)}
+            />
+          </label>
+          <label>
+            Gmail app password
+            <input
+              type="password"
+              value={exportSettingsDraft.gmail_app_password}
+              disabled={!signedIn}
+              placeholder={
+                exportSettings?.gmail_app_password_configured
+                  ? "Saved password is set"
+                  : "16-character app password"
+              }
+              onChange={(event) =>
+                updateExportSettingsDraft("gmail_app_password", event.target.value)
+              }
+            />
+          </label>
+          <label>
+            Keep raw rows at least
+            <input
+              type="number"
+              min="7"
+              max="3650"
+              value={exportSettingsDraft.raw_retention_days}
+              disabled={!signedIn}
+              onChange={(event) =>
+                updateExportSettingsDraft("raw_retention_days", Number(event.target.value))
+              }
+            />
+          </label>
+          <label className="toggle-field daily-export-clear">
+            <input
+              type="checkbox"
+              checked={Boolean(exportSettingsDraft.clear_gmail_app_password)}
+              disabled={!signedIn}
+              onChange={(event) =>
+                updateExportSettingsDraft("clear_gmail_app_password", event.target.checked)
+              }
+            />
+            Clear saved Gmail app password
+          </label>
+        </div>
+
+        <div className="daily-export-actions">
+          <button
+            className="secondary-button compact-button"
+            type="button"
+            disabled={!signedIn || testingExportEmail}
+            onClick={sendTestDailyExportEmail}
+          >
+            <Mail size={18} />
+            {testingExportEmail ? "Sending..." : "Send test email"}
+          </button>
+          <button
+            className="secondary-button compact-button"
+            type="button"
+            disabled={!signedIn || runningDailyExport}
+            onClick={runManualDailyExport}
+          >
+            <Download size={18} />
+            {runningDailyExport ? "Creating..." : `Archive selected date`}
+          </button>
+        </div>
+
+        {dailyExportMessage ? <p className="network-status">{dailyExportMessage}</p> : null}
+
+        <div className="daily-export-list">
+          <h3>Recent archives</h3>
+          {dailyExports.length === 0 ? (
+            <p>No daily spreadsheet archives have been created yet.</p>
+          ) : (
+            dailyExports.slice(0, 8).map((archive) => (
+              <div className="daily-export-row" key={archive.id}>
+                <div>
+                  <strong>{archive.report_date}</strong>
+                  <span>{archive.filename}</span>
+                  {archive.error_message ? <small>{archive.error_message}</small> : null}
+                </div>
+                <span className={`email-status is-${archive.email_status}`}>
+                  {formatEmailStatus(archive.email_status)}
+                </span>
+                <a
+                  className="secondary-button compact-button"
+                  href={api.getDailyExportDownloadUrl(currentAdminToken(), archive.id)}
+                >
+                  <Download size={16} />
+                  Download
+                </a>
+              </div>
+            ))
+          )}
+        </div>
+      </form>
+
       <div className="card-panel activity-admin">
         <h2>Activities</h2>
         <p>
           Add a service, then independently choose calendar time, a daily quantity limit, a
           countdown alarm, available hours, monthly dates, yearly dates, or any combination.
         </p>
+        <button
+          className="secondary-button compact-button"
+          type="button"
+          disabled={!signedIn}
+          onClick={applyListeningHouseDefaults}
+        >
+          <RefreshCw size={18} />
+          Apply Listening House defaults
+        </button>
         <form
           className="add-activity activity-config-card is-new"
           data-testid="add-activity-form"
@@ -1862,6 +2249,13 @@ function AnalyticsStat({ label, value, wide = false }) {
   );
 }
 
+function formatEmailStatus(status) {
+  if (status === "sent") return "Email sent";
+  if (status === "failed") return "Email failed";
+  if (status === "not_configured") return "Not emailed";
+  return "Pending";
+}
+
 function KioskCustomizationPreview({ customizationDraft, kioskPreviewStyle }) {
   const [pageIndex, setPageIndex] = useState(0);
   const page = kioskPreviewPages[pageIndex];
@@ -1998,6 +2392,23 @@ function KioskPreviewPage({ pageId, customizationDraft }) {
       </div>
     </div>
   );
+}
+
+function SpeechStatusCard({ title, value, detail, state = "warning" }) {
+  return (
+    <div className={`speech-status-card is-${state}`}>
+      <span>{title}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </div>
+  );
+}
+
+function formatSpeechMode(mode) {
+  if (mode === "phrase-first") return "Phrase first";
+  if (mode === "fallback-syllable") return "Fallback";
+  if (mode === "not-installed") return "Not installed";
+  return "Checking...";
 }
 
 function CustomizationIllustration({ type }) {

@@ -1,0 +1,34 @@
+{
+  "phrases": [
+    {
+      "key": "welcome_screen",
+      "text": "Zoo siab txais tos rau Listening House. Ib txoj kev sau npe yooj yim uas pab kev nyab xeeb, kev sib txuas, thiab kev pab siv tau. Sau npe / Tsim npe.",
+      "file": "welcome-screen.wav"
+    },
+    {
+      "key": "identity_screen",
+      "text": "Sau npe / Tsim npe. Sau lub npe thiab xeem. Lub npe tshiab yuav raug tsim; lub npe uas twb muaj lawm yuav rov sau npe. Lub npe. Xeem.",
+      "file": "identity-screen.wav"
+    },
+    {
+      "key": "language_screen",
+      "text": "Xaiv hom lus koj xav siv. Cov lus xaiv yog: English, Spanish, Hmong, Somali.",
+      "file": "language-screen.wav"
+    },
+    {
+      "key": "activities_intro",
+      "text": "Hnub no koj xav tau dab tsi? Xaiv kev pab koj xav tau hnub no.",
+      "file": "activities-intro.wav"
+    },
+    {
+      "key": "continue_button",
+      "text": "Mus ntxiv",
+      "file": "continue-button.wav"
+    },
+    {
+      "key": "confirmation_base",
+      "text": "Koj sau npe tiav lawm. Ua tsaug. Thov tos kom neeg ua hauj lwm hu koj lub npe.",
+      "file": "confirmation-base.wav"
+    }
+  ]
+}

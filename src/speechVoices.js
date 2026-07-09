@@ -1,7 +1,7 @@
 const speechLanguageCodes = {
   en: ["en-GB", "en-US", "en"],
   es: ["es-US", "es-MX", "es-ES", "es"],
-  hmn: ["hmn-US", "hmn", "mww-US", "mww"],
+  hmn: ["mww-US", "mww", "hmn-US", "hmn"],
   so: ["so-SO", "so"]
 };
 const britishVoicePreferences = [

@@ -1737,7 +1737,7 @@ export function updateExportSettings(payload = {}) {
       setSettingValue("daily_export_recipient", normalizeEmailList(payload.recipient));
     }
     if (payload.gmail_sender !== undefined) {
-      setSettingValue("daily_export_gmail_sender", cleanText(payload.gmail_sender, 300));
+      setSettingValue("daily_export_gmail_sender", normalizeEmailAddress(payload.gmail_sender));
     }
     if (payload.gmail_app_password !== undefined) {
       const password = normalizeGmailAppPassword(payload.gmail_app_password);
@@ -1834,19 +1834,26 @@ export async function runDueDailyExports({ now = new Date(), mailer = null } = {
 
 export async function sendDailyExportTestEmail({ mailer = null } = {}) {
   const settings = getExportSettings();
-  const transporter = mailer || createGmailTransport(settings);
   const recipient = settings.recipient;
   if (!recipient) {
     const error = new Error("Enter a recipient email for daily exports.");
     error.status = 400;
     throw error;
   }
-  await transporter.sendMail({
-    from: settings.gmail_sender,
-    to: recipient,
-    subject: "Listening House daily export test",
-    text: "This is a test message from the Listening House kiosk system. Daily spreadsheets will be attached to future archive emails."
-  });
+  const transporter = mailer || createGmailTransport(settings);
+  try {
+    await transporter.verify?.();
+    await transporter.sendMail({
+      from: `"Listening House Kiosk" <${settings.gmail_sender}>`,
+      to: recipient,
+      subject: "Listening House daily export test",
+      text: "This is a test message from the Listening House kiosk system. Daily spreadsheets will be attached to future archive emails."
+    });
+  } catch (error) {
+    const wrapped = new Error(formatEmailDeliveryError(error));
+    wrapped.status = 502;
+    throw wrapped;
+  }
   return { ok: true, recipient };
 }
 
@@ -1881,8 +1888,9 @@ async function emailDailyExportArchive(id, { mailer = null } = {}) {
 
   try {
     const transporter = mailer || createGmailTransport(settings);
+    await transporter.verify?.();
     await transporter.sendMail({
-      from: settings.gmail_sender,
+      from: `"Listening House Kiosk" <${settings.gmail_sender}>`,
       to: settings.recipient,
       subject: `Listening House daily export for ${archive.report_date}`,
       text: `Attached is the Listening House daily spreadsheet archive for ${archive.report_date}.`,
@@ -1903,23 +1911,34 @@ async function emailDailyExportArchive(id, { mailer = null } = {}) {
     return updateDailyExportEmailStatus(id, {
       emailStatus: "failed",
       recipient: settings.recipient,
-      errorMessage: error.message
+      errorMessage: formatEmailDeliveryError(error)
     });
   }
 }
 
 function createGmailTransport(settings) {
   const password = getSettingValue("daily_export_gmail_app_password");
-  if (!settings.gmail_sender || !password) {
-    const error = new Error("Gmail sender and app password are required.");
+  const sender = normalizeEmailAddress(settings.gmail_sender);
+  if (!sender || !password) {
+    const error = new Error(
+      "Gmail sender and Gmail app password are required. Enter the Gmail address that will send the spreadsheet, plus a Google app password."
+    );
     error.status = 400;
     throw error;
   }
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
     auth: {
-      user: settings.gmail_sender,
+      user: sender,
       pass: password
+    },
+    tls: {
+      servername: "smtp.gmail.com"
     }
   });
 }
@@ -2045,11 +2064,39 @@ function normalizeEmailList(value) {
     .slice(0, 500);
 }
 
+function normalizeEmailAddress(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .slice(0, 300);
+}
+
 function normalizeGmailAppPassword(value) {
   return String(value || "")
     .replace(/\s+/g, "")
     .trim()
     .slice(0, 80);
+}
+
+function formatEmailDeliveryError(error) {
+  const message = String(error?.message || "Email could not be sent.");
+  const response = String(error?.response || "");
+  const combined = `${message} ${response}`.toLowerCase();
+  if (combined.includes("invalid login") || combined.includes("535")) {
+    return "Gmail rejected the login. Use the Gmail address in Sender and a Google app password, not the normal Gmail password.";
+  }
+  if (combined.includes("less secure") || combined.includes("application-specific")) {
+    return "Gmail requires a Google app password for this system. Turn on 2-Step Verification for that Gmail account, then create an app password.";
+  }
+  if (
+    combined.includes("network") ||
+    combined.includes("timeout") ||
+    combined.includes("econn") ||
+    combined.includes("enotfound")
+  ) {
+    return "The server could not reach Gmail. Check that this computer or Raspberry Pi has internet access, then try Send test email again.";
+  }
+  return `Email could not be sent: ${message}`;
 }
 
 function formatSignInType(value) {

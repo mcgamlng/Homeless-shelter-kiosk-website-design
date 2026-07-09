@@ -3,6 +3,7 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   Globe2,
   KeyRound,
@@ -10,8 +11,10 @@ import {
   Lock,
   LogOut,
   Mail,
+  MonitorX,
   Palette,
   Plus,
+  Power,
   RefreshCw,
   RotateCcw,
   Save,
@@ -189,6 +192,13 @@ function createExportSettingsDraft(settings = {}) {
   };
 }
 
+const piMaintenanceCommands = {
+  update: "cd ~/listening-house-project && ./scripts/raspberry-pi/update-from-github.sh",
+  exitKiosk: "pkill -f '(^|/)(chromium|chromium-browser).*--kiosk.*(:3000/kiosk|/kiosk)'",
+  openKiosk: "cd ~/listening-house-project && ./scripts/raspberry-pi/start-kiosk.sh",
+  reboot: "sudo reboot"
+};
+
 function updateActivityNameDraft(current, name) {
   return {
     ...current,
@@ -259,6 +269,8 @@ export default function Admin() {
   const [savingExportSettings, setSavingExportSettings] = useState(false);
   const [runningDailyExport, setRunningDailyExport] = useState(false);
   const [testingExportEmail, setTestingExportEmail] = useState(false);
+  const [systemControlMessage, setSystemControlMessage] = useState("");
+  const [exitingKiosk, setExitingKiosk] = useState(false);
   const kioskPreviewStyle = useMemo(
     () => getKioskCssVariables({ customization: customizationDraft }),
     [customizationDraft]
@@ -539,6 +551,32 @@ export default function Admin() {
       setDailyExportMessage(err.message);
     } finally {
       setTestingExportEmail(false);
+    }
+  }
+
+  async function copyCommand(label, command) {
+    setSystemControlMessage("");
+    try {
+      await navigator.clipboard.writeText(command);
+      setSystemControlMessage(`${label} command copied.`);
+    } catch {
+      setSystemControlMessage(`${label} command: ${command}`);
+    }
+  }
+
+  async function exitKioskScreen() {
+    setSystemControlMessage("");
+    setExitingKiosk(true);
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        await document.exitFullscreen();
+      }
+      const result = await api.exitKiosk(currentAdminToken());
+      setSystemControlMessage(result.message || "Kiosk exit command sent.");
+    } catch (err) {
+      setSystemControlMessage(`${err.message} Manual command: ${piMaintenanceCommands.exitKiosk}`);
+    } finally {
+      setExitingKiosk(false);
     }
   }
 
@@ -1149,7 +1187,7 @@ export default function Admin() {
             title="Cloud language fallback"
             value={speechStatus?.cloudSpeechLanguages?.length ? "Ready" : "Unavailable"}
             state={speechStatus?.cloudSpeechLanguages?.length ? "ready" : "warning"}
-            detail="Spanish, Somali, and Hmong can try cloud speech before falling back to local options."
+            detail="Spanish, Somali, and Hmong Daw try cloud speech before any offline fallback."
           />
           <SpeechStatusCard
             title="Emergency local speech"
@@ -1157,7 +1195,7 @@ export default function Admin() {
             state={speechStatus?.serverSpeechReady ? "ready" : "warning"}
             detail={
               speechStatus?.serverSpeechReady
-                ? "espeak-ng is installed for offline emergency speech."
+                ? "espeak-ng is installed, but normal kiosk readout avoids this robotic voice."
                 : "Run sudo apt-get install -y espeak-ng on the Raspberry Pi."
             }
           />
@@ -1172,6 +1210,95 @@ export default function Admin() {
           </div>
         ) : null}
         {speechStatusMessage ? <p className="network-status">{speechStatusMessage}</p> : null}
+      </section>
+
+      <section className="card-panel system-controls-panel">
+        <div className="analytics-heading">
+          <div>
+            <h2>
+              <Power size={24} />
+              Kiosk & Raspberry Pi Controls
+            </h2>
+            <p>
+              Use these when the kiosk is full-screen, stuck, or needs the newest GitHub update.
+              Saved check-ins and spreadsheet archives stay on disk, but phones disconnect while the
+              Pi reboots and any unsaved Admin form edits are lost.
+            </p>
+          </div>
+        </div>
+
+        <div className="system-control-grid">
+          <div className="system-control-card">
+            <MonitorX size={26} />
+            <div>
+              <strong>Exit full-screen kiosk</strong>
+              <p>
+                Tries to close only the Chromium kiosk window on Raspberry Pi. The server keeps
+                running.
+              </p>
+            </div>
+            <button
+              className="secondary-button compact-button"
+              type="button"
+              disabled={!signedIn || exitingKiosk}
+              onClick={exitKioskScreen}
+            >
+              {exitingKiosk ? "Exiting..." : "Exit kiosk screen"}
+            </button>
+          </div>
+
+          <div className="system-control-card">
+            <RefreshCw size={26} />
+            <div>
+              <strong>Update from GitHub</strong>
+              <p>Copies the command that pulls the newest code, rebuilds, and restarts the app.</p>
+            </div>
+            <button
+              className="secondary-button compact-button"
+              type="button"
+              onClick={() => copyCommand("Update", piMaintenanceCommands.update)}
+            >
+              <Copy size={16} />
+              Copy update command
+            </button>
+          </div>
+
+          <div className="system-control-card">
+            <Power size={26} />
+            <div>
+              <strong>Reboot Raspberry Pi</strong>
+              <p>
+                Rebooting does not delete saved database data, but wait until exports or check-ins
+                finish first.
+              </p>
+            </div>
+            <button
+              className="danger-button compact-button"
+              type="button"
+              onClick={() => copyCommand("Reboot", piMaintenanceCommands.reboot)}
+            >
+              <Copy size={16} />
+              Copy reboot command
+            </button>
+          </div>
+
+          <div className="system-control-card">
+            <Globe2 size={26} />
+            <div>
+              <strong>Open kiosk again</strong>
+              <p>Copies the command to reopen Chromium in kiosk mode after exiting it.</p>
+            </div>
+            <button
+              className="secondary-button compact-button"
+              type="button"
+              onClick={() => copyCommand("Open kiosk", piMaintenanceCommands.openKiosk)}
+            >
+              <Copy size={16} />
+              Copy open command
+            </button>
+          </div>
+        </div>
+        {systemControlMessage ? <p className="network-status">{systemControlMessage}</p> : null}
       </section>
 
       <form className="card-panel kiosk-customization-panel" onSubmit={saveKioskCustomization}>
@@ -1530,7 +1657,7 @@ export default function Admin() {
             </h2>
             <p>
               At the selected time, the Raspberry Pi saves yesterday&apos;s spreadsheet and emails
-              it when Gmail is configured.
+              it when Gmail sender, app password, and recipient are all configured.
             </p>
           </div>
           <button
@@ -1541,6 +1668,13 @@ export default function Admin() {
             <Save size={18} />
             {savingExportSettings ? "Saving..." : "Save daily export settings"}
           </button>
+        </div>
+
+        <div className="daily-export-help">
+          <strong>Email setup needs three things:</strong>
+          <span>1. Recipient email: where the spreadsheet goes.</span>
+          <span>2. Gmail sender: the Gmail account that sends it.</span>
+          <span>3. Gmail app password: a Google app password, not the normal Gmail password.</span>
         </div>
 
         <div className="daily-export-grid">
@@ -1574,6 +1708,7 @@ export default function Admin() {
               placeholder="sheltergmail@gmail.com"
               onChange={(event) => updateExportSettingsDraft("gmail_sender", event.target.value)}
             />
+            <small>The Gmail account used to send the spreadsheet.</small>
           </label>
           <label>
             Gmail app password
@@ -1590,6 +1725,9 @@ export default function Admin() {
                 updateExportSettingsDraft("gmail_app_password", event.target.value)
               }
             />
+            <small>
+              Use a Google app password with spaces allowed; the system removes spaces when saving.
+            </small>
           </label>
           <label>
             Keep raw rows at least

@@ -36,7 +36,7 @@ const naturalSpeechVoices = {
 const cloudSpeechLanguages = {
   es: "es-US",
   so: "so",
-  hmn: "hmn"
+  hmn: "mww"
 };
 
 let hmongVoiceIndex = null;

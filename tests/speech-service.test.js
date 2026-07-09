@@ -141,7 +141,7 @@ test("cloud speech routes Somali and Hmong to language-specific targets", async 
   };
   await getCloudSpeechAudio("Soo dhawoow.", "so", response);
   await getCloudSpeechAudio("Zoo siab txais tos.", "hmn", response);
-  assert.deepEqual(requestedLanguages, ["so", "hmn"]);
+  assert.deepEqual(requestedLanguages, ["so", "mww"]);
 });
 
 function createTestWave() {

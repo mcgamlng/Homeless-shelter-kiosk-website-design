@@ -191,6 +191,12 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
+  exitKiosk(token) {
+    return request("/api/admin/system/exit-kiosk", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
   getDailyExportDownloadUrl(token, id) {
     return `/api/admin/daily-exports/${id}/download?${new URLSearchParams({ token }).toString()}`;
   },

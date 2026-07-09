@@ -145,10 +145,11 @@ The kiosk uses a different speech path for each language so it does not force un
 through an English voice:
 
 - English tries the natural British neural voice `en-GB-RyanNeural` through the server when internet
-  is available, then falls back to local Pi speech and browser speech.
-- Spanish and Somali try natural/cloud server speech first. If internet is unavailable, they fall
-  back to local Pi speech and browser speech.
-- Hmong tries cloud speech first, then checks for approved native phrase recordings in
+  is available, then falls back to the best browser voice. The kiosk avoids the robotic local
+  `espeak-ng` voice for normal English readout.
+- Spanish and Somali try natural/cloud server speech first, then the best browser voice.
+- Hmong Daw uses the `mww` cloud speech code first, then checks for approved native phrase
+  recordings in
   `data/hmong-phrases`. When a matching
   full phrase exists, the kiosk plays that human-recorded sentence. If no phrase recording exists,
   it falls back to the local native-recorded White Hmong RPA syllable pack. The fallback works
@@ -323,9 +324,10 @@ Day** sheet includes every date in the requested period, including zero-activity
 and daily totals.
 
 Admin can also configure a daily archive. By default, the Pi checks at 3:00 a.m., saves the previous
-calendar day's `.xlsx` file into `data/exports`, and emails it through Gmail SMTP when a Gmail sender,
-app password, and recipient are saved. If the Pi is off at the scheduled time, the server catches up
-on the next startup. Raw rows are kept for at least seven days and are not purged when email fails.
+calendar day's `.xlsx` file into `data/exports`, and emails it through Gmail SMTP when all three
+email fields are saved: recipient email, Gmail sender address, and a Google app password. The normal
+Gmail login password will not work. If the Pi is off at the scheduled time, the server catches up on
+the next startup. Raw rows are kept for at least seven days and are not purged when email fails.
 
 ## Automatic Startup
 
@@ -356,6 +358,11 @@ chmod +x scripts/raspberry-pi/*.sh
 Codex does not need to run on the Raspberry Pi for the kiosk to work. The Pi only needs Git, Node.js,
 the project files, and the local database. If you choose to install Codex CLI on the Pi, treat it as
 a developer tool, not part of the production kiosk startup.
+
+Admin also includes **Kiosk & Raspberry Pi Controls**. Staff can copy the update command, copy the
+reboot command, reopen the kiosk, or try to exit the Chromium kiosk window. Rebooting does not delete
+saved SQLite data or completed spreadsheet archives, but unsaved form edits are lost and staff phones
+disconnect while the Pi restarts.
 
 Chromium kiosk command:
 

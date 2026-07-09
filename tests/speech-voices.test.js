@@ -11,7 +11,7 @@ const voices = [
 test("selects a voice that matches the kiosk language", () => {
   assert.equal(chooseSpeechVoice(voices, "es")?.lang, "es-US");
   assert.equal(chooseSpeechVoice(voices, "so")?.lang, "so-SO");
-  assert.equal(preferredSpeechLanguage("hmn"), "hmn-US");
+  assert.equal(preferredSpeechLanguage("hmn"), "mww-US");
 });
 
 test("prefers the same natural British voice used by the walkthrough videos", () => {

@@ -84,9 +84,9 @@ sudo apt-get install -y espeak-ng
 ```
 
 The kiosk now tries natural online speech first, including the British English voice
-`en-GB-RyanNeural`. If internet speech is not available, it falls back to cloud language speech and
-then to the local `espeak-ng` emergency voice. Hmong can also use cloud speech first, then the local
-Hmong phrase or syllable pack.
+`en-GB-RyanNeural`. Spanish and Somali use natural/cloud speech before browser fallback. Hmong Daw
+uses the `mww` cloud speech code first, then the local Hmong phrase or syllable pack. The local
+`espeak-ng` package is kept as an emergency tool, but normal kiosk readout avoids that robotic voice.
 
 Create `.env`:
 
@@ -219,6 +219,13 @@ Use a Gmail app password, not the normal Gmail login password. Press **Send test
 leaving it running overnight. If the Pi is off at the scheduled time, the server catches up the next
 time it starts.
 
+If test email fails, check the exact Admin message:
+
+- Missing sender/app password means the recipient email alone is not enough.
+- Gmail rejected login means the sender must use a Google app password, not the normal Gmail
+  password.
+- Could not reach Gmail means the Raspberry Pi or laptop needs internet access.
+
 Archives are saved in:
 
 ```text
@@ -226,6 +233,19 @@ data/exports
 ```
 
 If email fails, the database rows are kept so staff can fix the settings and export again.
+
+## Admin Kiosk and Pi Controls
+
+Admin includes **Kiosk & Raspberry Pi Controls**:
+
+- **Exit kiosk screen** tries to close only the Chromium kiosk window on Raspberry Pi/Linux.
+- **Copy update command** copies the command that pulls the newest GitHub code and restarts the app.
+- **Copy reboot command** copies `sudo reboot`.
+- **Copy open command** copies the command to reopen Chromium in kiosk mode.
+
+Rebooting does not delete saved check-ins or completed spreadsheet archives because they are stored on
+disk in SQLite and `data/exports`. Do wait for any active check-in or export to finish first. Unsaved
+Admin form edits are lost, and phones/tablets disconnect while the Pi restarts.
 
 If you still want Codex on the Pi for development, install Codex CLI separately and sign in with
 ChatGPT device-code login or an API key. Do not make Codex part of the production startup service.

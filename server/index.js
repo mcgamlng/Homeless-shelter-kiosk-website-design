@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
+import { spawn } from "node:child_process";
 import dotenv from "dotenv";
 import express from "express";
 import http from "node:http";
@@ -70,6 +71,8 @@ const adminSessions = new Map();
 const analyticsDownloads = new Map();
 const DOWNLOAD_TTL_MS = 10 * 60 * 1000;
 const DAILY_EXPORT_CHECK_MS = 15 * 60 * 1000;
+const EXIT_KIOSK_COMMAND =
+  "pkill -f '(^|/)(chromium|chromium-browser).*--kiosk.*(:3000/kiosk|/kiosk)'";
 
 if (PUBLIC_URL) {
   updateSettings({
@@ -169,6 +172,28 @@ function handleRoute(fn) {
         error: error.message || "Something went wrong."
       });
     }
+  };
+}
+
+function exitKioskBrowser() {
+  if (process.platform !== "linux") {
+    const error = new Error(
+      "Automatic kiosk exit is only available on Raspberry Pi/Linux. Use the command shown in Admin."
+    );
+    error.status = 422;
+    throw error;
+  }
+
+  const child = spawn("sh", ["-lc", EXIT_KIOSK_COMMAND], {
+    detached: true,
+    stdio: "ignore"
+  });
+  child.unref();
+  return {
+    ok: true,
+    command: EXIT_KIOSK_COMMAND,
+    message:
+      "Exit command sent. If the browser stays open, open a terminal on the Pi and run the command shown in Admin."
   };
 }
 
@@ -533,6 +558,14 @@ app.post(
   requireAdmin,
   handleRoute(async (_req, res) => {
     res.json(await sendDailyExportTestEmail());
+  })
+);
+
+app.post(
+  "/api/admin/system/exit-kiosk",
+  requireAdmin,
+  handleRoute((_req, res) => {
+    res.json(exitKioskBrowser());
   })
 );
 

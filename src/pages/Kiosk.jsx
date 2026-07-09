@@ -125,9 +125,14 @@ export default function Kiosk({ settings: shellSettings = null }) {
     if (speechTimerRef.current) window.clearTimeout(speechTimerRef.current);
     speechTimerRef.current = null;
     if (speechAudioRef.current) {
-      speechAudioRef.current.pause();
-      speechAudioRef.current.removeAttribute("src");
-      speechAudioRef.current.load();
+      const audio = speechAudioRef.current;
+      audio.onended = null;
+      audio.onerror = null;
+      audio.onabort = null;
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.src = "";
+      audio.load();
       speechAudioRef.current = null;
     }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -175,14 +180,12 @@ export default function Kiosk({ settings: shellSettings = null }) {
         return;
       }
       playNaturalSpeechQueue(segments, runId, pauseMs, language, () => {
-        const nextFallback = () =>
-          playServerSpeechQueue(segments, runId, pauseMs, language, () =>
+        if (["es", "so"].includes(language)) {
+          playCloudSpeechQueue(segments, runId, pauseMs, language, () =>
             startBrowserSpeechFallback(segments, runId, pauseMs)
           );
-        if (["es", "so"].includes(language)) {
-          playCloudSpeechQueue(segments, runId, pauseMs, language, nextFallback);
         } else {
-          nextFallback();
+          startBrowserSpeechFallback(segments, runId, pauseMs);
         }
       });
       return;
@@ -222,26 +225,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
       }).toString()}`,
       pauseAfter: pauseMs
     }));
-    playAudioQueue(queue, runId, 0, 1.1);
-  }
-
-  function serverSpeechUrl(segment, currentLanguage) {
-    return `/api/speech/local?${new URLSearchParams({
-      language: currentLanguage,
-      text: readoutSegmentText(segment)
-    }).toString()}`;
-  }
-
-  function playServerSpeechQueue(segments, runId, pauseMs, currentLanguage, onFailure) {
-    if (!("Audio" in window)) {
-      onFailure?.();
-      return;
-    }
-    const queue = segments.map((segment) => ({
-      url: serverSpeechUrl(segment, currentLanguage),
-      pauseAfter: pauseMs
-    }));
-    playAudioQueue(queue, runId, 0, 1, onFailure);
+    playAudioQueue(queue, runId, 0, 1);
   }
 
   function playAudioQueue(queue, runId, index, playbackRate, onFailure = null) {
@@ -252,10 +236,18 @@ export default function Kiosk({ settings: shellSettings = null }) {
       setReadoutMessage("");
       return;
     }
+    if (speechAudioRef.current) {
+      speechAudioRef.current.onended = null;
+      speechAudioRef.current.onerror = null;
+      speechAudioRef.current.pause();
+    }
     const audio = new window.Audio(queue[index].url);
     speechAudioRef.current = audio;
     audio.preload = "auto";
     audio.playbackRate = playbackRate;
+    audio.onabort = () => {
+      if (runId === speechRunRef.current) handleAudioFailure();
+    };
     audio.onended = () => {
       if (runId !== speechRunRef.current) return;
       speechAudioRef.current = null;

@@ -153,7 +153,7 @@ function AppShell() {
       </header>
       <main>
         <Routes>
-          <Route path="/" element={<Navigate to="/kiosk" replace />} />
+          <Route path="/" element={<KioskLauncher />} />
           <Route path="/kiosk" element={<Kiosk settings={settings} />} />
           <Route path="/install" element={<InstallApp />} />
           <Route
@@ -217,6 +217,41 @@ function AppShell() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function KioskLauncher() {
+  const [message, setMessage] = useState("");
+  const [launching, setLaunching] = useState(false);
+
+  async function openFullScreenKiosk() {
+    setMessage("");
+    setLaunching(true);
+    try {
+      const result = await api.openKioskOnThisPi();
+      setMessage(result.message || "Opening the kiosk full-screen on this Raspberry Pi.");
+    } catch (err) {
+      setMessage(err.message || "Open this button on the Raspberry Pi screen itself.");
+    } finally {
+      setLaunching(false);
+    }
+  }
+
+  return (
+    <section className="entry-page kiosk-launcher-page">
+      <div className="entry-card kiosk-launcher-card">
+        <img src="/icons/lh-icon.svg" alt="" className="launcher-logo" />
+        <h1>Listening House Kiosk</h1>
+        <p>Use this page to open the guest check-in kiosk again on the Raspberry Pi screen.</p>
+        <button className="primary-button" type="button" onClick={openFullScreenKiosk}>
+          {launching ? "Opening..." : "Open full-screen kiosk"}
+        </button>
+        <Link className="secondary-button launcher-link" to="/kiosk">
+          Open kiosk in this browser
+        </Link>
+        {message ? <p className="network-status">{message}</p> : null}
+      </div>
+    </section>
   );
 }
 

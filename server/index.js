@@ -1,7 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import dotenv from "dotenv";
 import express from "express";
 import http from "node:http";
@@ -57,6 +57,7 @@ import {
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, "..");
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -73,6 +74,12 @@ const DOWNLOAD_TTL_MS = 10 * 60 * 1000;
 const DAILY_EXPORT_CHECK_MS = 15 * 60 * 1000;
 const EXIT_KIOSK_COMMAND =
   "pkill -f '(^|/)(chromium|chromium-browser).*--kiosk.*(:3000/kiosk|/kiosk)'";
+const SYSTEM_ACTION_COMMANDS = {
+  exitKiosk: EXIT_KIOSK_COMMAND,
+  openKiosk:
+    "pkill -f '(^|/)(chromium|chromium-browser).*--kiosk.*(:3000/kiosk|/kiosk)' || true; sleep 1; ./scripts/raspberry-pi/start-kiosk.sh",
+  reboot: "sleep 2; sudo -n reboot"
+};
 
 if (PUBLIC_URL) {
   updateSettings({
@@ -195,6 +202,90 @@ function exitKioskBrowser() {
     message:
       "Exit command sent. If the browser stays open, open a terminal on the Pi and run the command shown in Admin."
   };
+}
+
+function requireLinuxSystemAction(actionName) {
+  if (process.platform === "linux") return;
+  const error = new Error(`${actionName} can only run automatically on Raspberry Pi/Linux.`);
+  error.status = 422;
+  throw error;
+}
+
+function ensurePasswordlessSudo(actionName) {
+  const result = spawnSync("sudo", ["-n", "true"], {
+    encoding: "utf8",
+    timeout: 3000
+  });
+  if (!result.error && result.status === 0) return;
+  const error = new Error(
+    `${actionName} needs Raspberry Pi sudo permission. Run it once from the terminal if this button cannot continue.`
+  );
+  error.status = 503;
+  throw error;
+}
+
+function runDetachedSystemAction({ actionName, command, message, requiresSudo = false }) {
+  requireLinuxSystemAction(actionName);
+  if (requiresSudo) ensurePasswordlessSudo(actionName);
+
+  const logPath = path.join(PROJECT_ROOT, "data", "system-actions.log");
+  const wrappedCommand = `mkdir -p data && (${command}) >> ${shellQuote(logPath)} 2>&1`;
+  const child = spawn("sh", ["-lc", wrappedCommand], {
+    cwd: PROJECT_ROOT,
+    detached: true,
+    env: {
+      ...process.env,
+      DISPLAY: process.env.DISPLAY || ":0",
+      XAUTHORITY:
+        process.env.XAUTHORITY ||
+        (process.env.HOME ? path.join(process.env.HOME, ".Xauthority") : "")
+    },
+    stdio: "ignore"
+  });
+  child.unref();
+  return { ok: true, command, logPath, message };
+}
+
+function openKioskBrowser() {
+  return runDetachedSystemAction({
+    actionName: "Open kiosk",
+    command: SYSTEM_ACTION_COMMANDS.openKiosk,
+    message: "Opening the kiosk full-screen on this Raspberry Pi."
+  });
+}
+
+function updateFromGithub() {
+  const updateCommand =
+    "chmod +x scripts/raspberry-pi/*.sh && ./scripts/raspberry-pi/update-from-github.sh";
+  const command = [
+    "sudo -n systemd-run",
+    "--unit=listening-house-update",
+    "--collect",
+    `--working-directory=${shellQuote(PROJECT_ROOT)}`,
+    "/bin/bash",
+    "-lc",
+    shellQuote(updateCommand)
+  ].join(" ");
+  return runDetachedSystemAction({
+    actionName: "Update from GitHub",
+    command,
+    message:
+      "GitHub update started. The server may restart for a minute while it installs the newest version.",
+    requiresSudo: true
+  });
+}
+
+function rebootRaspberryPi() {
+  return runDetachedSystemAction({
+    actionName: "Reboot Raspberry Pi",
+    command: SYSTEM_ACTION_COMMANDS.reboot,
+    message: "Reboot command sent. The Raspberry Pi will disconnect briefly.",
+    requiresSudo: true
+  });
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
 }
 
 app.get("/api/health", (_req, res) => {
@@ -566,6 +657,53 @@ app.post(
   requireAdmin,
   handleRoute((_req, res) => {
     res.json(exitKioskBrowser());
+  })
+);
+
+app.post(
+  "/api/admin/system/open-kiosk",
+  requireAdmin,
+  handleRoute((_req, res) => {
+    res.json(openKioskBrowser());
+  })
+);
+
+app.post(
+  "/api/admin/system/update",
+  requireAdmin,
+  handleRoute((_req, res) => {
+    res.json(updateFromGithub());
+  })
+);
+
+app.post(
+  "/api/admin/system/reboot",
+  requireAdmin,
+  handleRoute((_req, res) => {
+    res.json(rebootRaspberryPi());
+  })
+);
+
+app.post(
+  "/api/system/open-kiosk",
+  handleRoute((req, res) => {
+    const remoteAddress = req.socket.remoteAddress || "";
+    const forwardedAddress = String(req.headers["x-forwarded-for"] || "")
+      .split(",")[0]
+      .trim();
+    const address = forwardedAddress || remoteAddress;
+    const isLocalRequest =
+      address === "127.0.0.1" ||
+      address === "::1" ||
+      address === "::ffff:127.0.0.1" ||
+      req.hostname === "localhost" ||
+      req.hostname === "127.0.0.1";
+    if (!isLocalRequest) {
+      const error = new Error("Open this button on the Raspberry Pi screen itself.");
+      error.status = 403;
+      throw error;
+    }
+    res.json(openKioskBrowser());
   })
 );
 

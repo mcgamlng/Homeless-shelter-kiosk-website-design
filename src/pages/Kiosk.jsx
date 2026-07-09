@@ -170,7 +170,11 @@ export default function Kiosk({ settings: shellSettings = null }) {
         return;
       }
       playCloudSpeechQueue(segments, runId, pauseMs, language, () =>
-        playHmongSpeechQueue(segments, runId, pauseMs)
+        playHmongSpeechQueue(segments, runId, pauseMs, () =>
+          playLocalSpeechQueue(segments, runId, pauseMs, language, () =>
+            startBrowserSpeechFallback(segments, runId, pauseMs)
+          )
+        )
       );
       return;
     }
@@ -182,10 +186,14 @@ export default function Kiosk({ settings: shellSettings = null }) {
       playNaturalSpeechQueue(segments, runId, pauseMs, language, () => {
         if (["es", "so"].includes(language)) {
           playCloudSpeechQueue(segments, runId, pauseMs, language, () =>
-            startBrowserSpeechFallback(segments, runId, pauseMs)
+            playLocalSpeechQueue(segments, runId, pauseMs, language, () =>
+              startBrowserSpeechFallback(segments, runId, pauseMs)
+            )
           );
         } else {
-          startBrowserSpeechFallback(segments, runId, pauseMs);
+          playLocalSpeechQueue(segments, runId, pauseMs, language, () =>
+            startBrowserSpeechFallback(segments, runId, pauseMs)
+          );
         }
       });
       return;
@@ -217,7 +225,15 @@ export default function Kiosk({ settings: shellSettings = null }) {
     playAudioQueue(queue, runId, 0, 1, onFailure);
   }
 
-  function playHmongSpeechQueue(segments, runId, pauseMs) {
+  function playLocalSpeechQueue(segments, runId, pauseMs, currentLanguage, onFailure) {
+    const queue = segments.map((segment) => ({
+      url: speechRouteUrl("local", segment, currentLanguage),
+      pauseAfter: pauseMs
+    }));
+    playAudioQueue(queue, runId, 0, 1, onFailure);
+  }
+
+  function playHmongSpeechQueue(segments, runId, pauseMs, onFailure) {
     const queue = segments.map((segment) => ({
       url: `/api/speech/hmong?${new URLSearchParams({
         text: readoutSegmentText(segment),
@@ -225,7 +241,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
       }).toString()}`,
       pauseAfter: pauseMs
     }));
-    playAudioQueue(queue, runId, 0, 1);
+    playAudioQueue(queue, runId, 0, 1, onFailure);
   }
 
   function playAudioQueue(queue, runId, index, playbackRate, onFailure = null) {

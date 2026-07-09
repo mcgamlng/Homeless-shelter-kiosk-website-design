@@ -62,6 +62,45 @@ test("activity-specific hours control the scheduled window", () => {
   );
 });
 
+test("overnight workday schedules after a late-night check-in instead of next evening", () => {
+  const [result] = scheduleActivities({
+    activities: [
+      {
+        ...timedActivity(1, "Shower", 30),
+        availability_start: "20:00",
+        availability_end: "02:00"
+      }
+    ],
+    guestId: 42,
+    existingItems: [],
+    bufferMinutes: 5,
+    now: new Date(2026, 5, 24, 1, 0),
+    settings: { workday_start: "20:00", workday_end: "02:00" }
+  });
+
+  const start = new Date(result.scheduled_start);
+  assert.equal(start.getFullYear(), 2026);
+  assert.equal(start.getMonth(), 5);
+  assert.equal(start.getDate(), 24);
+  assert.equal(start.getHours(), 1);
+  assert.equal(start.getMinutes(), 0);
+});
+
+test("check-ins are rejected when the workday is closed", () => {
+  assert.throws(
+    () =>
+      scheduleActivities({
+        activities: [timedActivity(1, "Shower", 30)],
+        guestId: 42,
+        existingItems: [],
+        bufferMinutes: 5,
+        now: new Date(2026, 5, 24, 3, 0),
+        settings: { workday_start: "20:00", workday_end: "02:00" }
+      }),
+    /workday is closed/
+  );
+});
+
 function scheduledItem(overrides = {}) {
   return {
     id: 1,

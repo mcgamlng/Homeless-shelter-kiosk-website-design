@@ -47,6 +47,11 @@ npm install
 echo "Building production website..."
 npm run build
 
+echo "Refreshing kiosk desktop launcher..."
+chmod +x "$PROJECT_DIR/scripts/raspberry-pi/start-kiosk.sh"
+chmod +x "$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh"
+"$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh" || echo "Desktop launcher refresh failed. The server can still run."
+
 if [[ ! -d "$PROJECT_DIR/data/hmong-voice/Kong" ]]; then
   echo "Installing Hmong fallback voice pack..."
   npm run speech:install-hmong || echo "Hmong voice download failed. The kiosk can still run; retry later."

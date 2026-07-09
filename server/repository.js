@@ -8,6 +8,7 @@ import {
   addMinutes,
   compactScheduleAfterFinalStatus,
   getActivityBounds,
+  isWithinWorkday,
   parseStoredDate,
   rebalanceWaitingSchedule,
   repairScheduleAfterMove,
@@ -797,6 +798,12 @@ function validateDailyLimits(activities) {
 }
 
 function validateActivityAvailability(activities, settings, now = new Date()) {
+  if (!isWithinWorkday(now, settings)) {
+    const error = new Error("The workday is closed. Please ask staff for help.");
+    error.status = 409;
+    throw error;
+  }
+
   activities.forEach((activity) => {
     const unavailableByDate = !isActivityDateAvailable(activity, now);
     const bounds = getActivityBounds(now, activity, settings);

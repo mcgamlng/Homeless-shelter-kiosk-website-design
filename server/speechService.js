@@ -24,9 +24,11 @@ const hmongCompoundWords = {
   sijhawm: ["sij", "hawm"]
 };
 const localSpeechVoices = {
-  en: "en-gb",
-  es: "es",
-  so: "so"
+  en: ["en-gb", "en"],
+  es: ["es", "es-la", "en"],
+  so: ["so", "en"],
+  hmn: ["en-gb", "en"],
+  mww: ["en-gb", "en"]
 };
 const naturalSpeechVoices = {
   en: "en-GB-RyanNeural",
@@ -529,8 +531,8 @@ export function createLocalSpeechAudio(text, language = "en", { spawnImpl = spaw
     error.status = 400;
     throw error;
   }
-  const voice = localSpeechVoices[language];
-  if (!voice) {
+  const voices = localSpeechVoices[language];
+  if (!voices?.length) {
     const error = new Error("Server speech is not configured for this language.");
     error.status = 422;
     throw error;
@@ -540,25 +542,34 @@ export function createLocalSpeechAudio(text, language = "en", { spawnImpl = spaw
   if (localSpeechCache.has(cacheKey)) return localSpeechCache.get(cacheKey);
 
   const command = localSpeechCommand();
-  const result = spawnImpl(command, ["--stdout", "-v", voice, "-s", "145", "-p", "42", cleanText], {
-    encoding: "buffer",
-    maxBuffer: 1024 * 1024 * 4
-  });
-
-  if (result.error || result.status !== 0 || !result.stdout?.length) {
-    const error = new Error(
-      "Server speech is not installed. On Raspberry Pi, install it with: sudo apt-get install -y espeak-ng"
+  let lastResult = null;
+  for (const voice of voices) {
+    const result = spawnImpl(
+      command,
+      ["--stdout", "-v", voice, "-s", "145", "-p", "42", cleanText],
+      {
+        encoding: "buffer",
+        maxBuffer: 1024 * 1024 * 4
+      }
     );
-    error.status = 503;
-    throw error;
+    lastResult = result;
+    if (!result.error && result.status === 0 && result.stdout?.length) {
+      const audio = Buffer.from(result.stdout);
+      localSpeechCache.set(cacheKey, audio);
+      if (localSpeechCache.size > MAX_LOCAL_SPEECH_CACHE_ITEMS) {
+        localSpeechCache.delete(localSpeechCache.keys().next().value);
+      }
+      return audio;
+    }
   }
 
-  const audio = Buffer.from(result.stdout);
-  localSpeechCache.set(cacheKey, audio);
-  if (localSpeechCache.size > MAX_LOCAL_SPEECH_CACHE_ITEMS) {
-    localSpeechCache.delete(localSpeechCache.keys().next().value);
-  }
-  return audio;
+  const error = new Error(
+    `Server speech is not installed or could not speak this language. On Raspberry Pi, install it with: sudo apt-get install -y espeak-ng${
+      lastResult?.stderr?.length ? ` (${String(lastResult.stderr).trim()})` : ""
+    }`
+  );
+  error.status = 503;
+  throw error;
 }
 
 function localSpeechCommand() {

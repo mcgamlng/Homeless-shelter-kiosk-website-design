@@ -59,15 +59,37 @@ function parseTime(value, fallback) {
   };
 }
 
-export function getWorkdayBounds(referenceDate = new Date(), settings = {}) {
-  const startParts = parseTime(settings.workday_start, DEFAULT_WORKDAY_START);
-  const endParts = parseTime(settings.workday_end, DEFAULT_WORKDAY_END);
+function timeToMinutes(parts) {
+  return parts.hours * 60 + parts.minutes;
+}
+
+function getTimeWindowBounds(referenceDate, startParts, endParts) {
   const start = new Date(referenceDate);
   start.setHours(startParts.hours, startParts.minutes, 0, 0);
   const end = new Date(referenceDate);
   end.setHours(endParts.hours, endParts.minutes, 0, 0);
-  if (end <= start) end.setDate(end.getDate() + 1);
+
+  if (end <= start) {
+    end.setDate(end.getDate() + 1);
+    const referenceMinutes = referenceDate.getHours() * 60 + referenceDate.getMinutes();
+    if (referenceMinutes < timeToMinutes(endParts)) {
+      start.setDate(start.getDate() - 1);
+      end.setDate(end.getDate() - 1);
+    }
+  }
+
   return { start, end };
+}
+
+export function getWorkdayBounds(referenceDate = new Date(), settings = {}) {
+  const startParts = parseTime(settings.workday_start, DEFAULT_WORKDAY_START);
+  const endParts = parseTime(settings.workday_end, DEFAULT_WORKDAY_END);
+  return getTimeWindowBounds(referenceDate, startParts, endParts);
+}
+
+export function isWithinWorkday(referenceDate = new Date(), settings = {}) {
+  const { start, end } = getWorkdayBounds(referenceDate, settings);
+  return referenceDate >= start && referenceDate < end;
 }
 
 export function getActivityBounds(referenceDate = new Date(), activity = {}, settings = {}) {
@@ -84,11 +106,7 @@ export function getActivityBounds(referenceDate = new Date(), activity = {}, set
     activity.availability_end ?? activity.activity_end_time,
     settings.workday_end || DEFAULT_WORKDAY_END
   );
-  const start = new Date(referenceDate);
-  start.setHours(startParts.hours, startParts.minutes, 0, 0);
-  const end = new Date(referenceDate);
-  end.setHours(endParts.hours, endParts.minutes, 0, 0);
-  if (end <= start) end.setDate(end.getDate() + 1);
+  const { start, end } = getTimeWindowBounds(referenceDate, startParts, endParts);
 
   return {
     start: maxDate(start, workday.start),
@@ -259,7 +277,7 @@ export function scheduleActivities({
     originalIndex
   }));
 
-  if (timedActivities.length > 0 && minStart >= workdayEnd) {
+  if (timedActivities.length > 0 && (!isWithinWorkday(now, settings) || minStart >= workdayEnd)) {
     throw scheduleError("The workday is closed. Please ask staff for help.");
   }
 

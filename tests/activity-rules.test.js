@@ -146,6 +146,27 @@ test("activity quantity, untimed queue, and alarm settings are enforced", async 
       repository.getActivities().find((activity) => activity.id === yearlyClosed.id).is_unavailable,
       true
     );
+
+    const closedWindowStart = new Date(now.getTime() + 120 * 60 * 1000);
+    const closedWindowEnd = new Date(now.getTime() + 180 * 60 * 1000);
+    repository.updateSettings({
+      workday_start: toClock(closedWindowStart),
+      workday_end: toClock(closedWindowEnd)
+    });
+    const untimedClosedWorkday = repository.createActivity({
+      name: "Closed Workday Untimed Help",
+      time_limit_enabled: false,
+      active: true
+    });
+    assert.throws(
+      () =>
+        repository.createCheckIn({
+          activityIds: [untimedClosedWorkday.id],
+          language: "en",
+          signIn: { mode: "sign_up", firstName: "Late", lastName: "Guest" }
+        }),
+      /workday is closed/
+    );
   } finally {
     if (database?.open) database.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

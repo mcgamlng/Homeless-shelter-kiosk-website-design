@@ -84,9 +84,10 @@ sudo apt-get install -y espeak-ng
 ```
 
 The kiosk now tries natural online speech first, including the British English voice
-`en-GB-RyanNeural`. Spanish and Somali use natural/cloud speech before browser fallback. Hmong Daw
-uses the `mww` cloud speech code first, then the local Hmong phrase or syllable pack. The local
-`espeak-ng` package is kept as an emergency tool, but normal kiosk readout avoids that robotic voice.
+`en-GB-RyanNeural`. Spanish and Somali use natural/cloud speech before local `espeak-ng` and browser
+fallback. Hmong Daw uses the `mww` cloud speech code first, then the local Hmong phrase or syllable
+pack, then emergency `espeak-ng` pronunciation. The emergency voice is robotic, but it keeps read
+aloud working when Chromium browser speech is unavailable.
 
 Create `.env`:
 
@@ -200,6 +201,7 @@ The update helper:
 - Rebuilds the website.
 - Installs new Node dependencies such as speech and email packages when they are added.
 - Installs the lightweight `espeak-ng` speech fallback.
+- Refreshes the desktop shortcut named **Open Listening House Kiosk**.
 - Installs the Hmong fallback voice pack if missing.
 - Restarts the service and checks `http://127.0.0.1:3000/api/health`.
 
@@ -239,9 +241,13 @@ If email fails, the database rows are kept so staff can fix the settings and exp
 Admin includes **Kiosk & Raspberry Pi Controls**:
 
 - **Exit kiosk screen** tries to close only the Chromium kiosk window on Raspberry Pi/Linux.
-- **Copy update command** copies the command that pulls the newest GitHub code and restarts the app.
-- **Copy reboot command** copies `sudo reboot`.
-- **Copy open command** copies the command to reopen Chromium in kiosk mode.
+- **Run update now** pulls the newest GitHub code, rebuilds the app, and restarts the server.
+- **Reboot Pi now** sends a Raspberry Pi reboot command.
+- **Open kiosk now** reopens Chromium in kiosk mode when the web app is still open.
+
+The update script also installs a desktop shortcut named **Open Listening House Kiosk**. If Chromium
+is completely closed and staff cannot press a web button, double-click that desktop icon to reopen
+the kiosk without rebooting.
 
 Rebooting does not delete saved check-ins or completed spreadsheet archives because they are stored on
 disk in SQLite and `data/exports`. Do wait for any active check-in or export to finish first. Unsaved

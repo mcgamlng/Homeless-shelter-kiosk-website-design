@@ -197,6 +197,29 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
+  openKiosk(token) {
+    return request("/api/admin/system/open-kiosk", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+  updateFromGithub(token) {
+    return request("/api/admin/system/update", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+  rebootPi(token) {
+    return request("/api/admin/system/reboot", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+  openKioskOnThisPi() {
+    return request("/api/system/open-kiosk", {
+      method: "POST"
+    });
+  },
   getDailyExportDownloadUrl(token, id) {
     return `/api/admin/daily-exports/${id}/download?${new URLSearchParams({ token }).toString()}`;
   },

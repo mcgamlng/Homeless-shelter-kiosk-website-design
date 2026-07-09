@@ -141,19 +141,21 @@ alternative translation endpoint.
 
 ## Read-Aloud Support
 
-The kiosk uses a different speech path for each language so it does not force unsupported languages
-through an English voice:
+The kiosk uses a layered speech path for each language. It tries clearer online speech first, then
+falls back to local Raspberry Pi speech so the read-aloud button still works when browser speech is
+missing:
 
 - English tries the natural British neural voice `en-GB-RyanNeural` through the server when internet
-  is available, then falls back to the best browser voice. The kiosk avoids the robotic local
-  `espeak-ng` voice for normal English readout.
-- Spanish and Somali try natural/cloud server speech first, then the best browser voice.
+  is available, then local `espeak-ng`, then the best browser voice.
+- Spanish and Somali try natural/cloud server speech first, then local `espeak-ng`, then the best
+  browser voice.
 - Hmong Daw uses the `mww` cloud speech code first, then checks for approved native phrase
   recordings in
   `data/hmong-phrases`. When a matching
   full phrase exists, the kiosk plays that human-recorded sentence. If no phrase recording exists,
-  it falls back to the local native-recorded White Hmong RPA syllable pack. The fallback works
-  without internet and does not depend on browser or operating-system Hmong support.
+  it falls back to the local native-recorded White Hmong RPA syllable pack, then emergency
+  `espeak-ng` pronunciation. The emergency fallback is robotic, but it produces audio when the Pi
+  cannot use browser or online speech.
 
 Install the Hmong voice once on each server:
 
@@ -359,10 +361,12 @@ Codex does not need to run on the Raspberry Pi for the kiosk to work. The Pi onl
 the project files, and the local database. If you choose to install Codex CLI on the Pi, treat it as
 a developer tool, not part of the production kiosk startup.
 
-Admin also includes **Kiosk & Raspberry Pi Controls**. Staff can copy the update command, copy the
-reboot command, reopen the kiosk, or try to exit the Chromium kiosk window. Rebooting does not delete
-saved SQLite data or completed spreadsheet archives, but unsaved form edits are lost and staff phones
-disconnect while the Pi restarts.
+Admin also includes **Kiosk & Raspberry Pi Controls**. Staff can run the GitHub update, reboot the
+Pi, reopen the full-screen kiosk, or try to exit only the Chromium kiosk window. Rebooting does not
+delete saved SQLite data or completed spreadsheet archives, but unsaved form edits are lost and staff
+phones disconnect while the Pi restarts. The Raspberry Pi update also installs a desktop shortcut
+called **Open Listening House Kiosk** so staff can reopen the kiosk without rebooting if Chromium is
+closed.
 
 Chromium kiosk command:
 

@@ -3,7 +3,6 @@ import {
   BarChart3,
   ChevronLeft,
   ChevronRight,
-  Copy,
   Download,
   Globe2,
   KeyRound,
@@ -270,7 +269,7 @@ export default function Admin() {
   const [runningDailyExport, setRunningDailyExport] = useState(false);
   const [testingExportEmail, setTestingExportEmail] = useState(false);
   const [systemControlMessage, setSystemControlMessage] = useState("");
-  const [exitingKiosk, setExitingKiosk] = useState(false);
+  const [runningSystemAction, setRunningSystemAction] = useState("");
   const kioskPreviewStyle = useMemo(
     () => getKioskCssVariables({ customization: customizationDraft }),
     [customizationDraft]
@@ -554,19 +553,9 @@ export default function Admin() {
     }
   }
 
-  async function copyCommand(label, command) {
-    setSystemControlMessage("");
-    try {
-      await navigator.clipboard.writeText(command);
-      setSystemControlMessage(`${label} command copied.`);
-    } catch {
-      setSystemControlMessage(`${label} command: ${command}`);
-    }
-  }
-
   async function exitKioskScreen() {
     setSystemControlMessage("");
-    setExitingKiosk(true);
+    setRunningSystemAction("exitKiosk");
     try {
       if (document.fullscreenElement && document.exitFullscreen) {
         await document.exitFullscreen();
@@ -576,7 +565,20 @@ export default function Admin() {
     } catch (err) {
       setSystemControlMessage(`${err.message} Manual command: ${piMaintenanceCommands.exitKiosk}`);
     } finally {
-      setExitingKiosk(false);
+      setRunningSystemAction("");
+    }
+  }
+
+  async function runPiSystemAction(action, label, apiCall) {
+    setSystemControlMessage("");
+    setRunningSystemAction(action);
+    try {
+      const result = await apiCall(currentAdminToken());
+      setSystemControlMessage(result.message || `${label} started.`);
+    } catch (err) {
+      setSystemControlMessage(`${err.message} Manual command: ${piMaintenanceCommands[action]}`);
+    } finally {
+      setRunningSystemAction("");
     }
   }
 
@@ -1181,7 +1183,7 @@ export default function Admin() {
             title="Natural online speech"
             value={speechStatus?.naturalSpeechReady ? "Ready" : "Unavailable"}
             state={speechStatus?.naturalSpeechReady ? "ready" : "warning"}
-            detail="English prefers the British neural voice. Spanish and Somali use natural speech when the Pi has internet."
+            detail="English, Spanish, and Somali try natural speech first when the Pi has internet."
           />
           <SpeechStatusCard
             title="Cloud language fallback"
@@ -1195,7 +1197,7 @@ export default function Admin() {
             state={speechStatus?.serverSpeechReady ? "ready" : "warning"}
             detail={
               speechStatus?.serverSpeechReady
-                ? "espeak-ng is installed, but normal kiosk readout avoids this robotic voice."
+                ? "espeak-ng is installed and will be used when natural or cloud speech is unavailable."
                 : "Run sudo apt-get install -y espeak-ng on the Raspberry Pi."
             }
           />
@@ -1240,10 +1242,10 @@ export default function Admin() {
             <button
               className="secondary-button compact-button"
               type="button"
-              disabled={!signedIn || exitingKiosk}
+              disabled={!signedIn || Boolean(runningSystemAction)}
               onClick={exitKioskScreen}
             >
-              {exitingKiosk ? "Exiting..." : "Exit kiosk screen"}
+              {runningSystemAction === "exitKiosk" ? "Exiting..." : "Exit kiosk screen"}
             </button>
           </div>
 
@@ -1251,15 +1253,15 @@ export default function Admin() {
             <RefreshCw size={26} />
             <div>
               <strong>Update from GitHub</strong>
-              <p>Copies the command that pulls the newest code, rebuilds, and restarts the app.</p>
+              <p>Pulls the newest code, rebuilds the website, and restarts the app.</p>
             </div>
             <button
               className="secondary-button compact-button"
               type="button"
-              onClick={() => copyCommand("Update", piMaintenanceCommands.update)}
+              disabled={!signedIn || Boolean(runningSystemAction)}
+              onClick={() => runPiSystemAction("update", "GitHub update", api.updateFromGithub)}
             >
-              <Copy size={16} />
-              Copy update command
+              {runningSystemAction === "update" ? "Updating..." : "Run update now"}
             </button>
           </div>
 
@@ -1275,10 +1277,10 @@ export default function Admin() {
             <button
               className="danger-button compact-button"
               type="button"
-              onClick={() => copyCommand("Reboot", piMaintenanceCommands.reboot)}
+              disabled={!signedIn || Boolean(runningSystemAction)}
+              onClick={() => runPiSystemAction("reboot", "Reboot", api.rebootPi)}
             >
-              <Copy size={16} />
-              Copy reboot command
+              {runningSystemAction === "reboot" ? "Rebooting..." : "Reboot Pi now"}
             </button>
           </div>
 
@@ -1286,15 +1288,15 @@ export default function Admin() {
             <Globe2 size={26} />
             <div>
               <strong>Open kiosk again</strong>
-              <p>Copies the command to reopen Chromium in kiosk mode after exiting it.</p>
+              <p>Reopens Chromium in full-screen kiosk mode after exiting it.</p>
             </div>
             <button
               className="secondary-button compact-button"
               type="button"
-              onClick={() => copyCommand("Open kiosk", piMaintenanceCommands.openKiosk)}
+              disabled={!signedIn || Boolean(runningSystemAction)}
+              onClick={() => runPiSystemAction("openKiosk", "Open kiosk", api.openKiosk)}
             >
-              <Copy size={16} />
-              Copy open command
+              {runningSystemAction === "openKiosk" ? "Opening..." : "Open kiosk now"}
             </button>
           </div>
         </div>

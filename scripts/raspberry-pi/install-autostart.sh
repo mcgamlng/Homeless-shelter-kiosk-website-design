@@ -52,18 +52,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable listening-house.service
 sudo systemctl restart listening-house.service
 
-mkdir -p "$USER_HOME/.config/autostart"
-cat > "$USER_HOME/.config/autostart/listening-house-kiosk.desktop" <<DESKTOP
-[Desktop Entry]
-Type=Application
-Name=Listening House Kiosk
-Comment=Open the shelter check-in kiosk full screen
-Exec=$PROJECT_DIR/scripts/raspberry-pi/start-kiosk.sh
-X-GNOME-Autostart-enabled=true
-DESKTOP
-
 chmod +x "$PROJECT_DIR/scripts/raspberry-pi/start-kiosk.sh"
-chown -R "$APP_USER:$APP_USER" "$USER_HOME/.config/autostart"
+chmod +x "$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh"
+"$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh"
 
 echo "Installed Listening House server service and desktop kiosk autostart."
 echo "Server service: sudo systemctl status listening-house"

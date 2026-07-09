@@ -3,6 +3,14 @@ set -euo pipefail
 
 KIOSK_URL="${KIOSK_URL:-http://127.0.0.1:3000/kiosk}"
 
+export DISPLAY="${DISPLAY:-:0}"
+if [[ -z "${XAUTHORITY:-}" && -n "${HOME:-}" && -f "$HOME/.Xauthority" ]]; then
+  export XAUTHORITY="$HOME/.Xauthority"
+fi
+if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]; then
+  export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+
 for attempt in {1..160}; do
   if curl -fsS "http://127.0.0.1:3000/api/health" >/dev/null 2>&1; then
     break

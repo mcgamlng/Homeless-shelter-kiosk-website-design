@@ -112,8 +112,25 @@ test("creates local server speech audio with espeak-ng compatible arguments", ()
   assert.ok(calls[0].args.includes("Welcome to Listening House."));
 });
 
-test("local server speech rejects unsupported languages", () => {
-  assert.throws(() => createLocalSpeechAudio("Hello", "hmn"), /not configured/);
+test("local server speech falls back for Hmong and missing language voices", () => {
+  const expected = createTestWave();
+  const calls = [];
+  const audio = createLocalSpeechAudio("Zoo siab txais tos.", "hmn", {
+    spawnImpl(command, args) {
+      calls.push({ command, args });
+      return {
+        status: calls.length === 1 ? 1 : 0,
+        stdout: calls.length === 1 ? Buffer.from("") : expected
+      };
+    }
+  });
+  assert.deepEqual(audio, expected);
+  assert.equal(calls[0].args[2], "en-gb");
+  assert.equal(calls[1].args[2], "en");
+});
+
+test("local server speech rejects unknown languages", () => {
+  assert.throws(() => createLocalSpeechAudio("Hello", "unknown"), /not configured/);
 });
 
 test("natural speech uses the configured British English voice", async () => {

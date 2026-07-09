@@ -3131,6 +3131,25 @@ main {
   place-items: center;
 }
 
+.kiosk-launcher-page {
+  padding: 32px 18px;
+}
+
+.kiosk-launcher-card {
+  width: min(560px, 100%);
+  justify-items: center;
+  text-align: center;
+}
+
+.launcher-logo {
+  width: 104px;
+  height: auto;
+}
+
+.launcher-link {
+  text-decoration: none;
+}
+
 @media (max-width: 1200px) {
   .activity-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));

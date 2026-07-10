@@ -42,8 +42,7 @@ medical details, or sensitive notes.
 - Automatic daily rollover
 - Real-time Socket.IO updates on every open dashboard
 - SQLite persistence
-- Day, week, month, and year spreadsheet reports
-- Nightly daily spreadsheet archive saved locally for download
+- Day, week, month, and year Excel downloads from Analytics
 - Admin PIN protection
 - Kiosk wording and color customization
 - Browser and Android download QR codes on the About page
@@ -325,14 +324,14 @@ check-ins, requested activities, visit dates, and first and last check-in times.
 Day** sheet includes every date in the requested period, including zero-activity days, with names
 and daily totals.
 
-Admin can also configure a daily archive. By default, the Pi checks at 3:00 a.m. and saves the
-previous calendar day's `.xlsx` file into `data/exports` for local download from Admin. The system no
-longer stores Gmail addresses or app passwords and does not email spreadsheets automatically. If the
-Pi is off at the scheduled time, the server catches up on the next startup.
+Admin can download Excel reports directly from the Analytics section for a selected day, week, month,
+or year. Spreadsheet emailing is not part of the app; staff should use the Analytics export button
+when they need a spreadsheet.
 
 Admin can set a once-a-year data deletion date and time. Starting 14 days before that date, warning
 banners appear in Admin and Dashboard. When the scheduled deletion runs, guest names, check-ins,
-scheduled items, status history, analytics archive records, and files in `data/exports` are deleted.
+scheduled items, status history, old analytics archive records, and old files in `data/exports` are
+deleted.
 Staff user accounts, permissions, the admin PIN, activities, kiosk customization, and app settings are
 preserved.
 
@@ -368,8 +367,8 @@ a developer tool, not part of the production kiosk startup.
 
 Admin also includes **Kiosk & Raspberry Pi Controls**. Staff can run the GitHub update, reboot the
 Pi, reopen the full-screen kiosk, or try to exit only the Chromium kiosk window. Rebooting does not
-delete saved SQLite data or completed spreadsheet archives, but unsaved form edits are lost and staff
-phones disconnect while the Pi restarts. The Raspberry Pi update also installs a desktop shortcut
+delete saved SQLite data, but unsaved form edits are lost and staff phones disconnect while the Pi
+restarts. The Raspberry Pi update also installs a desktop shortcut
 called **Open Listening House Kiosk** so staff can reopen the kiosk without rebooting if Chromium is
 closed.
 

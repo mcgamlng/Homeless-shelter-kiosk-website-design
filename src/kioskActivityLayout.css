@@ -6,13 +6,26 @@
   justify-content: center;
   width: 100%;
   max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .kiosk-page .activity-choice {
-  flex: 0 1 clamp(180px, calc((100% - 64px) / 5), 220px) !important;
+  flex: 0 1 clamp(166px, calc((100% - 64px) / 5), 224px) !important;
   height: 100%;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+@media (orientation: portrait) and (min-width: 560px) {
+  .kiosk-page .activity-grid {
+    gap: 12px !important;
+    max-width: min(100%, 940px);
+  }
+
+  .kiosk-page .activity-choice {
+    flex-basis: clamp(180px, calc((100% - 24px) / 3), 260px) !important;
+  }
 }
 
 @media (max-width: 640px) {

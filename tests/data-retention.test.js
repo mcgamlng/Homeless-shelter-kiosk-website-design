@@ -4,71 +4,47 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test("daily spreadsheet archives stay local and yearly deletion preserves staff users", async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-daily-export-"));
+test("yearly deletion removes guest data and preserves staff users", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-data-retention-"));
   process.env.DATABASE_PATH = path.join(tempDir, "test.sqlite");
   process.env.EXPORTS_PATH = path.join(tempDir, "exports");
   let database;
 
   try {
-    const repository = await import(`../server/repository.js?daily-export=${Date.now()}`);
+    const repository = await import(`../server/repository.js?data-retention=${Date.now()}`);
     database = (await import("../server/db.js")).db;
     repository.updateSettings({ workday_start: "00:00", workday_end: "23:59" });
-    const activities = repository.getActivities();
-    activities.slice(0, 3).forEach((activity) => {
-      repository.updateActivity(activity.id, {
-        availability_window_enabled: false,
-        weekly_window_enabled: false
-      });
+    const activity = repository.getActivities()[0];
+    repository.updateActivity(activity.id, {
+      availability_window_enabled: false,
+      weekly_window_enabled: false
     });
-    const openActivities = repository.getActivities();
+    const openActivity = repository.getActivities()[0];
 
     const staffUser = repository.createStaffUser({
       display_name: "Dashboard Staff",
       pin: "1717",
       permissions: { dashboard: true, about: true }
     });
+    assert.equal(repository.verifyStaffUserPin("1717").display_name, "Dashboard Staff");
 
-    const firstCheckIn = repository.createCheckIn({
-      activityIds: [openActivities[0].id],
+    const checkIn = repository.createCheckIn({
+      activityIds: [openActivity.id],
       language: "en",
       signIn: { mode: "sign_up", firstName: "Maya", lastName: "Johnson" }
     });
     database
       .prepare("UPDATE check_ins SET checked_in_at = ? WHERE id = ?")
-      .run("2026-07-05T12:00:00.000Z", firstCheckIn.id);
+      .run("2026-07-05T12:00:00.000Z", checkIn.id);
 
-    const firstArchive = await repository.runDailyExportArchive({
-      date: "2026-07-05"
-    });
-    const secondArchive = await repository.runDailyExportArchive({
-      date: "2026-07-05"
-    });
-
-    assert.equal(firstArchive.report_date, "2026-07-05");
-    assert.equal(secondArchive.id, firstArchive.id);
-    assert.ok(fs.existsSync(path.join(process.env.EXPORTS_PATH, firstArchive.filename)));
-    assert.deepEqual(Object.keys(firstArchive).sort(), [
-      "created_at",
-      "filename",
-      "id",
-      "report_date"
-    ]);
-
-    const catchUpCheckIn = repository.createCheckIn({
-      activityIds: [openActivities[1].id],
-      language: "en",
-      signIn: { mode: "sign_up", firstName: "Ari", lastName: "Lee" }
-    });
+    fs.mkdirSync(process.env.EXPORTS_PATH, { recursive: true });
+    fs.writeFileSync(path.join(process.env.EXPORTS_PATH, "old-report.xlsx"), "old report");
     database
-      .prepare("UPDATE check_ins SET checked_in_at = ? WHERE id = ?")
-      .run("2026-07-04T12:00:00.000Z", catchUpCheckIn.id);
-
-    repository.updateExportSettings({ export_time: "03:00" });
-    const catchUpArchives = await repository.runDueDailyExports({
-      now: new Date(2026, 6, 5, 4, 0)
-    });
-    assert.ok(catchUpArchives.some((archive) => archive.report_date === "2026-07-04"));
+      .prepare(
+        `INSERT INTO daily_export_archives (report_date, filename, file_path, created_at)
+         VALUES (?, ?, ?, CURRENT_TIMESTAMP)`
+      )
+      .run("2026-07-05", "old-report.xlsx", path.join(process.env.EXPORTS_PATH, "old-report.xlsx"));
 
     repository.updateDataDeletionSettings({
       enabled: true,
@@ -93,6 +69,7 @@ test("daily spreadsheet archives stay local and yearly deletion preserves staff 
       database.prepare("SELECT COUNT(*) AS count FROM daily_export_archives").get().count,
       0
     );
+    assert.equal(fs.existsSync(path.join(process.env.EXPORTS_PATH, "old-report.xlsx")), false);
     assert.equal(repository.listStaffUsers().length, 1);
     assert.equal(repository.listStaffUsers()[0].id, staffUser.id);
   } finally {

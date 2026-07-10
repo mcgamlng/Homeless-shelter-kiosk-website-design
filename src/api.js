@@ -167,30 +167,6 @@ export const api = {
       body: JSON.stringify({ period, date })
     });
   },
-  getExportSettings(token) {
-    return request("/api/admin/export-settings", {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-  },
-  updateExportSettings(token, settings) {
-    return request("/api/admin/export-settings", {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify(settings)
-    });
-  },
-  getDailyExports(token) {
-    return request("/api/admin/daily-exports", {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-  },
-  runDailyExport(token, payload = {}) {
-    return request("/api/admin/daily-exports/run", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify(payload)
-    });
-  },
   getDataDeletionSettings(token) {
     return request("/api/admin/data-deletion", {
       headers: { Authorization: `Bearer ${token}` }
@@ -269,9 +245,6 @@ export const api = {
     return request("/api/system/open-kiosk", {
       method: "POST"
     });
-  },
-  getDailyExportDownloadUrl(token, id) {
-    return `/api/admin/daily-exports/${id}/download?${new URLSearchParams({ token }).toString()}`;
   },
   getAnalyticsExportUrl(token, period, date) {
     const params = new URLSearchParams({ period, date, token });

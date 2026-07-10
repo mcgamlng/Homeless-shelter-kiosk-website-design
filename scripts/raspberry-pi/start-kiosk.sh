@@ -11,11 +11,32 @@ if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]; then
   export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 fi
 
-for attempt in {1..160}; do
+wait_for_server() {
+  for attempt in {1..160}; do
+    if curl -fsS "http://127.0.0.1:3000/api/health" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+if ! wait_for_server; then
+  echo "Listening House server is not ready yet. Trying to start it..."
+  sudo -n systemctl start listening-house.service >/dev/null 2>&1 || true
+fi
+
+if ! wait_for_server; then
+  echo "Listening House server did not respond at http://127.0.0.1:3000/api/health"
+  echo "Check it with: sudo systemctl status listening-house --no-pager"
+  exit 1
+fi
+
+for attempt in {1..10}; do
   if curl -fsS "http://127.0.0.1:3000/api/health" >/dev/null 2>&1; then
     break
   fi
-  sleep 0.5
+  sleep 0.2
 done
 
 if command -v chromium-browser >/dev/null 2>&1; then

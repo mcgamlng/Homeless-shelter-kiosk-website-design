@@ -423,6 +423,7 @@ export function createStaffUser(payload = {}) {
     throw error;
   }
   const pin = requireStaffPin(payload.pin);
+  ensureUniqueStaffPin(pin);
   const permissions = normalizeStaffPermissions(payload.permissions || payload);
   const info = db
     .prepare(
@@ -461,7 +462,9 @@ export function updateStaffUser(id, payload = {}) {
     admin: payload.permissions?.admin ?? payload.admin ?? current.can_admin,
     about: payload.permissions?.about ?? payload.about ?? current.can_about
   });
-  const pinHash = payload.pin ? hashSecret(requireStaffPin(payload.pin)) : current.pin_hash;
+  const pin = payload.pin ? requireStaffPin(payload.pin) : "";
+  if (pin) ensureUniqueStaffPin(pin, Number(id));
+  const pinHash = pin ? hashSecret(pin) : current.pin_hash;
   db.prepare(
     `UPDATE staff_users
      SET display_name = ?, pin_hash = ?, can_dashboard = ?, can_admin = ?, can_about = ?,
@@ -490,20 +493,29 @@ export function deleteStaffUser(id) {
   return publicStaffUser(current);
 }
 
-export function verifyStaffUserCredentials(displayName, pin) {
-  const cleanName = normalizeStaffDisplayName(displayName);
+export function verifyStaffUserPin(pin) {
   const cleanPin = String(pin || "").trim();
-  if (!cleanName || !cleanPin) return null;
-  const user = one(
+  if (!cleanPin) return null;
+  const users = rows(
     `SELECT *
      FROM staff_users
-     WHERE active = 1 AND lower(display_name) = lower(?)
-     ORDER BY datetime(updated_at) DESC, id DESC
-     LIMIT 1`,
-    [cleanName]
+     WHERE active = 1
+     ORDER BY lower(display_name), id`
   );
-  if (!user || !verifySecret(cleanPin, user.pin_hash)) return null;
-  return publicStaffUser(user);
+  const user = users.find((candidate) => verifySecret(cleanPin, candidate.pin_hash));
+  return user ? publicStaffUser(user) : null;
+}
+
+function ensureUniqueStaffPin(pin, ignoredUserId = null) {
+  const users = rows("SELECT id, pin_hash FROM staff_users");
+  const duplicate = users.find(
+    (user) => Number(user.id) !== Number(ignoredUserId) && verifySecret(pin, user.pin_hash)
+  );
+  if (duplicate) {
+    const error = new Error("That staff PIN is already used by another staff user.");
+    error.status = 409;
+    throw error;
+  }
 }
 
 function normalizeActivityPayload(payload, current = {}) {
@@ -1945,122 +1957,6 @@ export function createAnalyticsWorkbook({ period = "day", date } = {}) {
   };
 }
 
-export function getExportSettings() {
-  return {
-    export_time: getSettingValue("daily_export_time") || "03:00"
-  };
-}
-
-export function updateExportSettings(payload = {}) {
-  const transaction = db.transaction(() => {
-    if (payload.export_time !== undefined) {
-      setSettingValue("daily_export_time", normalizeClockTime(payload.export_time, "03:00"));
-    }
-    setSettingValue("daily_export_recipient", "");
-    setSettingValue("daily_export_gmail_sender", "");
-    setSettingValue("daily_export_gmail_app_password", "");
-  });
-  transaction();
-  return getExportSettings();
-}
-
-export function listDailyExports() {
-  return rows(
-    `SELECT id, report_date, filename, created_at
-     FROM daily_export_archives
-     ORDER BY report_date DESC, id DESC
-     LIMIT 90`
-  );
-}
-
-export async function runDailyExportArchive({ date, force = false, now = new Date() } = {}) {
-  const reportDate = normalizeReportDateKey(date) || previousDateKey(now);
-  const existing = one("SELECT * FROM daily_export_archives WHERE report_date = ?", [reportDate]);
-  if (existing && !force) return normalizeExportArchive(existing);
-
-  fs.mkdirSync(exportDirectory, { recursive: true });
-  const workbook = createAnalyticsWorkbook({ period: "day", date: reportDate });
-  const filename = `listening-house-daily-${reportDate}.xlsx`;
-  const filePath = path.join(exportDirectory, filename);
-  fs.writeFileSync(filePath, workbook.buffer);
-
-  const archived = upsertDailyExportArchive({
-    reportDate,
-    filename,
-    filePath
-  });
-
-  return archived;
-}
-
-export async function runDueDailyExports({ now = new Date() } = {}) {
-  const settings = getExportSettings();
-  const exportTime = normalizeClockTime(settings.export_time, "03:00");
-  const [hour, minute] = exportTime.split(":").map(Number);
-  const todayRunTime = new Date(now);
-  todayRunTime.setHours(hour, minute, 0, 0);
-  if (now < todayRunTime) return [];
-
-  const dueDates = rows(
-    `SELECT DISTINCT substr(checked_in_at, 1, 10) AS report_date
-     FROM check_ins
-     WHERE checked_in_at < date('now', 'localtime')
-     ORDER BY report_date`
-  )
-    .map((row) => row.report_date)
-    .filter(Boolean)
-    .filter((reportDate) => {
-      const archived = one("SELECT id FROM daily_export_archives WHERE report_date = ?", [
-        reportDate
-      ]);
-      return !archived;
-    });
-
-  const completed = [];
-  for (const reportDate of dueDates) {
-    completed.push(await runDailyExportArchive({ date: reportDate, now }));
-  }
-  return completed;
-}
-
-export function getDailyExportDownload(id) {
-  const archive = one("SELECT * FROM daily_export_archives WHERE id = ?", [id]);
-  if (!archive || !fs.existsSync(archive.file_path)) {
-    const error = new Error("That daily export file was not found.");
-    error.status = 404;
-    throw error;
-  }
-  return {
-    filename: archive.filename,
-    buffer: fs.readFileSync(archive.file_path)
-  };
-}
-
-function upsertDailyExportArchive({ reportDate, filename, filePath }) {
-  db.prepare(
-    `INSERT INTO daily_export_archives
-       (report_date, filename, file_path, created_at)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-     ON CONFLICT(report_date) DO UPDATE SET
-       filename = excluded.filename,
-       file_path = excluded.file_path,
-       created_at = CURRENT_TIMESTAMP`
-  ).run(reportDate, filename, filePath);
-  return normalizeExportArchive(
-    one("SELECT * FROM daily_export_archives WHERE report_date = ?", [reportDate])
-  );
-}
-
-function normalizeExportArchive(row) {
-  if (!row) return row;
-  return {
-    id: row.id,
-    report_date: row.report_date,
-    filename: row.filename,
-    created_at: row.created_at
-  };
-}
-
 export function getDataDeletionSettings(now = new Date()) {
   const settings = {
     enabled: getSettingValue("yearly_data_deletion_enabled") === "1",
@@ -2173,16 +2069,6 @@ function clearExportFiles() {
   }
   fs.mkdirSync(exportDirectory, { recursive: true });
   return deleted;
-}
-
-function normalizeReportDateKey(value) {
-  return parseRequestedReportDate(value) ? formatDateKey(parseRequestedReportDate(value)) : "";
-}
-
-function previousDateKey(referenceDate = new Date()) {
-  const date = new Date(referenceDate);
-  date.setDate(date.getDate() - 1);
-  return formatDateKey(date);
 }
 
 function formatSignInType(value) {

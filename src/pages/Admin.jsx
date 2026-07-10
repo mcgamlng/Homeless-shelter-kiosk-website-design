@@ -184,12 +184,6 @@ function createNewActivityDraft() {
   };
 }
 
-function createExportSettingsDraft(settings = {}) {
-  return {
-    export_time: settings.export_time || "03:00"
-  };
-}
-
 function createDataDeletionDraft(settings = {}) {
   return {
     enabled: Boolean(settings.enabled),
@@ -287,12 +281,6 @@ export default function Admin() {
   const [savingNetwork, setSavingNetwork] = useState(false);
   const [speechStatus, setSpeechStatus] = useState(null);
   const [speechStatusMessage, setSpeechStatusMessage] = useState("");
-  const [exportSettings, setExportSettings] = useState(null);
-  const [exportSettingsDraft, setExportSettingsDraft] = useState(createExportSettingsDraft);
-  const [dailyExports, setDailyExports] = useState([]);
-  const [dailyExportMessage, setDailyExportMessage] = useState("");
-  const [savingExportSettings, setSavingExportSettings] = useState(false);
-  const [runningDailyExport, setRunningDailyExport] = useState(false);
   const [dataDeletionSettings, setDataDeletionSettings] = useState(null);
   const [dataDeletionDraft, setDataDeletionDraft] = useState(createDataDeletionDraft);
   const [dataDeletionMessage, setDataDeletionMessage] = useState("");
@@ -336,7 +324,6 @@ export default function Admin() {
   useEffect(() => {
     if (!signedIn) return;
     loadAnalytics(token);
-    loadDailyExportTools(token);
     loadDataDeletionTools(token);
     loadStaffUsers(token);
   }, [signedIn, token, analyticsPeriod, analyticsDate]);
@@ -361,6 +348,8 @@ export default function Admin() {
     try {
       const response = await api.adminLogin(pin, { permission: "admin", path: "/admin" });
       sessionStorage.setItem("lh-admin-token", response.token);
+      sessionStorage.setItem("lh-staff-user", JSON.stringify(response.user));
+      window.dispatchEvent(new CustomEvent("lh:staff-session-updated", { detail: response.user }));
       setAdminVerified(false);
       setToken(response.token);
       setPin("");
@@ -393,6 +382,8 @@ export default function Admin() {
         return;
       }
       sessionStorage.removeItem("lh-admin-token");
+      sessionStorage.removeItem("lh-staff-user");
+      window.dispatchEvent(new CustomEvent("lh:staff-session-updated", { detail: null }));
       setToken("");
       setAdminVerified(false);
       setAnalytics(null);
@@ -474,6 +465,8 @@ export default function Admin() {
       }
     });
     sessionStorage.removeItem("lh-admin-token");
+    sessionStorage.removeItem("lh-staff-user");
+    window.dispatchEvent(new CustomEvent("lh:staff-session-updated", { detail: null }));
     setToken("");
     setAdminVerified(false);
     setAnalytics(null);
@@ -484,6 +477,8 @@ export default function Admin() {
 
   function signOutAdmin() {
     sessionStorage.removeItem("lh-admin-token");
+    sessionStorage.removeItem("lh-staff-user");
+    window.dispatchEvent(new CustomEvent("lh:staff-session-updated", { detail: null }));
     setToken("");
     setAdminVerified(false);
     setAnalytics(null);
@@ -509,67 +504,6 @@ export default function Admin() {
       if (requestId === analyticsRequestRef.current) {
         setAnalyticsLoading(false);
       }
-    }
-  }
-
-  async function loadDailyExportTools(authToken = token) {
-    try {
-      const [settings, exportsList] = await Promise.all([
-        api.getExportSettings(authToken),
-        api.getDailyExports(authToken)
-      ]);
-      setExportSettings(settings);
-      setExportSettingsDraft(createExportSettingsDraft(settings));
-      setDailyExports(exportsList);
-    } catch (err) {
-      handleAdminError(err, authToken);
-    }
-  }
-
-  function updateExportSettingsDraft(key, value) {
-    setExportSettingsDraft((current) => ({
-      ...current,
-      [key]: value
-    }));
-  }
-
-  async function saveDailyExportSettings(event) {
-    event.preventDefault();
-    setDailyExportMessage("");
-    const authToken = currentAdminToken();
-    setSavingExportSettings(true);
-    try {
-      const nextSettings = await api.updateExportSettings(authToken, exportSettingsDraft);
-      setExportSettings(nextSettings);
-      setExportSettingsDraft(createExportSettingsDraft(nextSettings));
-      setDailyExportMessage("Daily export settings saved.");
-    } catch (err) {
-      handleAdminError(err, authToken);
-      setDailyExportMessage(err.message);
-    } finally {
-      setSavingExportSettings(false);
-    }
-  }
-
-  async function runManualDailyExport() {
-    setDailyExportMessage("");
-    const authToken = currentAdminToken();
-    setRunningDailyExport(true);
-    try {
-      const nextSettings = await api.updateExportSettings(authToken, exportSettingsDraft);
-      setExportSettings(nextSettings);
-      setExportSettingsDraft(createExportSettingsDraft(nextSettings));
-      const archive = await api.runDailyExport(authToken, {
-        date: analyticsDate,
-        force: true
-      });
-      setDailyExportMessage(`Saved ${archive.filename}.`);
-      setDailyExports(await api.getDailyExports(authToken));
-    } catch (err) {
-      handleAdminError(err, authToken);
-      setDailyExportMessage(err.message);
-    } finally {
-      setRunningDailyExport(false);
     }
   }
 
@@ -624,7 +558,6 @@ export default function Admin() {
         `Deleted ${result.deleted.guests} guest profiles, ${result.deleted.checkIns} check-ins, and ${result.deleted_export_files} spreadsheet files.`
       );
       await refresh();
-      setDailyExports(await api.getDailyExports(authToken));
     } catch (err) {
       handleAdminError(err, authToken);
       setDataDeletionMessage(err.message);
@@ -1886,86 +1819,6 @@ export default function Admin() {
         ) : null}
       </div>
 
-      <form className="card-panel daily-export-panel" onSubmit={saveDailyExportSettings}>
-        <div className="analytics-heading">
-          <div>
-            <h2>
-              <Download size={24} />
-              Daily Spreadsheet Archive
-            </h2>
-            <p>
-              At the selected time, the Raspberry Pi saves yesterday&apos;s spreadsheet locally.
-              Email delivery has been removed; staff can download archives here.
-            </p>
-          </div>
-          <button
-            className="primary-button compact-button"
-            type="submit"
-            disabled={!signedIn || savingExportSettings}
-          >
-            <Save size={18} />
-            {savingExportSettings ? "Saving..." : "Save daily export settings"}
-          </button>
-        </div>
-
-        <div className="daily-export-help">
-          <strong>Local archive only:</strong>
-          <span>Spreadsheets are saved on this computer or Raspberry Pi in data/exports.</span>
-          <span>Use Download next to an archive to open or save it on another device.</span>
-        </div>
-
-        <div className="daily-export-grid">
-          <label>
-            Export time
-            <input
-              type="time"
-              value={exportSettingsDraft.export_time}
-              disabled={!signedIn}
-              onInput={(event) =>
-                updateExportSettingsDraft("export_time", event.currentTarget.value)
-              }
-            />
-          </label>
-        </div>
-
-        <div className="daily-export-actions">
-          <button
-            className="secondary-button compact-button"
-            type="button"
-            disabled={!signedIn || runningDailyExport}
-            onClick={runManualDailyExport}
-          >
-            <Download size={18} />
-            {runningDailyExport ? "Creating..." : `Archive selected date`}
-          </button>
-        </div>
-
-        {dailyExportMessage ? <p className="network-status">{dailyExportMessage}</p> : null}
-
-        <div className="daily-export-list">
-          <h3>Recent archives</h3>
-          {dailyExports.length === 0 ? (
-            <p>No daily spreadsheet archives have been created yet.</p>
-          ) : (
-            dailyExports.slice(0, 8).map((archive) => (
-              <div className="daily-export-row" key={archive.id}>
-                <div>
-                  <strong>{archive.report_date}</strong>
-                  <span>{archive.filename}</span>
-                </div>
-                <a
-                  className="secondary-button compact-button"
-                  href={api.getDailyExportDownloadUrl(currentAdminToken(), archive.id)}
-                >
-                  <Download size={16} />
-                  Download
-                </a>
-              </div>
-            ))
-          )}
-        </div>
-      </form>
-
       <form className="card-panel data-deletion-panel" onSubmit={saveDataDeletionSettings}>
         <div className="analytics-heading">
           <div>
@@ -1993,7 +1846,7 @@ export default function Admin() {
             <span>{dataDeletionSettings.warning.message}</span>
           </div>
         ) : null}
-        <div className="daily-export-grid">
+        <div className="data-deletion-grid">
           <label className="toggle-field">
             <input
               type="checkbox"
@@ -2025,7 +1878,7 @@ export default function Admin() {
             />
           </label>
         </div>
-        <div className="daily-export-actions">
+        <div className="data-deletion-actions">
           <button
             className="danger-button compact-button"
             type="button"

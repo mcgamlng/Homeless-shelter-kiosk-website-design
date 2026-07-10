@@ -58,6 +58,22 @@ sudo systemctl daemon-reload
 sudo systemctl enable listening-house.service
 sudo systemctl restart listening-house.service
 
+SYSTEMCTL_BIN="$(command -v systemctl || true)"
+SYSTEMD_RUN_BIN="$(command -v systemd-run || true)"
+REBOOT_BIN="$(command -v reboot || true)"
+SUDOERS_FILE="/etc/sudoers.d/listening-house-kiosk"
+if [[ -n "$SYSTEMCTL_BIN" && -n "$SYSTEMD_RUN_BIN" && -n "$REBOOT_BIN" ]]; then
+  sudo tee "$SUDOERS_FILE" >/dev/null <<SUDOERS
+$APP_USER ALL=(root) NOPASSWD: $SYSTEMD_RUN_BIN *
+$APP_USER ALL=(root) NOPASSWD: $REBOOT_BIN
+$APP_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start listening-house.service
+$APP_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart listening-house.service
+$APP_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN stop listening-house.service
+$APP_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN status listening-house.service
+SUDOERS
+  sudo chmod 0440 "$SUDOERS_FILE"
+fi
+
 chmod +x "$PROJECT_DIR/scripts/raspberry-pi/start-kiosk.sh"
 chmod +x "$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh"
 "$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh"

@@ -32,23 +32,42 @@ function permissionForPath(path) {
   return "dashboard";
 }
 
+function readStoredStaffUser() {
+  try {
+    return JSON.parse(sessionStorage.getItem("lh-staff-user") || "null");
+  } catch {
+    return null;
+  }
+}
+
 function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const isKiosk = location.pathname === "/kiosk";
   const [staffMenuOpen, setStaffMenuOpen] = useState(false);
   const [pendingPath, setPendingPath] = useState("");
-  const [entryName, setEntryName] = useState("");
   const [entryPin, setEntryPin] = useState("");
   const [entryMessage, setEntryMessage] = useState("");
   const [entryLoading, setEntryLoading] = useState(false);
   const [settings, setSettings] = useState(null);
+  const [signedInUser, setSignedInUser] = useState(readStoredStaffUser);
   const customization = getKioskCustomization(settings || {});
   const kioskThemeStyle = isKiosk ? getKioskCssVariables(settings || {}) : undefined;
 
   useEffect(() => {
     setStaffMenuOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    function updateStaffSession(event) {
+      setSignedInUser(event.detail || readStoredStaffUser());
+    }
+
+    window.addEventListener("lh:staff-session-updated", updateStaffSession);
+    return () => {
+      window.removeEventListener("lh:staff-session-updated", updateStaffSession);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -87,7 +106,6 @@ function AppShell() {
 
     if (isKiosk && protectedPaths.has(path)) {
       setPendingPath(path);
-      setEntryName("");
       setEntryPin("");
       setEntryMessage("");
       return;
@@ -102,14 +120,14 @@ function AppShell() {
     setEntryLoading(true);
     try {
       const response = await api.adminLogin(entryPin, {
-        displayName: entryName,
         path: pendingPath,
         permission: permissionForPath(pendingPath)
       });
       sessionStorage.setItem("lh-admin-token", response.token);
+      sessionStorage.setItem("lh-staff-user", JSON.stringify(response.user));
+      setSignedInUser(response.user);
       const path = pendingPath;
       setPendingPath("");
-      setEntryName("");
       setEntryPin("");
       setStaffMenuOpen(false);
       navigate(path);
@@ -172,7 +190,7 @@ function AppShell() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedEntry>
+              <ProtectedEntry onSignedIn={setSignedInUser}>
                 <Dashboard />
               </ProtectedEntry>
             }
@@ -180,7 +198,7 @@ function AppShell() {
           <Route
             path="/admin"
             element={
-              <ProtectedEntry>
+              <ProtectedEntry onSignedIn={setSignedInUser}>
                 <Admin />
               </ProtectedEntry>
             }
@@ -188,7 +206,7 @@ function AppShell() {
           <Route
             path="/about"
             element={
-              <ProtectedEntry>
+              <ProtectedEntry onSignedIn={setSignedInUser}>
                 <About />
               </ProtectedEntry>
             }
@@ -203,19 +221,11 @@ function AppShell() {
               <LockKeyhole size={28} />
             </div>
             <h2>Staff PIN required</h2>
-            <p>Enter your staff name and PIN. The owner Admin PIN also works by itself.</p>
-            <label>
-              Staff name
-              <input
-                autoFocus
-                autoComplete="name"
-                onChange={(event) => setEntryName(event.target.value)}
-                value={entryName}
-              />
-            </label>
+            <p>Enter your staff PIN. The owner Admin PIN also works by itself.</p>
             <label>
               Entry PIN
               <input
+                autoFocus
                 inputMode="numeric"
                 maxLength={12}
                 onChange={(event) =>
@@ -237,6 +247,7 @@ function AppShell() {
           </form>
         </div>
       ) : null}
+      {signedInUser ? <StaffSignedInBadge user={signedInUser} /> : null}
     </div>
   );
 }
@@ -276,10 +287,9 @@ function KioskLauncher() {
   );
 }
 
-function ProtectedEntry({ children }) {
+function ProtectedEntry({ children, onSignedIn }) {
   const location = useLocation();
   const permission = permissionForPath(location.pathname);
-  const [displayName, setDisplayName] = useState("");
   const [pin, setPin] = useState("");
   const [state, setState] = useState("checking");
   const [message, setMessage] = useState("");
@@ -294,14 +304,20 @@ function ProtectedEntry({ children }) {
     let active = true;
     api
       .getStaffSession(token, permission)
-      .then(() => {
-        if (active) setState("unlocked");
+      .then((session) => {
+        if (active) {
+          sessionStorage.setItem("lh-staff-user", JSON.stringify(session.user));
+          onSignedIn?.(session.user);
+          setState("unlocked");
+        }
       })
       .catch(() => {
         sessionStorage.removeItem("lh-admin-token");
+        sessionStorage.removeItem("lh-staff-user");
+        onSignedIn?.(null);
         if (active) {
           setState("locked");
-          setMessage("Enter the current Admin PIN to continue.");
+          setMessage("Enter your staff PIN to continue.");
         }
       });
 
@@ -316,12 +332,12 @@ function ProtectedEntry({ children }) {
     setState("checking");
     try {
       const response = await api.adminLogin(pin, {
-        displayName,
         path: location.pathname,
         permission
       });
       sessionStorage.setItem("lh-admin-token", response.token);
-      setDisplayName("");
+      sessionStorage.setItem("lh-staff-user", JSON.stringify(response.user));
+      onSignedIn?.(response.user);
       setPin("");
       setState("unlocked");
     } catch (err) {
@@ -342,19 +358,11 @@ function ProtectedEntry({ children }) {
             <LockKeyhole size={30} />
           </div>
           <h1>Staff PIN required</h1>
-          <p>Enter your staff name and PIN. The owner Admin PIN also works by itself.</p>
-          <label>
-            Staff name
-            <input
-              autoFocus
-              autoComplete="name"
-              onChange={(event) => setDisplayName(event.target.value)}
-              value={displayName}
-            />
-          </label>
+          <p>Enter your staff PIN. The owner Admin PIN also works by itself.</p>
           <label>
             Entry PIN
             <input
+              autoFocus
               inputMode="numeric"
               maxLength={12}
               onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 12))}
@@ -375,6 +383,16 @@ function ProtectedEntry({ children }) {
   }
 
   return children;
+}
+
+function StaffSignedInBadge({ user }) {
+  if (!user?.display_name) return null;
+  return (
+    <div className="staff-signed-in-badge" aria-live="polite">
+      <span>Signed in</span>
+      <strong>{user.display_name}</strong>
+    </div>
+  );
 }
 
 export default function App() {

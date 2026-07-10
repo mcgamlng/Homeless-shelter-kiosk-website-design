@@ -442,7 +442,6 @@ export function seedBaseData(database) {
   insertSetting.run("network_mode", "local");
   insertSetting.run("preferred_local_url", "");
   insertSetting.run("public_base_url", "");
-  insertSetting.run("daily_export_time", "03:00");
   insertSetting.run("yearly_data_deletion_enabled", "0");
   insertSetting.run("yearly_data_deletion_month_day", "01-01");
   insertSetting.run("yearly_data_deletion_time", "03:00");

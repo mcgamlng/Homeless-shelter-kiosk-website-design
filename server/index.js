@@ -18,35 +18,29 @@ import {
   deleteStaffUser,
   deleteActivity,
   getDataDeletionSettings,
-  getDailyExportDownload,
   getAdminSecuritySettings,
   getAnalyticsReport,
   getActivities,
   getDashboardData,
-  getExportSettings,
   getSettings,
   inspectNameCheckIn,
-  listDailyExports,
   listStaffUsers,
   moveScheduledItem,
   rebalanceActiveWaitingSchedule,
   reorderCheckInItems,
-  runDailyExportArchive,
-  runDueDailyExports,
   runDueYearlyDataDeletion,
   runYearlyDataDeletion,
   rescheduleScheduledItem,
   resetDailyData,
   updateDataDeletionSettings,
   updateActivity,
-  updateExportSettings,
   updateStaffUser,
   updateScheduledItemStatus,
   updateSetting,
   updateSettings,
   verifyNameSignIn,
   verifyAdminPin,
-  verifyStaffUserCredentials
+  verifyStaffUserPin
 } from "./repository.js";
 import { createAccessInfo, getWifiName, normalizeServerBaseUrl } from "./network.js";
 import { enrichActivityTranslations, translateActivityLabel } from "./translationService.js";
@@ -81,7 +75,7 @@ const PUBLIC_URL = String(process.env.PUBLIC_URL || "").replace(/\/+$/, "");
 const adminSessions = new Map();
 const analyticsDownloads = new Map();
 const DOWNLOAD_TTL_MS = 10 * 60 * 1000;
-const DAILY_EXPORT_CHECK_MS = 15 * 60 * 1000;
+const SCHEDULED_MAINTENANCE_CHECK_MS = 15 * 60 * 1000;
 const EXIT_KIOSK_COMMAND =
   "pkill -f '(^|/)(chromium|chromium-browser).*--kiosk.*(:3000/kiosk|/kiosk)'";
 const SYSTEM_ACTION_COMMANDS = {
@@ -630,12 +624,9 @@ app.post("/api/admin/session", (req, res) => {
   if (verifyAdminPin(req.body.pin, ADMIN_PIN)) {
     return res.json(createStaffSession({ owner: true }));
   }
-  const user = verifyStaffUserCredentials(
-    req.body.displayName || req.body.display_name,
-    req.body.pin
-  );
+  const user = verifyStaffUserPin(req.body.pin);
   if (!user) {
-    return res.status(401).json({ error: "That staff name or PIN did not work." });
+    return res.status(401).json({ error: "That staff PIN did not work." });
   }
   if (!user.permissions?.[requestedPermission]) {
     return res.status(403).json({ error: "This user does not have access to that page." });
@@ -794,43 +785,6 @@ app.get(
 );
 
 app.get(
-  "/api/admin/export-settings",
-  requireAdmin,
-  handleRoute((_req, res) => {
-    res.json(getExportSettings());
-  })
-);
-
-app.put(
-  "/api/admin/export-settings",
-  requireAdmin,
-  handleRoute((req, res) => {
-    res.json(updateExportSettings(req.body || {}));
-  })
-);
-
-app.get(
-  "/api/admin/daily-exports",
-  requireAdmin,
-  handleRoute((_req, res) => {
-    res.json(listDailyExports());
-  })
-);
-
-app.post(
-  "/api/admin/daily-exports/run",
-  requireAdmin,
-  handleRoute(async (req, res) => {
-    res.json(
-      await runDailyExportArchive({
-        date: req.body.date,
-        force: Boolean(req.body.force)
-      })
-    );
-  })
-);
-
-app.get(
   "/api/admin/data-deletion",
   requireAdmin,
   handleRoute((_req, res) => {
@@ -908,15 +862,6 @@ app.post(
       throw error;
     }
     res.json(openKioskBrowser());
-  })
-);
-
-app.get(
-  "/api/admin/daily-exports/:id/download",
-  requireAdminDownload,
-  handleRoute((req, res) => {
-    const workbook = getDailyExportDownload(req.params.id);
-    sendAnalyticsWorkbook(res, workbook);
   })
 );
 
@@ -1072,9 +1017,6 @@ server.listen(PORT, "0.0.0.0", () => {
   repairEnglishActivityTranslations().catch((error) => {
     console.warn(`Activity translation repair skipped: ${error.message}`);
   });
-  runDueDailyExports().catch((error) => {
-    console.warn(`Daily export catch-up skipped: ${error.message}`);
-  });
   try {
     const deletion = runDueYearlyDataDeletion();
     if (deletion) console.warn(`Yearly data deletion ran: ${deletion.ran_at}`);
@@ -1084,12 +1026,9 @@ server.listen(PORT, "0.0.0.0", () => {
 });
 
 setInterval(() => {
-  runDueDailyExports().catch((error) => {
-    console.warn(`Daily export check skipped: ${error.message}`);
-  });
   try {
     runDueYearlyDataDeletion();
   } catch (error) {
     console.warn(`Yearly data deletion check skipped: ${error.message}`);
   }
-}, DAILY_EXPORT_CHECK_MS).unref();
+}, SCHEDULED_MAINTENANCE_CHECK_MS).unref();

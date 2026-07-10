@@ -206,26 +206,6 @@ The update helper:
 - Preloads common read-aloud phrases into `data/speech-cache` when a speech source is available.
 - Restarts the service and checks `http://127.0.0.1:3000/api/health`.
 
-## Daily Spreadsheet Archive
-
-The server can save yesterday's spreadsheet every morning for local download from Admin.
-
-In Admin, open **Daily Spreadsheet Archive** and enter:
-
-- Export time, default `03:00`
-
-The email sender has been removed. The system does not store Gmail addresses, app passwords, or
-recipient email addresses. If the Pi is off at the scheduled time, the server catches up the next time
-it starts.
-
-Archives are saved in:
-
-```text
-data/exports
-```
-
-Staff can download archived spreadsheets from Admin.
-
 ## Yearly Data Deletion
 
 Admin can set one yearly deletion date and time. Warning banners appear in Admin and Dashboard 14
@@ -234,7 +214,8 @@ items, status history, analytics archive records, and spreadsheet files in `data
 
 The deletion does not remove staff user accounts, permissions, admin PIN/security settings,
 activities, kiosk customization, or app settings. If the Pi is off at the scheduled deletion time, the
-deletion runs on the next startup after that time.
+deletion runs on the next startup after that time. Staff can still download day, week, month, or year
+Excel reports from Admin Analytics before the yearly deletion date.
 
 ## Admin Kiosk and Pi Controls
 
@@ -249,9 +230,9 @@ The update script also installs a desktop shortcut named **Open Listening House 
 is completely closed and staff cannot press a web button, double-click that desktop icon to reopen
 the kiosk without rebooting.
 
-Rebooting does not delete saved check-ins or completed spreadsheet archives because they are stored on
-disk in SQLite and `data/exports`. Do wait for any active check-in or export to finish first. Unsaved
-Admin form edits are lost, and phones/tablets disconnect while the Pi restarts.
+Rebooting does not delete saved check-ins because they are stored in SQLite. Do wait for any active
+check-in or Excel export to finish first. Unsaved Admin form edits are lost, and phones/tablets
+disconnect while the Pi restarts.
 
 If you still want Codex on the Pi for development, install Codex CLI separately and sign in with
 ChatGPT device-code login or an API key. Do not make Codex part of the production startup service.
@@ -296,7 +277,7 @@ sudo systemctl status listening-house
 7. Turn on dashboard alarms and test an In Progress activity.
 8. Open Admin and confirm Read Aloud Voice Status shows the expected Hmong mode.
 9. Scan the About-page QR codes from a phone.
-10. Run a manual daily spreadsheet archive from Admin and download it.
+10. Download an Excel report from Admin Analytics.
 11. Restart the Pi and confirm the server and kiosk return automatically.
 
 ## Backup

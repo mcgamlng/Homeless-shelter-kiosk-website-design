@@ -316,7 +316,8 @@ main {
 .kiosk-page {
   display: grid;
   place-items: center;
-  min-height: calc(100vh - 130px);
+  width: 100%;
+  min-height: calc(100svh - 130px);
 }
 
 .kiosk-page.has-back {
@@ -324,7 +325,8 @@ main {
 }
 
 .kiosk-stage {
-  width: min(1120px, 100%);
+  width: min(1280px, calc(100vw - 32px));
+  margin-inline: auto;
 }
 
 .kiosk-stage.has-back {
@@ -344,8 +346,8 @@ main {
 .kiosk-shell {
   position: relative;
   isolation: isolate;
-  width: min(1120px, 100%);
-  min-height: min(680px, calc(100vh - 140px));
+  width: 100%;
+  min-height: min(760px, calc(100svh - 140px));
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -361,13 +363,21 @@ main {
   display: grid;
   place-items: center;
   align-content: normal;
-  min-height: min(680px, calc(100vh - 210px));
+  min-height: min(760px, calc(100svh - 210px));
   padding: clamp(18px, 4vw, 42px);
+}
+
+.kiosk-shell.is-activities {
+  place-items: start center;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .kiosk-shell.is-confirmation {
   place-items: center;
   padding-block: clamp(28px, 5vh, 54px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .kiosk-shell::after {
@@ -643,7 +653,13 @@ main {
 .kiosk-panel.wide {
   display: grid;
   justify-items: center;
-  max-width: 1080px;
+  width: 100%;
+  max-width: 1180px;
+}
+
+.kiosk-shell.is-activities .kiosk-panel.wide {
+  align-self: start;
+  padding-bottom: 6px;
 }
 
 .kiosk-panel.wide h1 {
@@ -658,6 +674,7 @@ main {
   gap: 10px;
   margin-top: 16px;
   width: 100%;
+  max-width: 100%;
   text-align: center;
 }
 
@@ -669,8 +686,8 @@ main {
   align-items: center;
   gap: 10px 14px;
   min-height: 78px;
-  width: clamp(150px, calc((100% - 40px) / 5), 200px);
-  flex: 0 1 clamp(150px, calc((100% - 40px) / 5), 200px);
+  width: clamp(164px, calc((100% - 52px) / 5), 220px);
+  flex: 0 1 clamp(164px, calc((100% - 52px) / 5), 220px);
   padding: 12px;
   font-size: clamp(0.98rem, 1.25vw, 1.22rem);
   text-align: center;
@@ -1235,7 +1252,7 @@ main {
   align-content: center;
   width: min(780px, 100%);
   max-width: min(780px, 100%);
-  max-height: calc(100vh - 190px);
+  max-height: min(100%, calc(100svh - 160px));
   margin: 0 auto;
   padding: clamp(10px, 2vh, 24px) 0;
   overflow-y: auto;
@@ -1258,11 +1275,11 @@ main {
 .guest-name-hero {
   width: min(720px, 100%);
   margin: 6px auto 22px;
-  padding: 22px 28px;
+  padding: clamp(12px, 2vh, 22px) clamp(14px, 3vw, 28px);
   background: var(--lh-aqua-light);
   color: var(--lh-navy);
   border: 4px solid white;
-  font-size: clamp(1.4rem, min(5vw, 8vh), 4.2rem);
+  font-size: clamp(1.25rem, min(4vw, 6vh), 3.8rem);
   font-weight: 950;
   line-height: 1.05;
   text-align: center;
@@ -2778,87 +2795,30 @@ main {
   text-decoration: none;
 }
 
-.daily-export-panel {
-  margin-bottom: 18px;
-}
-
-.daily-export-grid {
+.data-deletion-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-top: 18px;
 }
 
-.daily-export-help {
-  display: grid;
-  gap: 4px;
-  margin-top: 16px;
-  padding: 14px 16px;
-  border-left: 6px solid var(--lh-golden-yellow);
-  background: #fff7d6;
-  color: var(--lh-navy);
-  font-weight: 850;
-}
-
-.daily-export-help span {
-  color: var(--lh-charcoal);
-  font-weight: 720;
-}
-
-.daily-export-grid label {
+.data-deletion-grid label {
   display: grid;
   gap: 6px;
   color: var(--lh-navy);
   font-weight: 900;
 }
 
-.daily-export-grid small {
+.data-deletion-grid small {
   color: var(--lh-muted-brown);
   font-weight: 700;
 }
 
-.daily-export-clear {
-  align-self: end;
-  min-height: 48px;
-}
-
-.daily-export-actions {
+.data-deletion-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   margin: 16px 0;
-}
-
-.daily-export-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.daily-export-list h3,
-.daily-export-list p {
-  margin: 0;
-}
-
-.daily-export-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: var(--lh-aqua);
-  border-left: 6px solid var(--lh-purple);
-}
-
-.daily-export-row div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.daily-export-row span,
-.daily-export-row small {
-  overflow-wrap: anywhere;
 }
 
 .data-deletion-warning {
@@ -2875,7 +2835,7 @@ main {
 .staff-user-form,
 .staff-user-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(120px, 180px) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(140px, 220px);
   gap: 14px;
   align-items: end;
 }
@@ -2895,6 +2855,23 @@ main {
   align-items: center;
 }
 
+.staff-user-form .permission-checkboxes {
+  grid-column: 1 / -1;
+  align-items: stretch;
+}
+
+.staff-user-form .toggle-field {
+  min-height: 42px;
+  padding: 8px 10px;
+  background: var(--lh-soft-green);
+  border: 1px solid var(--lh-border);
+}
+
+.staff-user-form > button {
+  grid-column: 1 / -1;
+  width: min(520px, 100%);
+}
+
 .staff-user-list {
   display: grid;
   gap: 12px;
@@ -2906,6 +2883,11 @@ main {
   padding: 14px;
   background: var(--lh-soft-green);
   border: 1px solid var(--lh-border);
+}
+
+.staff-user-row > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .speech-test-actions {
@@ -3171,6 +3153,35 @@ main {
   min-height: calc(100vh - 190px);
   display: grid;
   place-items: center;
+}
+
+.staff-signed-in-badge {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  max-width: min(260px, calc(100vw - 32px));
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  border-radius: 14px;
+  background: var(--lh-texture), rgba(32, 32, 32, 0.92);
+  color: white;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+  pointer-events: none;
+}
+
+.staff-signed-in-badge span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.staff-signed-in-badge strong {
+  overflow-wrap: anywhere;
+  font-size: 0.98rem;
+  line-height: 1.1;
 }
 
 .kiosk-launcher-page {
@@ -3594,6 +3605,22 @@ main {
 
   .customization-text-grid {
     grid-template-columns: 1fr;
+  }
+
+  .staff-user-form,
+  .staff-user-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .staff-user-row .permission-checkboxes,
+  .staff-user-form .permission-checkboxes {
+    align-items: stretch;
+  }
+
+  .staff-user-row .toggle-field,
+  .staff-user-form .toggle-field {
+    justify-content: flex-start;
   }
 }
 
@@ -5381,7 +5408,7 @@ main {
   .activity-option-grid,
   .activity-translation-grid,
   .access-qr-grid,
-  .daily-export-grid,
+  .data-deletion-grid,
   .install-platform-grid,
   .system-control-grid,
   .speech-status-grid {
@@ -5478,7 +5505,6 @@ main {
 
   .network-current,
   .network-mode-picker,
-  .daily-export-row,
   .system-control-card,
   .install-connection-banner {
     grid-template-columns: 1fr;

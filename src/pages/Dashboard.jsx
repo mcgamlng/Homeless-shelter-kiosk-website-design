@@ -353,7 +353,7 @@ export default function Dashboard() {
     event.preventDefault();
     if (!window.confirm("Start a new day and clear all active guest check-ins?")) return;
     try {
-      const { token } = await api.adminLogin(resetPin);
+      const { token } = await api.adminLogin(resetPin, { permission: "admin", path: "/admin" });
       setData(await api.resetDay(token, false));
       setShowReset(false);
       setResetPin("");
@@ -394,6 +394,13 @@ export default function Dashboard() {
           </button>
         </div>
       </div>
+
+      {data.settings?.dataDeletion?.warning ? (
+        <div className="data-deletion-warning" role="status">
+          <Bell size={20} />
+          <span>{data.settings.dataDeletion.warning.message}</span>
+        </div>
+      ) : null}
 
       {alerts.length ? (
         <div className="activity-alert-stack" aria-live="assertive">
@@ -744,7 +751,14 @@ function UntimedQueue({ data, items, onClearGuest, onStatus }) {
                     <DailyPersonNumber item={item} />
                     {item.guest_name}
                   </strong>
-                  <span>{item.activity_name}</span>
+                  <span>
+                    {item.activity_name}
+                    {item.service_spot_status === "waitlist"
+                      ? ` - Waitlist #${item.service_spot_number || ""}`
+                      : item.service_spot_number
+                        ? ` - Spot #${item.service_spot_number}`
+                        : ""}
+                  </span>
                 </div>
                 <span
                   className={`status-badge status-${item.status
@@ -789,6 +803,9 @@ function ActivityLaneHeading({ activity }) {
         {activity.duration_minutes} min
         {activity.daily_limit_enabled
           ? ` / ${activity.daily_used}/${activity.daily_limit} today`
+          : ""}
+        {activity.waitlist_enabled
+          ? ` / ${activity.confirmed_spots} available + ${activity.waitlist_spots} waitlist`
           : ""}
         {activity.alarm_enabled ? ` / timer alert at ${activity.alarm_minutes_before} min` : ""}
       </span>

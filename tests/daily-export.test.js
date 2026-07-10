@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test("daily spreadsheet archives are saved, caught up, and safe on email failure", async () => {
+test("daily spreadsheet archives stay local and yearly deletion preserves staff users", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-daily-export-"));
   process.env.DATABASE_PATH = path.join(tempDir, "test.sqlite");
   process.env.EXPORTS_PATH = path.join(tempDir, "exports");
@@ -15,9 +15,22 @@ test("daily spreadsheet archives are saved, caught up, and safe on email failure
     database = (await import("../server/db.js")).db;
     repository.updateSettings({ workday_start: "00:00", workday_end: "23:59" });
     const activities = repository.getActivities();
+    activities.slice(0, 3).forEach((activity) => {
+      repository.updateActivity(activity.id, {
+        availability_window_enabled: false,
+        weekly_window_enabled: false
+      });
+    });
+    const openActivities = repository.getActivities();
+
+    const staffUser = repository.createStaffUser({
+      display_name: "Dashboard Staff",
+      pin: "1717",
+      permissions: { dashboard: true, about: true }
+    });
 
     const firstCheckIn = repository.createCheckIn({
-      activityIds: [activities[0].id],
+      activityIds: [openActivities[0].id],
       language: "en",
       signIn: { mode: "sign_up", firstName: "Maya", lastName: "Johnson" }
     });
@@ -26,21 +39,24 @@ test("daily spreadsheet archives are saved, caught up, and safe on email failure
       .run("2026-07-05T12:00:00.000Z", firstCheckIn.id);
 
     const firstArchive = await repository.runDailyExportArchive({
-      date: "2026-07-05",
-      sendEmail: false
+      date: "2026-07-05"
     });
     const secondArchive = await repository.runDailyExportArchive({
-      date: "2026-07-05",
-      sendEmail: false
+      date: "2026-07-05"
     });
 
     assert.equal(firstArchive.report_date, "2026-07-05");
     assert.equal(secondArchive.id, firstArchive.id);
-    assert.equal(firstArchive.email_status, "not_configured");
     assert.ok(fs.existsSync(path.join(process.env.EXPORTS_PATH, firstArchive.filename)));
+    assert.deepEqual(Object.keys(firstArchive).sort(), [
+      "created_at",
+      "filename",
+      "id",
+      "report_date"
+    ]);
 
     const catchUpCheckIn = repository.createCheckIn({
-      activityIds: [activities[1].id],
+      activityIds: [openActivities[1].id],
       language: "en",
       signIn: { mode: "sign_up", firstName: "Ari", lastName: "Lee" }
     });
@@ -54,40 +70,31 @@ test("daily spreadsheet archives are saved, caught up, and safe on email failure
     });
     assert.ok(catchUpArchives.some((archive) => archive.report_date === "2026-07-04"));
 
-    repository.updateExportSettings({
-      recipient: "reports@example.org",
-      gmail_sender: "sender@gmail.com",
-      gmail_app_password: "abcdefghijklmnop",
-      raw_retention_days: 7
+    repository.updateDataDeletionSettings({
+      enabled: true,
+      month_day: "07-06",
+      time: "03:00"
     });
-    const failedEmailCheckIn = repository.createCheckIn({
-      activityIds: [activities[2].id],
-      language: "en",
-      signIn: { mode: "sign_up", firstName: "Samira", lastName: "Ahmed" }
-    });
-    database
-      .prepare("UPDATE check_ins SET checked_in_at = ? WHERE id = ?")
-      .run("2026-01-01T12:00:00.000Z", failedEmailCheckIn.id);
+    const warning = repository.getDataDeletionSettings(new Date(2026, 5, 25, 12, 0)).warning;
+    assert.ok(warning);
+    assert.match(warning.message, /Yearly data deletion/);
 
-    const failedArchive = await repository.runDailyExportArchive({
-      date: "2026-01-01",
-      sendEmail: true,
-      force: true,
-      now: new Date(2026, 6, 7, 4, 0),
-      mailer: {
-        async sendMail() {
-          throw new Error("SMTP failed");
-        }
-      }
+    const deletion = repository.runDueYearlyDataDeletion({
+      now: new Date(2026, 6, 6, 4, 0)
     });
-
-    const oldCheckInStillExists = database
-      .prepare("SELECT COUNT(*) AS count FROM check_ins WHERE id = ?")
-      .get(failedEmailCheckIn.id).count;
-    assert.equal(failedArchive.email_status, "failed");
-    assert.match(failedArchive.error_message, /SMTP failed/);
-    assert.equal(oldCheckInStillExists, 1);
-    assert.ok(repository.listDailyExports().length >= 3);
+    assert.equal(deletion.ok, true);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM guests").get().count, 0);
+    assert.equal(database.prepare("SELECT COUNT(*) AS count FROM check_ins").get().count, 0);
+    assert.equal(
+      database.prepare("SELECT COUNT(*) AS count FROM scheduled_activity_items").get().count,
+      0
+    );
+    assert.equal(
+      database.prepare("SELECT COUNT(*) AS count FROM daily_export_archives").get().count,
+      0
+    );
+    assert.equal(repository.listStaffUsers().length, 1);
+    assert.equal(repository.listStaffUsers()[0].id, staffUser.id);
   } finally {
     if (database?.open) database.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

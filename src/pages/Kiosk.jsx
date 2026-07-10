@@ -164,38 +164,12 @@ export default function Kiosk({ settings: shellSettings = null }) {
     setSpeaking(true);
     setReadoutMessage(t.readingNow);
 
-    if (language === "hmn") {
-      if (!("Audio" in window)) {
-        stopReadout(t.readoutUnavailable);
-        return;
-      }
-      playCloudSpeechQueue(segments, runId, pauseMs, language, () =>
-        playHmongSpeechQueue(segments, runId, pauseMs, () =>
-          playLocalSpeechQueue(segments, runId, pauseMs, language, () =>
-            startBrowserSpeechFallback(segments, runId, pauseMs)
-          )
-        )
-      );
-      return;
-    }
-    if (["en", "es", "so"].includes(language)) {
-      if (!("Audio" in window)) {
-        startBrowserSpeechFallback(segments, runId, pauseMs);
-        return;
-      }
-      playNaturalSpeechQueue(segments, runId, pauseMs, language, () => {
-        if (["es", "so"].includes(language)) {
-          playCloudSpeechQueue(segments, runId, pauseMs, language, () =>
-            playLocalSpeechQueue(segments, runId, pauseMs, language, () =>
-              startBrowserSpeechFallback(segments, runId, pauseMs)
-            )
-          );
-        } else {
-          playLocalSpeechQueue(segments, runId, pauseMs, language, () =>
-            startBrowserSpeechFallback(segments, runId, pauseMs)
-          );
-        }
-      });
+    if (["en", "es", "hmn", "so"].includes(language)) {
+      if (!("Audio" in window)) startBrowserSpeechFallback(segments, runId, pauseMs);
+      else
+        playBestSpeechQueue(segments, runId, pauseMs, language, () =>
+          startBrowserSpeechFallback(segments, runId, pauseMs)
+        );
       return;
     }
 
@@ -212,6 +186,18 @@ export default function Kiosk({ settings: shellSettings = null }) {
   function playNaturalSpeechQueue(segments, runId, pauseMs, currentLanguage, onFailure) {
     const queue = segments.map((segment) => ({
       url: speechRouteUrl("natural", segment, currentLanguage),
+      pauseAfter: pauseMs
+    }));
+    playAudioQueue(queue, runId, 0, 1, onFailure);
+  }
+
+  function playBestSpeechQueue(segments, runId, pauseMs, currentLanguage, onFailure) {
+    const queue = segments.map((segment) => ({
+      url: `/api/speech/best?${new URLSearchParams({
+        language: currentLanguage,
+        text: readoutSegmentText(segment),
+        ...(readoutSegmentKey(segment) ? { key: readoutSegmentKey(segment) } : {})
+      }).toString()}`,
       pauseAfter: pauseMs
     }));
     playAudioQueue(queue, runId, 0, 1, onFailure);
@@ -624,6 +610,11 @@ export default function Kiosk({ settings: shellSettings = null }) {
                 {confirmation.items.map((item) => (
                   <div key={item.id}>
                     <strong>{translateActivityName(item, language)}</strong>
+                    {item.service_spot_status === "waitlist" ? (
+                      <span>Waitlist #{item.service_spot_number}</span>
+                    ) : item.service_spot_number ? (
+                      <span>Spot #{item.service_spot_number}</span>
+                    ) : null}
                   </div>
                 ))}
               </div>

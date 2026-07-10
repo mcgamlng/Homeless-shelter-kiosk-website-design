@@ -59,6 +59,9 @@ else
   echo "Hmong fallback voice pack already installed."
 fi
 
+echo "Preparing read-aloud speech cache..."
+npm run speech:preload || echo "Speech preload could not finish. Read aloud will still use live fallback when available."
+
 if systemctl list-unit-files "$SERVICE_NAME" >/dev/null 2>&1; then
   echo "Restarting $SERVICE_NAME..."
   sudo systemctl start "$SERVICE_NAME"

@@ -11,10 +11,13 @@ import {
   clearCheckIn,
   changeAdminPin,
   applyDefaultActivities,
+  createStaffUser,
   createActivity,
   createAnalyticsWorkbook,
   createCheckIn,
+  deleteStaffUser,
   deleteActivity,
+  getDataDeletionSettings,
   getDailyExportDownload,
   getAdminSecuritySettings,
   getAnalyticsReport,
@@ -24,21 +27,26 @@ import {
   getSettings,
   inspectNameCheckIn,
   listDailyExports,
+  listStaffUsers,
   moveScheduledItem,
   rebalanceActiveWaitingSchedule,
   reorderCheckInItems,
   runDailyExportArchive,
   runDueDailyExports,
+  runDueYearlyDataDeletion,
+  runYearlyDataDeletion,
   rescheduleScheduledItem,
   resetDailyData,
-  sendDailyExportTestEmail,
+  updateDataDeletionSettings,
   updateActivity,
   updateExportSettings,
+  updateStaffUser,
   updateScheduledItemStatus,
   updateSetting,
   updateSettings,
   verifyNameSignIn,
-  verifyAdminPin
+  verifyAdminPin,
+  verifyStaffUserCredentials
 } from "./repository.js";
 import { createAccessInfo, getWifiName, normalizeServerBaseUrl } from "./network.js";
 import { enrichActivityTranslations, translateActivityLabel } from "./translationService.js";
@@ -49,7 +57,9 @@ import {
   getCloudSpeechAudio,
   createLocalSpeechAudio,
   getHmongSyllablePath,
+  getBestSpeechAudio,
   getNaturalSpeechAudio,
+  preloadBestSpeechAudio,
   getSpanishSpeechAudio,
   getSpeechStatus
 } from "./speechService.js";
@@ -132,24 +142,105 @@ function normalizeWithoutDiacritics(value) {
     .toLowerCase();
 }
 
-function requireAdmin(req, res, next) {
+function sessionFromRequest(req) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (!token || !adminSessions.has(token)) {
-    return res.status(401).json({ error: "Admin PIN required." });
+  return token ? adminSessions.get(token) : null;
+}
+
+function sessionHasPermission(session, permission) {
+  if (!session) return false;
+  if (session.owner) return true;
+  return Boolean(session.permissions?.[permission]);
+}
+
+function requirePermission(permission, label) {
+  return (req, res, next) => {
+    const session = sessionFromRequest(req);
+    if (!sessionHasPermission(session, permission)) {
+      return res.status(401).json({ error: `${label} access required.` });
+    }
+    return next();
+  };
+}
+
+function requireAnyPermission(permissions, label) {
+  return (req, res, next) => {
+    const session = sessionFromRequest(req);
+    if (!permissions.some((permission) => sessionHasPermission(session, permission))) {
+      return res.status(401).json({ error: `${label} access required.` });
+    }
+    return next();
+  };
+}
+
+const requireAdmin = requirePermission("admin", "Admin Controls");
+const requireDashboardAccess = requireAnyPermission(
+  ["dashboard", "admin"],
+  "Dashboard or Admin Controls"
+);
+
+function requireAnyStaff(req, res, next) {
+  if (!sessionFromRequest(req)) {
+    return res.status(401).json({ error: "Staff access required." });
   }
   return next();
 }
 
-function requireAdminDownload(req, res, next) {
+function requireDownloadPermission(permission, label) {
+  return (req, res, next) => {
+    const header = req.headers.authorization || "";
+    const bearerToken = header.startsWith("Bearer ") ? header.slice(7) : "";
+    const queryToken = typeof req.query.token === "string" ? req.query.token : "";
+    const token = bearerToken || queryToken;
+    const session = token ? adminSessions.get(token) : null;
+    if (!sessionHasPermission(session, permission)) {
+      return res.status(401).json({ error: `${label} access required.` });
+    }
+    return next();
+  };
+}
+
+const requireAdminDownload = requireDownloadPermission("admin", "Admin Controls");
+
+function createStaffSession({ owner = false, user = null, permissions = null } = {}) {
+  const token = crypto.randomUUID();
+  const sessionPermissions = owner
+    ? { dashboard: true, admin: true, about: true }
+    : permissions || user?.permissions || {};
+  adminSessions.set(token, {
+    createdAt: Date.now(),
+    owner,
+    userId: user?.id || null,
+    displayName: owner ? "Owner Admin" : user?.display_name || "",
+    permissions: sessionPermissions
+  });
+  return {
+    token,
+    user: {
+      id: owner ? "owner" : user?.id,
+      display_name: owner ? "Owner Admin" : user?.display_name || "",
+      permissions: sessionPermissions,
+      owner
+    }
+  };
+}
+
+function requestedPermissionForPath(value) {
+  const cleanValue = String(value || "").toLowerCase();
+  if (cleanValue.includes("admin")) return "admin";
+  if (cleanValue.includes("about")) return "about";
+  return "dashboard";
+}
+
+function requireAdminOrPermission(req, res, next) {
   const header = req.headers.authorization || "";
-  const bearerToken = header.startsWith("Bearer ") ? header.slice(7) : "";
-  const queryToken = typeof req.query.token === "string" ? req.query.token : "";
-  const token = bearerToken || queryToken;
-  if (!token || !adminSessions.has(token)) {
-    return res.status(401).json({ error: "Admin PIN required." });
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const session = token ? adminSessions.get(token) : null;
+  if (sessionHasPermission(session, "admin")) {
+    return next();
   }
-  return next();
+  return requireAdmin(req, res, next);
 }
 
 function sendAnalyticsWorkbook(res, workbook) {
@@ -340,6 +431,41 @@ app.get("/api/speech/status", (_req, res) => {
 });
 
 app.get(
+  "/api/speech/best",
+  handleRoute(async (req, res) => {
+    const result = await getBestSpeechAudio(req.query.text, req.query.language || "en", {
+      key: req.query.key || ""
+    });
+    res.setHeader("Content-Type", result.contentType);
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.setHeader("X-Speech-Source", result.source);
+    res.setHeader("X-Speech-Cache", result.cached ? "hit" : "miss");
+    res.send(result.audio);
+  })
+);
+
+app.post(
+  "/api/admin/speech/preload",
+  requireAdmin,
+  handleRoute(async (req, res) => {
+    const rawSegments = Array.isArray(req.body?.segments) ? req.body.segments : [];
+    const segments = rawSegments.slice(0, 300).map((segment) => ({
+      language: String(segment.language || "en").slice(0, 8),
+      key: String(segment.key || "").slice(0, 120),
+      text: String(segment.text || "").slice(0, 350)
+    }));
+    const results = await preloadBestSpeechAudio(segments);
+    res.json({
+      ok: true,
+      total: results.length,
+      ready: results.filter((result) => result.ok).length,
+      failed: results.filter((result) => !result.ok).length,
+      results
+    });
+  })
+);
+
+app.get(
   "/api/speech/hmong-plan",
   handleRoute((req, res) => {
     res.json(createHmongSpeechPlan(req.query.text));
@@ -443,7 +569,7 @@ app.post(
 
 app.get(
   "/api/dashboard",
-  requireAdmin,
+  requireDashboardAccess,
   handleRoute((_req, res) => {
     res.json(getDashboardData());
   })
@@ -451,7 +577,7 @@ app.get(
 
 app.patch(
   "/api/scheduled-items/:id/status",
-  requireAdmin,
+  requireDashboardAccess,
   handleRoute((req, res) => {
     const item = updateScheduledItemStatus(req.params.id, req.body.status);
     emitDashboard();
@@ -461,7 +587,7 @@ app.patch(
 
 app.patch(
   "/api/scheduled-items/:id/move",
-  requireAdmin,
+  requireDashboardAccess,
   handleRoute((req, res) => {
     const item = moveScheduledItem(req.params.id, req.body.direction);
     emitDashboard();
@@ -471,7 +597,7 @@ app.patch(
 
 app.patch(
   "/api/scheduled-items/:id/reschedule",
-  requireAdmin,
+  requireDashboardAccess,
   handleRoute((req, res) => {
     const item = rescheduleScheduledItem(req.params.id, req.body.targetStart);
     emitDashboard();
@@ -481,7 +607,7 @@ app.patch(
 
 app.patch(
   "/api/check-ins/:id/reorder",
-  requireAdmin,
+  requireDashboardAccess,
   handleRoute((req, res) => {
     const checkIn = reorderCheckInItems(req.params.id, req.body.orderedIds);
     emitDashboard();
@@ -491,7 +617,7 @@ app.patch(
 
 app.delete(
   "/api/check-ins/:id",
-  requireAdmin,
+  requireDashboardAccess,
   handleRoute((req, res) => {
     clearCheckIn(req.params.id);
     emitDashboard();
@@ -500,12 +626,21 @@ app.delete(
 );
 
 app.post("/api/admin/session", (req, res) => {
-  if (!verifyAdminPin(req.body.pin, ADMIN_PIN)) {
-    return res.status(401).json({ error: "That PIN did not work." });
+  const requestedPermission = requestedPermissionForPath(req.body.permission || req.body.path);
+  if (verifyAdminPin(req.body.pin, ADMIN_PIN)) {
+    return res.json(createStaffSession({ owner: true }));
   }
-  const token = crypto.randomUUID();
-  adminSessions.set(token, { createdAt: Date.now() });
-  return res.json({ token });
+  const user = verifyStaffUserCredentials(
+    req.body.displayName || req.body.display_name,
+    req.body.pin
+  );
+  if (!user) {
+    return res.status(401).json({ error: "That staff name or PIN did not work." });
+  }
+  if (!user.permissions?.[requestedPermission]) {
+    return res.status(403).json({ error: "This user does not have access to that page." });
+  }
+  return res.json(createStaffSession({ user }));
 });
 
 app.get(
@@ -516,12 +651,32 @@ app.get(
   })
 );
 
+app.get(
+  "/api/staff/session",
+  handleRoute((req, res) => {
+    const session = sessionFromRequest(req);
+    const permission = requestedPermissionForPath(req.query.permission || req.query.path);
+    if (!sessionHasPermission(session, permission)) {
+      return res.status(401).json({ error: "Staff access required." });
+    }
+    res.json({
+      ok: true,
+      user: {
+        id: session.owner ? "owner" : session.userId,
+        display_name: session.displayName,
+        permissions: session.permissions,
+        owner: Boolean(session.owner)
+      }
+    });
+  })
+);
+
 app.put(
   "/api/admin/security/pin",
   handleRoute((req, res) => {
     const header = req.headers.authorization || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-    const hasValidSession = token && adminSessions.has(token);
+    const hasValidSession = token && sessionHasPermission(adminSessions.get(token), "admin");
     const hasValidCurrentPin = verifyAdminPin(
       req.body.currentPin ?? req.body.current_pin,
       ADMIN_PIN
@@ -534,6 +689,38 @@ app.put(
     changeAdminPin(req.body, ADMIN_PIN);
     adminSessions.clear();
     res.json({ ok: true });
+  })
+);
+
+app.get(
+  "/api/admin/users",
+  requireAdmin,
+  handleRoute((_req, res) => {
+    res.json(listStaffUsers());
+  })
+);
+
+app.post(
+  "/api/admin/users",
+  requireAdmin,
+  handleRoute((req, res) => {
+    res.status(201).json(createStaffUser(req.body));
+  })
+);
+
+app.patch(
+  "/api/admin/users/:id",
+  requireAdmin,
+  handleRoute((req, res) => {
+    res.json(updateStaffUser(req.params.id, req.body));
+  })
+);
+
+app.delete(
+  "/api/admin/users/:id",
+  requireAdmin,
+  handleRoute((req, res) => {
+    res.json({ ok: true, user: deleteStaffUser(req.params.id) });
   })
 );
 
@@ -637,18 +824,35 @@ app.post(
     res.json(
       await runDailyExportArchive({
         date: req.body.date,
-        force: Boolean(req.body.force),
-        sendEmail: req.body.sendEmail !== false
+        force: Boolean(req.body.force)
       })
     );
   })
 );
 
-app.post(
-  "/api/admin/daily-exports/test-email",
+app.get(
+  "/api/admin/data-deletion",
   requireAdmin,
-  handleRoute(async (_req, res) => {
-    res.json(await sendDailyExportTestEmail());
+  handleRoute((_req, res) => {
+    res.json(getDataDeletionSettings());
+  })
+);
+
+app.put(
+  "/api/admin/data-deletion",
+  requireAdmin,
+  handleRoute((req, res) => {
+    res.json(updateDataDeletionSettings(req.body || {}));
+  })
+);
+
+app.post(
+  "/api/admin/data-deletion/run",
+  requireAdmin,
+  handleRoute((_req, res) => {
+    const result = runYearlyDataDeletion({ reason: "manual" });
+    emitDashboard();
+    res.json(result);
   })
 );
 
@@ -843,8 +1047,12 @@ app.get("*", (_req, res) => {
 
 io.use((socket, next) => {
   const token = String(socket.handshake.auth?.token || "");
-  if (!token || !adminSessions.has(token)) {
-    next(new Error("Admin PIN required."));
+  const session = token ? adminSessions.get(token) : null;
+  if (
+    !session ||
+    (!sessionHasPermission(session, "dashboard") && !sessionHasPermission(session, "admin"))
+  ) {
+    next(new Error("Dashboard access required."));
     return;
   }
   next();
@@ -867,10 +1075,21 @@ server.listen(PORT, "0.0.0.0", () => {
   runDueDailyExports().catch((error) => {
     console.warn(`Daily export catch-up skipped: ${error.message}`);
   });
+  try {
+    const deletion = runDueYearlyDataDeletion();
+    if (deletion) console.warn(`Yearly data deletion ran: ${deletion.ran_at}`);
+  } catch (error) {
+    console.warn(`Yearly data deletion skipped: ${error.message}`);
+  }
 });
 
 setInterval(() => {
   runDueDailyExports().catch((error) => {
     console.warn(`Daily export check skipped: ${error.message}`);
   });
+  try {
+    runDueYearlyDataDeletion();
+  } catch (error) {
+    console.warn(`Yearly data deletion check skipped: ${error.message}`);
+  }
 }, DAILY_EXPORT_CHECK_MS).unref();

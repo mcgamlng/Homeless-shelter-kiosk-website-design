@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import nodemailer from "nodemailer";
 import { applyListeningHouseActivityPreset, db } from "./db.js";
 import {
   addMinutes,
@@ -328,6 +327,7 @@ export function getSettings() {
       preferred_local_url: values.preferred_local_url || "",
       public_base_url: values.public_base_url || ""
     },
+    dataDeletion: getDataDeletionSettings(),
     customization
   };
 }
@@ -369,6 +369,143 @@ export function changeAdminPin(payload = {}, fallbackPin = "2468") {
   return true;
 }
 
+function normalizeStaffDisplayName(value) {
+  return cleanText(value, 120);
+}
+
+function normalizeStaffPermissions(payload = {}) {
+  return {
+    dashboard: Boolean(payload.dashboard ?? payload.can_dashboard),
+    admin: Boolean(payload.admin ?? payload.can_admin),
+    about: Boolean(payload.about ?? payload.can_about)
+  };
+}
+
+function publicStaffUser(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    display_name: row.display_name,
+    permissions: {
+      dashboard: Boolean(row.can_dashboard),
+      admin: Boolean(row.can_admin),
+      about: Boolean(row.can_about)
+    },
+    active: Boolean(row.active),
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function requireStaffPin(pin) {
+  const cleanPin = String(pin || "").trim();
+  if (!/^\d{4,12}$/.test(cleanPin)) {
+    const error = new Error("Staff PIN must be 4 to 12 numbers.");
+    error.status = 400;
+    throw error;
+  }
+  return cleanPin;
+}
+
+export function listStaffUsers() {
+  return rows(
+    `SELECT id, display_name, can_dashboard, can_admin, can_about, active, created_at, updated_at
+     FROM staff_users
+     ORDER BY active DESC, lower(display_name), id`
+  ).map(publicStaffUser);
+}
+
+export function createStaffUser(payload = {}) {
+  const displayName = normalizeStaffDisplayName(payload.display_name ?? payload.displayName);
+  if (!displayName) {
+    const error = new Error("Enter a staff user name.");
+    error.status = 400;
+    throw error;
+  }
+  const pin = requireStaffPin(payload.pin);
+  const permissions = normalizeStaffPermissions(payload.permissions || payload);
+  const info = db
+    .prepare(
+      `INSERT INTO staff_users
+       (display_name, pin_hash, can_dashboard, can_admin, can_about, active)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      displayName,
+      hashSecret(pin),
+      permissions.dashboard ? 1 : 0,
+      permissions.admin ? 1 : 0,
+      permissions.about ? 1 : 0,
+      payload.active === false ? 0 : 1
+    );
+  return listStaffUsers().find((user) => Number(user.id) === Number(info.lastInsertRowid));
+}
+
+export function updateStaffUser(id, payload = {}) {
+  const current = one("SELECT * FROM staff_users WHERE id = ?", [id]);
+  if (!current) {
+    const error = new Error("Staff user not found.");
+    error.status = 404;
+    throw error;
+  }
+  const displayName = normalizeStaffDisplayName(
+    payload.display_name ?? payload.displayName ?? current.display_name
+  );
+  if (!displayName) {
+    const error = new Error("Enter a staff user name.");
+    error.status = 400;
+    throw error;
+  }
+  const permissions = normalizeStaffPermissions({
+    dashboard: payload.permissions?.dashboard ?? payload.dashboard ?? current.can_dashboard,
+    admin: payload.permissions?.admin ?? payload.admin ?? current.can_admin,
+    about: payload.permissions?.about ?? payload.about ?? current.can_about
+  });
+  const pinHash = payload.pin ? hashSecret(requireStaffPin(payload.pin)) : current.pin_hash;
+  db.prepare(
+    `UPDATE staff_users
+     SET display_name = ?, pin_hash = ?, can_dashboard = ?, can_admin = ?, can_about = ?,
+         active = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ).run(
+    displayName,
+    pinHash,
+    permissions.dashboard ? 1 : 0,
+    permissions.admin ? 1 : 0,
+    permissions.about ? 1 : 0,
+    payload.active === undefined ? current.active : payload.active ? 1 : 0,
+    id
+  );
+  return listStaffUsers().find((user) => Number(user.id) === Number(id));
+}
+
+export function deleteStaffUser(id) {
+  const current = one("SELECT * FROM staff_users WHERE id = ?", [id]);
+  if (!current) {
+    const error = new Error("Staff user not found.");
+    error.status = 404;
+    throw error;
+  }
+  db.prepare("DELETE FROM staff_users WHERE id = ?").run(id);
+  return publicStaffUser(current);
+}
+
+export function verifyStaffUserCredentials(displayName, pin) {
+  const cleanName = normalizeStaffDisplayName(displayName);
+  const cleanPin = String(pin || "").trim();
+  if (!cleanName || !cleanPin) return null;
+  const user = one(
+    `SELECT *
+     FROM staff_users
+     WHERE active = 1 AND lower(display_name) = lower(?)
+     ORDER BY datetime(updated_at) DESC, id DESC
+     LIMIT 1`,
+    [cleanName]
+  );
+  if (!user || !verifySecret(cleanPin, user.pin_hash)) return null;
+  return publicStaffUser(user);
+}
+
 function normalizeActivityPayload(payload, current = {}) {
   const name = cleanText(payload.name ?? current.name, 120);
   const generatedTranslations = buildActivityTranslations(name);
@@ -398,6 +535,10 @@ function normalizeActivityPayload(payload, current = {}) {
     payload.yearly_window_enabled === undefined
       ? Boolean(current.yearly_window_enabled)
       : Boolean(payload.yearly_window_enabled);
+  const weeklyWindowEnabled =
+    payload.weekly_window_enabled === undefined
+      ? Boolean(current.weekly_window_enabled)
+      : Boolean(payload.weekly_window_enabled);
   const durationMinutes = Math.max(
     1,
     Number(payload.duration_minutes ?? current.duration_minutes ?? 20)
@@ -405,6 +546,18 @@ function normalizeActivityPayload(payload, current = {}) {
   const dailyLimit = dailyLimitEnabled
     ? Math.max(1, Number(payload.daily_limit ?? current.daily_limit ?? 1))
     : null;
+  const waitlistEnabled =
+    payload.waitlist_enabled === undefined
+      ? Boolean(current.waitlist_enabled)
+      : Boolean(payload.waitlist_enabled);
+  const confirmedSpots = waitlistEnabled
+    ? Math.max(0, Number(payload.confirmed_spots ?? current.confirmed_spots ?? dailyLimit ?? 1))
+    : null;
+  const waitlistSpots = waitlistEnabled
+    ? Math.max(0, Number(payload.waitlist_spots ?? current.waitlist_spots ?? 0))
+    : null;
+  const adjustedDailyLimit =
+    waitlistEnabled && dailyLimitEnabled ? Math.max(1, confirmedSpots + waitlistSpots) : dailyLimit;
   const alarmMinutesBefore = Math.max(
     1,
     Math.min(
@@ -461,6 +614,8 @@ function normalizeActivityPayload(payload, current = {}) {
     availabilityWindowEnabled,
     availabilityStart,
     availabilityEnd,
+    weeklyWindowEnabled,
+    weeklyDays: normalizeWeeklyDays(payload.weekly_days ?? current.weekly_days),
     monthlyWindowEnabled,
     monthlyStartDay,
     monthlyEndDay,
@@ -468,7 +623,10 @@ function normalizeActivityPayload(payload, current = {}) {
     yearlyStart,
     yearlyEnd,
     dailyLimitEnabled,
-    dailyLimit,
+    dailyLimit: adjustedDailyLimit,
+    waitlistEnabled,
+    confirmedSpots,
+    waitlistSpots,
     alarmEnabled,
     alarmMinutesBefore,
     icon: cleanText(payload.icon ?? current.icon ?? "heart-hand", 60),
@@ -494,6 +652,14 @@ function normalizeClockTime(value, fallback) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
+function normalizeWeeklyDays(value) {
+  const parts = Array.isArray(value) ? value : String(value || "").split(",");
+  const days = [
+    ...new Set(parts.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))
+  ];
+  return days.length ? days.toSorted((a, b) => a - b).join(",") : "0,1,2,3,4,5,6";
+}
+
 function normalizeDayOfMonth(value, fallback) {
   const parsed = Number(value);
   return Number.isInteger(parsed) ? Math.min(31, Math.max(1, parsed)) : fallback;
@@ -513,6 +679,15 @@ function valueFallsInRecurringRange(value, start, end) {
 }
 
 function isActivityDateAvailable(activity, referenceDate = new Date()) {
+  if (activity.weekly_window_enabled) {
+    const weeklyDays = new Set(
+      String(activity.weekly_days || "0,1,2,3,4,5,6")
+        .split(",")
+        .map(Number)
+        .filter((day) => Number.isInteger(day))
+    );
+    if (!weeklyDays.has(referenceDate.getDay())) return false;
+  }
   if (
     activity.monthly_window_enabled &&
     !valueFallsInRecurringRange(
@@ -566,10 +741,12 @@ export function getActivities({ includeInactive = false } = {}) {
     `SELECT id, name, name_es, name_hmn, name_so,
             duration_minutes, time_limit_enabled, availability_window_enabled,
             availability_start, availability_end,
+            weekly_window_enabled, weekly_days,
             monthly_window_enabled, monthly_start_day, monthly_end_day,
             yearly_window_enabled, yearly_start, yearly_end,
             daily_limit_enabled,
-            daily_limit, alarm_enabled, alarm_minutes_before, icon, active, sort_order
+            daily_limit, waitlist_enabled, confirmed_spots, waitlist_spots,
+            alarm_enabled, alarm_minutes_before, icon, active, sort_order
      FROM activities
      ${where}
      ORDER BY sort_order, name`
@@ -580,6 +757,7 @@ export function getActivities({ includeInactive = false } = {}) {
       ? Math.max(0, Number(activity.daily_limit || 0) - dailyUsed)
       : null;
     const availabilityWindowEnabled = Boolean(activity.availability_window_enabled);
+    const weeklyWindowEnabled = Boolean(activity.weekly_window_enabled);
     const monthlyWindowEnabled = Boolean(activity.monthly_window_enabled);
     const yearlyWindowEnabled = Boolean(activity.yearly_window_enabled);
     const availabilityBounds = getActivityBounds(now, activity, settings);
@@ -592,9 +770,14 @@ export function getActivities({ includeInactive = false } = {}) {
       active: Boolean(activity.active),
       time_limit_enabled: Boolean(activity.time_limit_enabled),
       availability_window_enabled: availabilityWindowEnabled,
+      weekly_window_enabled: weeklyWindowEnabled,
+      weekly_days: normalizeWeeklyDays(activity.weekly_days),
       monthly_window_enabled: monthlyWindowEnabled,
       yearly_window_enabled: yearlyWindowEnabled,
       daily_limit_enabled: dailyLimitEnabled,
+      waitlist_enabled: Boolean(activity.waitlist_enabled),
+      confirmed_spots: activity.confirmed_spots === null ? null : Number(activity.confirmed_spots),
+      waitlist_spots: activity.waitlist_spots === null ? null : Number(activity.waitlist_spots),
       alarm_enabled: Boolean(activity.alarm_enabled),
       daily_used: dailyUsed,
       daily_remaining: remaining,
@@ -621,11 +804,12 @@ export function createActivity(payload) {
        (name, name_es, name_hmn, name_so,
         duration_minutes, time_limit_enabled, availability_window_enabled,
         availability_start, availability_end,
+        weekly_window_enabled, weekly_days,
         monthly_window_enabled, monthly_start_day, monthly_end_day,
         yearly_window_enabled, yearly_start, yearly_end,
-        daily_limit_enabled, daily_limit,
+        daily_limit_enabled, daily_limit, waitlist_enabled, confirmed_spots, waitlist_spots,
         alarm_enabled, alarm_minutes_before, icon, active, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       activity.name,
@@ -637,6 +821,8 @@ export function createActivity(payload) {
       activity.availabilityWindowEnabled ? 1 : 0,
       activity.availabilityStart,
       activity.availabilityEnd,
+      activity.weeklyWindowEnabled ? 1 : 0,
+      activity.weeklyDays,
       activity.monthlyWindowEnabled ? 1 : 0,
       activity.monthlyStartDay,
       activity.monthlyEndDay,
@@ -645,6 +831,9 @@ export function createActivity(payload) {
       activity.yearlyEnd,
       activity.dailyLimitEnabled ? 1 : 0,
       activity.dailyLimit,
+      activity.waitlistEnabled ? 1 : 0,
+      activity.confirmedSpots,
+      activity.waitlistSpots,
       activity.alarmEnabled ? 1 : 0,
       activity.alarmMinutesBefore,
       activity.icon,
@@ -674,9 +863,11 @@ export function updateActivity(id, payload) {
      SET name = ?, name_es = ?, name_hmn = ?, name_so = ?,
          duration_minutes = ?, time_limit_enabled = ?,
          availability_window_enabled = ?, availability_start = ?, availability_end = ?,
+         weekly_window_enabled = ?, weekly_days = ?,
          monthly_window_enabled = ?, monthly_start_day = ?, monthly_end_day = ?,
          yearly_window_enabled = ?, yearly_start = ?, yearly_end = ?,
-         daily_limit_enabled = ?, daily_limit = ?, alarm_enabled = ?,
+         daily_limit_enabled = ?, daily_limit = ?, waitlist_enabled = ?,
+         confirmed_spots = ?, waitlist_spots = ?, alarm_enabled = ?,
          alarm_minutes_before = ?, icon = ?, active = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ).run(
@@ -689,6 +880,8 @@ export function updateActivity(id, payload) {
     activity.availabilityWindowEnabled ? 1 : 0,
     activity.availabilityStart,
     activity.availabilityEnd,
+    activity.weeklyWindowEnabled ? 1 : 0,
+    activity.weeklyDays,
     activity.monthlyWindowEnabled ? 1 : 0,
     activity.monthlyStartDay,
     activity.monthlyEndDay,
@@ -697,6 +890,9 @@ export function updateActivity(id, payload) {
     activity.yearlyEnd,
     activity.dailyLimitEnabled ? 1 : 0,
     activity.dailyLimit,
+    activity.waitlistEnabled ? 1 : 0,
+    activity.confirmedSpots,
+    activity.waitlistSpots,
     activity.alarmEnabled ? 1 : 0,
     activity.alarmMinutesBefore,
     activity.icon,
@@ -817,6 +1013,18 @@ function validateActivityAvailability(activities, settings, now = new Date()) {
   });
 }
 
+function resolveServiceSpot(activity, usedToday) {
+  const used = Math.max(0, Number(usedToday || 0));
+  if (!activity.waitlist_enabled) {
+    return { status: "confirmed", number: used + 1 };
+  }
+  const confirmedSpots = Math.max(0, Number(activity.confirmed_spots || 0));
+  if (used < confirmedSpots) {
+    return { status: "confirmed", number: used + 1 };
+  }
+  return { status: "waitlist", number: used - confirmedSpots + 1 };
+}
+
 export function createCheckIn({ activityIds, language, signIn }) {
   ensureCurrentDashboardDay();
   if (!Array.isArray(activityIds) || activityIds.length === 0) {
@@ -831,10 +1039,12 @@ export function createCheckIn({ activityIds, language, signIn }) {
     `SELECT id, name, name_es, name_hmn, name_so,
             duration_minutes, time_limit_enabled, availability_window_enabled,
             availability_start, availability_end,
+            weekly_window_enabled, weekly_days,
             monthly_window_enabled, monthly_start_day, monthly_end_day,
             yearly_window_enabled, yearly_start, yearly_end,
             daily_limit_enabled,
-            daily_limit, alarm_enabled, alarm_minutes_before
+            daily_limit, waitlist_enabled, confirmed_spots, waitlist_spots,
+            alarm_enabled, alarm_minutes_before
      FROM activities
      WHERE active = 1 AND id IN (${placeholders})
      ORDER BY sort_order, name`,
@@ -843,9 +1053,14 @@ export function createCheckIn({ activityIds, language, signIn }) {
     ...activity,
     time_limit_enabled: Boolean(activity.time_limit_enabled),
     availability_window_enabled: Boolean(activity.availability_window_enabled),
+    weekly_window_enabled: Boolean(activity.weekly_window_enabled),
+    weekly_days: normalizeWeeklyDays(activity.weekly_days),
     monthly_window_enabled: Boolean(activity.monthly_window_enabled),
     yearly_window_enabled: Boolean(activity.yearly_window_enabled),
     daily_limit_enabled: Boolean(activity.daily_limit_enabled),
+    waitlist_enabled: Boolean(activity.waitlist_enabled),
+    confirmed_spots: activity.confirmed_spots === null ? null : Number(activity.confirmed_spots),
+    waitlist_spots: activity.waitlist_spots === null ? null : Number(activity.waitlist_spots),
     alarm_enabled: Boolean(activity.alarm_enabled)
   }));
   if (activities.length !== new Set(activityIds.map(Number)).size) {
@@ -873,6 +1088,7 @@ export function createCheckIn({ activityIds, language, signIn }) {
 
     validateDailyLimits(activities);
     validateActivityAvailability(activities, settings);
+    const usageBefore = activityUsageCounts();
     const checkInInfo = db
       .prepare(
         `INSERT INTO check_ins (guest_id, sign_in_type, language, status)
@@ -895,12 +1111,14 @@ export function createCheckIn({ activityIds, language, signIn }) {
         duration_minutes, is_timed,
         activity_window_enabled, activity_start_time, activity_end_time,
         scheduled_start, scheduled_end,
-        alarm_enabled, alarm_minutes_before, status, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Waiting', ?)`
+        alarm_enabled, alarm_minutes_before, service_spot_status, service_spot_number,
+        status, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Waiting', ?)`
     );
     activities.forEach((activity, index) => {
       const timed = timedByActivity.get(Number(activity.id));
       const translations = buildScheduledActivityTranslations(activity);
+      const spot = resolveServiceSpot(activity, usageBefore.get(Number(activity.id)) || 0);
       insertItem.run(
         checkInId,
         activity.id,
@@ -918,8 +1136,11 @@ export function createCheckIn({ activityIds, language, signIn }) {
         timed?.scheduled_end || null,
         timed?.alarm_enabled || 0,
         timed?.alarm_minutes_before || activity.alarm_minutes_before || 5,
+        spot.status,
+        spot.number,
         index + 1
       );
+      usageBefore.set(Number(activity.id), (usageBefore.get(Number(activity.id)) || 0) + 1);
     });
     return checkInId;
   });
@@ -1725,13 +1946,8 @@ export function createAnalyticsWorkbook({ period = "day", date } = {}) {
 }
 
 export function getExportSettings() {
-  const appPassword = getSettingValue("daily_export_gmail_app_password");
   return {
-    export_time: getSettingValue("daily_export_time") || "03:00",
-    recipient: getSettingValue("daily_export_recipient"),
-    gmail_sender: getSettingValue("daily_export_gmail_sender"),
-    gmail_app_password_configured: Boolean(appPassword),
-    raw_retention_days: Math.max(7, Number(getSettingValue("daily_export_raw_retention_days") || 7))
+    export_time: getSettingValue("daily_export_time") || "03:00"
   };
 }
 
@@ -1740,25 +1956,9 @@ export function updateExportSettings(payload = {}) {
     if (payload.export_time !== undefined) {
       setSettingValue("daily_export_time", normalizeClockTime(payload.export_time, "03:00"));
     }
-    if (payload.recipient !== undefined) {
-      setSettingValue("daily_export_recipient", normalizeEmailList(payload.recipient));
-    }
-    if (payload.gmail_sender !== undefined) {
-      setSettingValue("daily_export_gmail_sender", normalizeEmailAddress(payload.gmail_sender));
-    }
-    if (payload.gmail_app_password !== undefined) {
-      const password = normalizeGmailAppPassword(payload.gmail_app_password);
-      if (password) setSettingValue("daily_export_gmail_app_password", password);
-    }
-    if (payload.clear_gmail_app_password) {
-      setSettingValue("daily_export_gmail_app_password", "");
-    }
-    if (payload.raw_retention_days !== undefined) {
-      setSettingValue(
-        "daily_export_raw_retention_days",
-        String(Math.max(7, Number(payload.raw_retention_days || 7)))
-      );
-    }
+    setSettingValue("daily_export_recipient", "");
+    setSettingValue("daily_export_gmail_sender", "");
+    setSettingValue("daily_export_gmail_app_password", "");
   });
   transaction();
   return getExportSettings();
@@ -1766,20 +1966,14 @@ export function updateExportSettings(payload = {}) {
 
 export function listDailyExports() {
   return rows(
-    `SELECT id, report_date, filename, created_at, emailed_at, email_status, recipient, error_message
+    `SELECT id, report_date, filename, created_at
      FROM daily_export_archives
      ORDER BY report_date DESC, id DESC
      LIMIT 90`
   );
 }
 
-export async function runDailyExportArchive({
-  date,
-  sendEmail = true,
-  force = false,
-  mailer = null,
-  now = new Date()
-} = {}) {
+export async function runDailyExportArchive({ date, force = false, now = new Date() } = {}) {
   const reportDate = normalizeReportDateKey(date) || previousDateKey(now);
   const existing = one("SELECT * FROM daily_export_archives WHERE report_date = ?", [reportDate]);
   if (existing && !force) return normalizeExportArchive(existing);
@@ -1793,23 +1987,13 @@ export async function runDailyExportArchive({
   const archived = upsertDailyExportArchive({
     reportDate,
     filename,
-    filePath,
-    emailStatus: "not_configured",
-    recipient: "",
-    errorMessage: ""
+    filePath
   });
 
-  let emailed = archived;
-  if (sendEmail) {
-    emailed = await emailDailyExportArchive(archived.id, { mailer });
-  }
-  if (emailed.email_status !== "failed") {
-    purgeArchivedRawRows();
-  }
-  return emailed;
+  return archived;
 }
 
-export async function runDueDailyExports({ now = new Date(), mailer = null } = {}) {
+export async function runDueDailyExports({ now = new Date() } = {}) {
   const settings = getExportSettings();
   const exportTime = normalizeClockTime(settings.export_time, "03:00");
   const [hour, minute] = exportTime.split(":").map(Number);
@@ -1834,34 +2018,9 @@ export async function runDueDailyExports({ now = new Date(), mailer = null } = {
 
   const completed = [];
   for (const reportDate of dueDates) {
-    completed.push(await runDailyExportArchive({ date: reportDate, sendEmail: true, mailer, now }));
+    completed.push(await runDailyExportArchive({ date: reportDate, now }));
   }
   return completed;
-}
-
-export async function sendDailyExportTestEmail({ mailer = null } = {}) {
-  const settings = getExportSettings();
-  const recipient = settings.recipient;
-  if (!recipient) {
-    const error = new Error("Enter a recipient email for daily exports.");
-    error.status = 400;
-    throw error;
-  }
-  const transporter = mailer || createGmailTransport(settings);
-  try {
-    await transporter.verify?.();
-    await transporter.sendMail({
-      from: `"Listening House Kiosk" <${settings.gmail_sender}>`,
-      to: recipient,
-      subject: "Listening House daily export test",
-      text: "This is a test message from the Listening House kiosk system. Daily spreadsheets will be attached to future archive emails."
-    });
-  } catch (error) {
-    const wrapped = new Error(formatEmailDeliveryError(error));
-    wrapped.status = 502;
-    throw wrapped;
-  }
-  return { ok: true, recipient };
 }
 
 export function getDailyExportDownload(id) {
@@ -1877,119 +2036,19 @@ export function getDailyExportDownload(id) {
   };
 }
 
-async function emailDailyExportArchive(id, { mailer = null } = {}) {
-  const archive = one("SELECT * FROM daily_export_archives WHERE id = ?", [id]);
-  if (!archive) {
-    const error = new Error("Daily export archive not found.");
-    error.status = 404;
-    throw error;
-  }
-  const settings = getExportSettings();
-  if (!settings.recipient || !settings.gmail_sender || !isGmailConfigured()) {
-    return updateDailyExportEmailStatus(id, {
-      emailStatus: "not_configured",
-      recipient: settings.recipient,
-      errorMessage: "Gmail sender, app password, and recipient are required before emailing."
-    });
-  }
-
-  try {
-    const transporter = mailer || createGmailTransport(settings);
-    await transporter.verify?.();
-    await transporter.sendMail({
-      from: `"Listening House Kiosk" <${settings.gmail_sender}>`,
-      to: settings.recipient,
-      subject: `Listening House daily export for ${archive.report_date}`,
-      text: `Attached is the Listening House daily spreadsheet archive for ${archive.report_date}.`,
-      attachments: [
-        {
-          filename: archive.filename,
-          path: archive.file_path
-        }
-      ]
-    });
-    return updateDailyExportEmailStatus(id, {
-      emailStatus: "sent",
-      recipient: settings.recipient,
-      emailedAt: new Date().toISOString(),
-      errorMessage: ""
-    });
-  } catch (error) {
-    return updateDailyExportEmailStatus(id, {
-      emailStatus: "failed",
-      recipient: settings.recipient,
-      errorMessage: formatEmailDeliveryError(error)
-    });
-  }
-}
-
-function createGmailTransport(settings) {
-  const password = getSettingValue("daily_export_gmail_app_password");
-  const sender = normalizeEmailAddress(settings.gmail_sender);
-  if (!sender || !password) {
-    const error = new Error(
-      "Gmail sender and Gmail app password are required. Enter the Gmail address that will send the spreadsheet, plus a Google app password."
-    );
-    error.status = 400;
-    throw error;
-  }
-  return nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 20000,
-    auth: {
-      user: sender,
-      pass: password
-    },
-    tls: {
-      servername: "smtp.gmail.com"
-    }
-  });
-}
-
-function isGmailConfigured() {
-  return Boolean(getSettingValue("daily_export_gmail_app_password"));
-}
-
-function upsertDailyExportArchive({
-  reportDate,
-  filename,
-  filePath,
-  emailStatus,
-  recipient,
-  errorMessage
-}) {
+function upsertDailyExportArchive({ reportDate, filename, filePath }) {
   db.prepare(
     `INSERT INTO daily_export_archives
-       (report_date, filename, file_path, created_at, email_status, recipient, error_message)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
+       (report_date, filename, file_path, created_at)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT(report_date) DO UPDATE SET
        filename = excluded.filename,
        file_path = excluded.file_path,
-       created_at = CURRENT_TIMESTAMP,
-       emailed_at = NULL,
-       email_status = excluded.email_status,
-       recipient = excluded.recipient,
-       error_message = excluded.error_message`
-  ).run(reportDate, filename, filePath, emailStatus, recipient, errorMessage);
+       created_at = CURRENT_TIMESTAMP`
+  ).run(reportDate, filename, filePath);
   return normalizeExportArchive(
     one("SELECT * FROM daily_export_archives WHERE report_date = ?", [reportDate])
   );
-}
-
-function updateDailyExportEmailStatus(
-  id,
-  { emailStatus, recipient, emailedAt = null, errorMessage }
-) {
-  db.prepare(
-    `UPDATE daily_export_archives
-     SET email_status = ?, recipient = ?, emailed_at = ?, error_message = ?
-     WHERE id = ?`
-  ).run(emailStatus, recipient || "", emailedAt, errorMessage || "", id);
-  return normalizeExportArchive(one("SELECT * FROM daily_export_archives WHERE id = ?", [id]));
 }
 
 function normalizeExportArchive(row) {
@@ -1998,58 +2057,122 @@ function normalizeExportArchive(row) {
     id: row.id,
     report_date: row.report_date,
     filename: row.filename,
-    created_at: row.created_at,
-    emailed_at: row.emailed_at,
-    email_status: row.email_status,
-    recipient: row.recipient || "",
-    error_message: row.error_message || ""
+    created_at: row.created_at
   };
 }
 
-function purgeArchivedRawRows() {
-  const retentionDays = Math.max(
-    7,
-    Number(getSettingValue("daily_export_raw_retention_days") || 7)
-  );
-  const cutoff = new Date();
-  cutoff.setHours(0, 0, 0, 0);
-  cutoff.setDate(cutoff.getDate() - retentionDays);
-  const cutoffKey = formatDateKey(cutoff);
-  const archivedDates = rows(
-    `SELECT report_date, file_path
-     FROM daily_export_archives
-     WHERE report_date < ?`,
-    [cutoffKey]
-  ).filter((archive) => archive.file_path && fs.existsSync(archive.file_path));
-  if (!archivedDates.length) return 0;
+export function getDataDeletionSettings(now = new Date()) {
+  const settings = {
+    enabled: getSettingValue("yearly_data_deletion_enabled") === "1",
+    month_day: normalizeMonthDay(getSettingValue("yearly_data_deletion_month_day"), "01-01"),
+    time: normalizeClockTime(getSettingValue("yearly_data_deletion_time"), "03:00"),
+    last_run_year: getSettingValue("yearly_data_deletion_last_run_year")
+  };
+  return {
+    ...settings,
+    warning: getDataDeletionWarning(settings, now)
+  };
+}
 
+export function updateDataDeletionSettings(payload = {}) {
   const transaction = db.transaction(() => {
-    let deleted = 0;
-    for (const archive of archivedDates) {
-      const ids = rows("SELECT id FROM check_ins WHERE substr(checked_in_at, 1, 10) = ?", [
-        archive.report_date
-      ]).map((row) => row.id);
-      if (!ids.length) continue;
-      const placeholders = ids.map(() => "?").join(",");
-      db.prepare(
-        `DELETE FROM status_history
-         WHERE scheduled_item_id IN (
-           SELECT id FROM scheduled_activity_items WHERE check_in_id IN (${placeholders})
-         )`
-      ).run(...ids);
-      db.prepare(`DELETE FROM scheduled_activity_items WHERE check_in_id IN (${placeholders})`).run(
-        ...ids
-      );
-      const info = db.prepare(`DELETE FROM check_ins WHERE id IN (${placeholders})`).run(...ids);
-      deleted += info.changes;
+    if (payload.enabled !== undefined) {
+      setSettingValue("yearly_data_deletion_enabled", payload.enabled ? "1" : "0");
     }
-    db.prepare(
-      `DELETE FROM guests
-       WHERE id NOT IN (SELECT DISTINCT guest_id FROM check_ins)`
-    ).run();
-    return deleted;
+    if (payload.month_day !== undefined) {
+      setSettingValue(
+        "yearly_data_deletion_month_day",
+        normalizeMonthDay(payload.month_day, "01-01")
+      );
+    }
+    if (payload.time !== undefined) {
+      setSettingValue("yearly_data_deletion_time", normalizeClockTime(payload.time, "03:00"));
+    }
   });
-  return transaction();
+  transaction();
+  return getDataDeletionSettings();
+}
+
+export function getDataDeletionWarning(settings = getDataDeletionSettings(), now = new Date()) {
+  if (!settings.enabled) return null;
+  const scheduledAt = scheduledDeletionDateForYear(now.getFullYear(), settings);
+  const warningStartsAt = new Date(scheduledAt);
+  warningStartsAt.setDate(warningStartsAt.getDate() - 14);
+  const alreadyRan = String(settings.last_run_year || "") === String(scheduledAt.getFullYear());
+  if (alreadyRan || now < warningStartsAt) return null;
+  const daysRemaining = Math.max(0, Math.ceil((scheduledAt - now) / 86_400_000));
+  return {
+    scheduled_at: scheduledAt.toISOString(),
+    warning_starts_at: warningStartsAt.toISOString(),
+    days_remaining: daysRemaining,
+    message:
+      daysRemaining === 0
+        ? "Yearly data deletion is scheduled for today. Guest history and spreadsheet archives will be deleted."
+        : `Yearly data deletion is scheduled in ${daysRemaining} day${
+            daysRemaining === 1 ? "" : "s"
+          }. Guest history and spreadsheet archives will be deleted.`
+  };
+}
+
+export function runDueYearlyDataDeletion({ now = new Date() } = {}) {
+  const settings = getDataDeletionSettings(now);
+  if (!settings.enabled) return null;
+  const scheduledAt = scheduledDeletionDateForYear(now.getFullYear(), settings);
+  if (String(settings.last_run_year || "") === String(scheduledAt.getFullYear())) return null;
+  if (now < scheduledAt) return null;
+  return runYearlyDataDeletion({ now, reason: "scheduled" });
+}
+
+export function runYearlyDataDeletion({ now = new Date(), reason = "manual" } = {}) {
+  const deletedFiles = clearExportFiles();
+  const deleted = db.transaction(() => {
+    const before = {
+      guests: one("SELECT COUNT(*) AS count FROM guests").count,
+      checkIns: one("SELECT COUNT(*) AS count FROM check_ins").count,
+      scheduledItems: one("SELECT COUNT(*) AS count FROM scheduled_activity_items").count,
+      statusHistory: one("SELECT COUNT(*) AS count FROM status_history").count,
+      archives: one("SELECT COUNT(*) AS count FROM daily_export_archives").count
+    };
+    db.prepare("DELETE FROM status_history").run();
+    db.prepare("DELETE FROM scheduled_activity_items").run();
+    db.prepare("DELETE FROM check_ins").run();
+    db.prepare("DELETE FROM guests").run();
+    db.prepare("DELETE FROM daily_export_archives").run();
+    setCurrentDashboardDayStart(now, { useCheckInFloor: false });
+    setSettingValue("yearly_data_deletion_last_run_year", String(now.getFullYear()));
+    return before;
+  })();
+  return {
+    ok: true,
+    reason,
+    ran_at: now.toISOString(),
+    deleted,
+    deleted_export_files: deletedFiles,
+    settings: getDataDeletionSettings(now)
+  };
+}
+
+function scheduledDeletionDateForYear(year, settings) {
+  const [monthValue, dayValue] = String(settings.month_day || "01-01")
+    .split("-")
+    .map(Number);
+  const [hour, minute] = normalizeClockTime(settings.time, "03:00").split(":").map(Number);
+  const month = Math.min(12, Math.max(1, monthValue || 1));
+  const maxDay = new Date(year, month, 0).getDate();
+  const day = Math.min(maxDay, Math.max(1, dayValue || 1));
+  return new Date(year, month - 1, day, hour, minute, 0, 0);
+}
+
+function clearExportFiles() {
+  if (!fs.existsSync(exportDirectory)) return 0;
+  let deleted = 0;
+  for (const entry of fs.readdirSync(exportDirectory)) {
+    const filePath = path.join(exportDirectory, entry);
+    fs.rmSync(filePath, { recursive: true, force: true });
+    deleted += 1;
+  }
+  fs.mkdirSync(exportDirectory, { recursive: true });
+  return deleted;
 }
 
 function normalizeReportDateKey(value) {
@@ -2060,50 +2183,6 @@ function previousDateKey(referenceDate = new Date()) {
   const date = new Date(referenceDate);
   date.setDate(date.getDate() - 1);
   return formatDateKey(date);
-}
-
-function normalizeEmailList(value) {
-  return String(value || "")
-    .split(/[;,]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .join(", ")
-    .slice(0, 500);
-}
-
-function normalizeEmailAddress(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .slice(0, 300);
-}
-
-function normalizeGmailAppPassword(value) {
-  return String(value || "")
-    .replace(/\s+/g, "")
-    .trim()
-    .slice(0, 80);
-}
-
-function formatEmailDeliveryError(error) {
-  const message = String(error?.message || "Email could not be sent.");
-  const response = String(error?.response || "");
-  const combined = `${message} ${response}`.toLowerCase();
-  if (combined.includes("invalid login") || combined.includes("535")) {
-    return "Gmail rejected the login. Use the Gmail address in Sender and a Google app password, not the normal Gmail password.";
-  }
-  if (combined.includes("less secure") || combined.includes("application-specific")) {
-    return "Gmail requires a Google app password for this system. Turn on 2-Step Verification for that Gmail account, then create an app password.";
-  }
-  if (
-    combined.includes("network") ||
-    combined.includes("timeout") ||
-    combined.includes("econn") ||
-    combined.includes("enotfound")
-  ) {
-    return "The server could not reach Gmail. Check that this computer or Raspberry Pi has internet access, then try Send test email again.";
-  }
-  return `Email could not be sent: ${message}`;
 }
 
 function formatSignInType(value) {

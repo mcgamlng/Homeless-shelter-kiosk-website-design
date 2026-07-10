@@ -28,6 +28,12 @@ if [[ ! -d "$PROJECT_DIR/dist" ]]; then
   npm run build
 fi
 
+if [[ ! -d "$PROJECT_DIR/data/hmong-voice/Kong" ]]; then
+  npm run speech:install-hmong || echo "Hmong voice download failed. The kiosk can still run; retry later."
+fi
+
+npm run speech:preload || echo "Speech preload could not finish. Read aloud will still use live fallback when available."
+
 sudo tee /etc/systemd/system/listening-house.service >/dev/null <<SERVICE
 [Unit]
 Description=Listening House Guest Check-In System

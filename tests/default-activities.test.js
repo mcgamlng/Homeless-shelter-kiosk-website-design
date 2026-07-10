@@ -14,11 +14,25 @@ test("Listening House default activities seed and preserve custom additions", as
     database = (await import("../server/db.js")).db;
 
     const seeded = repository.getActivities({ includeInactive: true });
-    assert.equal(seeded.length, 18);
-    assert.ok(seeded.some((activity) => activity.name === "Housing / Outreach Help"));
-    assert.ok(seeded.some((activity) => activity.name === "Staff / Volunteers Ready to Listen"));
-    assert.ok(seeded.some((activity) => activity.name === "Bathrooms / Showers"));
-    assert.ok(seeded.some((activity) => activity.time_limit_enabled === false));
+    assert.equal(seeded.length, 5);
+    const showers = seeded.find((activity) => activity.name === "Showers");
+    const vitalRecords = seeded.find((activity) => activity.name === "Vital Records");
+    const beds = seeded.find((activity) => activity.name === "Beds");
+    const quietRooms = seeded.find((activity) => activity.name === "Quiet Rooms");
+    assert.equal(showers.duration_minutes, 30);
+    assert.equal(showers.weekly_window_enabled, true);
+    assert.equal(showers.weekly_days, "0,1,2,3,4,6");
+    assert.equal(showers.availability_start, "14:00");
+    assert.equal(showers.availability_end, "17:00");
+    assert.equal(showers.alarm_enabled, true);
+    assert.equal(vitalRecords.time_limit_enabled, false);
+    assert.equal(vitalRecords.weekly_days, "1,2,3,4");
+    assert.equal(beds.daily_limit, 12);
+    assert.equal(beds.confirmed_spots, 6);
+    assert.equal(beds.waitlist_spots, 6);
+    assert.equal(quietRooms.daily_limit, 6);
+    assert.equal(quietRooms.confirmed_spots, 3);
+    assert.equal(quietRooms.waitlist_spots, 3);
 
     const custom = repository.createActivity({
       name: "Custom Staff Activity",
@@ -29,10 +43,7 @@ test("Listening House default activities seed and preserve custom additions", as
     repository.applyDefaultActivities();
     const afterApply = repository.getActivities({ includeInactive: true });
     assert.ok(afterApply.some((activity) => activity.id === custom.id));
-    assert.equal(
-      afterApply.filter((activity) => activity.name === "Housing / Outreach Help").length,
-      1
-    );
+    assert.equal(afterApply.filter((activity) => activity.name === "Showers").length, 1);
   } finally {
     if (database?.open) database.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

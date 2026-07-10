@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS activities (
   availability_window_enabled INTEGER NOT NULL DEFAULT 0,
   availability_start TEXT NOT NULL DEFAULT '08:00',
   availability_end TEXT NOT NULL DEFAULT '16:00',
+  weekly_window_enabled INTEGER NOT NULL DEFAULT 0,
+  weekly_days TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6',
   monthly_window_enabled INTEGER NOT NULL DEFAULT 0,
   monthly_start_day INTEGER NOT NULL DEFAULT 1,
   monthly_end_day INTEGER NOT NULL DEFAULT 31,
@@ -25,6 +27,9 @@ CREATE TABLE IF NOT EXISTS activities (
   yearly_end TEXT NOT NULL DEFAULT '12-31',
   daily_limit_enabled INTEGER NOT NULL DEFAULT 0,
   daily_limit INTEGER CHECK (daily_limit IS NULL OR daily_limit > 0),
+  waitlist_enabled INTEGER NOT NULL DEFAULT 0,
+  confirmed_spots INTEGER CHECK (confirmed_spots IS NULL OR confirmed_spots >= 0),
+  waitlist_spots INTEGER CHECK (waitlist_spots IS NULL OR waitlist_spots >= 0),
   alarm_enabled INTEGER NOT NULL DEFAULT 0,
   alarm_minutes_before INTEGER NOT NULL DEFAULT 5 CHECK (alarm_minutes_before > 0),
   icon TEXT,
@@ -72,6 +77,8 @@ CREATE TABLE IF NOT EXISTS scheduled_activity_items (
   scheduled_end TEXT,
   alarm_enabled INTEGER NOT NULL DEFAULT 0,
   alarm_minutes_before INTEGER NOT NULL DEFAULT 5,
+  service_spot_status TEXT NOT NULL DEFAULT 'confirmed',
+  service_spot_number INTEGER,
   status TEXT NOT NULL DEFAULT 'Waiting',
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -95,11 +102,19 @@ CREATE TABLE IF NOT EXISTS daily_export_archives (
   report_date TEXT NOT NULL UNIQUE,
   filename TEXT NOT NULL,
   file_path TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS staff_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  display_name TEXT NOT NULL,
+  pin_hash TEXT NOT NULL,
+  can_dashboard INTEGER NOT NULL DEFAULT 0,
+  can_admin INTEGER NOT NULL DEFAULT 0,
+  can_about INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  emailed_at TEXT,
-  email_status TEXT NOT NULL DEFAULT 'not_configured',
-  recipient TEXT,
-  error_message TEXT
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_check_ins_status ON check_ins(status);
@@ -112,3 +127,4 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_status ON scheduled_activity_items(stat
 CREATE INDEX IF NOT EXISTS idx_scheduled_start ON scheduled_activity_items(scheduled_start);
 CREATE INDEX IF NOT EXISTS idx_status_history_changed_at ON status_history(changed_at);
 CREATE INDEX IF NOT EXISTS idx_daily_exports_report_date ON daily_export_archives(report_date);
+CREATE INDEX IF NOT EXISTS idx_staff_users_display_name ON staff_users(display_name);

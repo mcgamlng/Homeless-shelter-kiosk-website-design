@@ -9,7 +9,6 @@ import {
   Link2,
   Lock,
   LogOut,
-  Mail,
   MonitorX,
   Palette,
   Plus,
@@ -165,6 +164,8 @@ function createNewActivityDraft() {
     availability_window_enabled: false,
     availability_start: "08:00",
     availability_end: "16:00",
+    weekly_window_enabled: false,
+    weekly_days: "0,1,2,3,4,5,6",
     monthly_window_enabled: false,
     monthly_start_day: 1,
     monthly_end_day: 31,
@@ -173,6 +174,9 @@ function createNewActivityDraft() {
     yearly_end: "12-31",
     daily_limit_enabled: false,
     daily_limit: 10,
+    waitlist_enabled: false,
+    confirmed_spots: 0,
+    waitlist_spots: 0,
     alarm_enabled: false,
     alarm_minutes_before: 5,
     icon: "heart-hand",
@@ -182,12 +186,24 @@ function createNewActivityDraft() {
 
 function createExportSettingsDraft(settings = {}) {
   return {
-    export_time: settings.export_time || "03:00",
-    recipient: settings.recipient || "",
-    gmail_sender: settings.gmail_sender || "",
-    gmail_app_password: "",
-    raw_retention_days: settings.raw_retention_days || 7,
-    clear_gmail_app_password: false
+    export_time: settings.export_time || "03:00"
+  };
+}
+
+function createDataDeletionDraft(settings = {}) {
+  return {
+    enabled: Boolean(settings.enabled),
+    month_day: settings.month_day || "01-01",
+    time: settings.time || "03:00"
+  };
+}
+
+function createStaffUserDraft() {
+  return {
+    display_name: "",
+    pin: "",
+    permissions: { dashboard: true, admin: false, about: false },
+    active: true
   };
 }
 
@@ -223,6 +239,16 @@ const monthOptions = [
   label,
   value: String(index + 1).padStart(2, "0")
 }));
+
+const weekDayOptions = [
+  ["0", "Sunday"],
+  ["1", "Monday"],
+  ["2", "Tuesday"],
+  ["3", "Wednesday"],
+  ["4", "Thursday"],
+  ["5", "Friday"],
+  ["6", "Saturday"]
+];
 
 function splitMonthDay(value, fallback = "01-01") {
   const match = String(value || fallback).match(/^(\d{2})-(\d{2})$/);
@@ -267,7 +293,17 @@ export default function Admin() {
   const [dailyExportMessage, setDailyExportMessage] = useState("");
   const [savingExportSettings, setSavingExportSettings] = useState(false);
   const [runningDailyExport, setRunningDailyExport] = useState(false);
-  const [testingExportEmail, setTestingExportEmail] = useState(false);
+  const [dataDeletionSettings, setDataDeletionSettings] = useState(null);
+  const [dataDeletionDraft, setDataDeletionDraft] = useState(createDataDeletionDraft);
+  const [dataDeletionMessage, setDataDeletionMessage] = useState("");
+  const [savingDataDeletion, setSavingDataDeletion] = useState(false);
+  const [runningDataDeletion, setRunningDataDeletion] = useState(false);
+  const [staffUsers, setStaffUsers] = useState([]);
+  const [staffUserDraft, setStaffUserDraft] = useState(createStaffUserDraft);
+  const [staffUserMessage, setStaffUserMessage] = useState("");
+  const [savingStaffUser, setSavingStaffUser] = useState(false);
+  const [speechPreloadMessage, setSpeechPreloadMessage] = useState("");
+  const [preloadingSpeech, setPreloadingSpeech] = useState(false);
   const [systemControlMessage, setSystemControlMessage] = useState("");
   const [runningSystemAction, setRunningSystemAction] = useState("");
   const kioskPreviewStyle = useMemo(
@@ -301,6 +337,8 @@ export default function Admin() {
     if (!signedIn) return;
     loadAnalytics(token);
     loadDailyExportTools(token);
+    loadDataDeletionTools(token);
+    loadStaffUsers(token);
   }, [signedIn, token, analyticsPeriod, analyticsDate]);
 
   useEffect(() => {
@@ -321,7 +359,7 @@ export default function Admin() {
     event.preventDefault();
     setMessage("");
     try {
-      const response = await api.adminLogin(pin);
+      const response = await api.adminLogin(pin, { permission: "admin", path: "/admin" });
       sessionStorage.setItem("lh-admin-token", response.token);
       setAdminVerified(false);
       setToken(response.token);
@@ -409,7 +447,10 @@ export default function Admin() {
     setSavingPin(true);
     const authToken = currentAdminToken();
     try {
-      const freshSession = await api.adminLogin(currentPinValue);
+      const freshSession = await api.adminLogin(currentPinValue, {
+        permission: "admin",
+        path: "/admin"
+      });
       await api.changeAdminPin(freshSession.token, {
         currentPin: currentPinValue,
         newPin: newPinValue
@@ -520,12 +561,9 @@ export default function Admin() {
       setExportSettingsDraft(createExportSettingsDraft(nextSettings));
       const archive = await api.runDailyExport(authToken, {
         date: analyticsDate,
-        force: true,
-        sendEmail: true
+        force: true
       });
-      setDailyExportMessage(
-        `Saved ${archive.filename}. Email status: ${formatEmailStatus(archive.email_status)}.`
-      );
+      setDailyExportMessage(`Saved ${archive.filename}.`);
       setDailyExports(await api.getDailyExports(authToken));
     } catch (err) {
       handleAdminError(err, authToken);
@@ -535,22 +573,185 @@ export default function Admin() {
     }
   }
 
-  async function sendTestDailyExportEmail() {
-    setDailyExportMessage("");
-    const authToken = currentAdminToken();
-    setTestingExportEmail(true);
+  async function loadDataDeletionTools(authToken = token) {
     try {
-      const nextSettings = await api.updateExportSettings(authToken, exportSettingsDraft);
-      setExportSettings(nextSettings);
-      setExportSettingsDraft(createExportSettingsDraft(nextSettings));
-      const result = await api.testDailyExportEmail(authToken);
-      setDailyExportMessage(`Test email sent to ${result.recipient}.`);
+      const settings = await api.getDataDeletionSettings(authToken);
+      setDataDeletionSettings(settings);
+      setDataDeletionDraft(createDataDeletionDraft(settings));
     } catch (err) {
       handleAdminError(err, authToken);
-      setDailyExportMessage(err.message);
-    } finally {
-      setTestingExportEmail(false);
     }
+  }
+
+  function updateDataDeletionDraft(key, value) {
+    setDataDeletionDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  async function saveDataDeletionSettings(event) {
+    event.preventDefault();
+    setDataDeletionMessage("");
+    const authToken = currentAdminToken();
+    setSavingDataDeletion(true);
+    try {
+      const settings = await api.updateDataDeletionSettings(authToken, dataDeletionDraft);
+      setDataDeletionSettings(settings);
+      setDataDeletionDraft(createDataDeletionDraft(settings));
+      setDataDeletionMessage("Yearly deletion settings saved.");
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setDataDeletionMessage(err.message);
+    } finally {
+      setSavingDataDeletion(false);
+    }
+  }
+
+  async function runDataDeletionNow() {
+    if (
+      !window.confirm(
+        "Delete all guest names, check-ins, activity history, and spreadsheet archives now? Staff users and app settings will stay."
+      )
+    ) {
+      return;
+    }
+    setDataDeletionMessage("");
+    const authToken = currentAdminToken();
+    setRunningDataDeletion(true);
+    try {
+      const result = await api.runYearlyDataDeletion(authToken);
+      setDataDeletionSettings(result.settings);
+      setDataDeletionDraft(createDataDeletionDraft(result.settings));
+      setDataDeletionMessage(
+        `Deleted ${result.deleted.guests} guest profiles, ${result.deleted.checkIns} check-ins, and ${result.deleted_export_files} spreadsheet files.`
+      );
+      await refresh();
+      setDailyExports(await api.getDailyExports(authToken));
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setDataDeletionMessage(err.message);
+    } finally {
+      setRunningDataDeletion(false);
+    }
+  }
+
+  async function loadStaffUsers(authToken = token) {
+    try {
+      setStaffUsers(await api.getStaffUsers(authToken));
+    } catch (err) {
+      handleAdminError(err, authToken);
+    }
+  }
+
+  function updateStaffUserDraft(key, value) {
+    setStaffUserDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateStaffPermissionDraft(permission, checked) {
+    setStaffUserDraft((current) => ({
+      ...current,
+      permissions: { ...current.permissions, [permission]: checked }
+    }));
+  }
+
+  async function addStaffUser(event) {
+    event.preventDefault();
+    setStaffUserMessage("");
+    const authToken = currentAdminToken();
+    setSavingStaffUser(true);
+    try {
+      await api.createStaffUser(authToken, staffUserDraft);
+      setStaffUserDraft(createStaffUserDraft());
+      setStaffUsers(await api.getStaffUsers(authToken));
+      setStaffUserMessage("Staff user added.");
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setStaffUserMessage(err.message);
+    } finally {
+      setSavingStaffUser(false);
+    }
+  }
+
+  async function updateStaffUser(user, changes) {
+    const authToken = currentAdminToken();
+    setStaffUserMessage("");
+    try {
+      await api.updateStaffUser(authToken, user.id, changes);
+      setStaffUsers(await api.getStaffUsers(authToken));
+      setStaffUserMessage("Staff user updated.");
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setStaffUserMessage(err.message);
+    }
+  }
+
+  async function deleteStaffUser(user) {
+    if (!window.confirm(`Delete staff user ${user.display_name}?`)) return;
+    const authToken = currentAdminToken();
+    setStaffUserMessage("");
+    try {
+      await api.deleteStaffUser(authToken, user.id);
+      setStaffUsers(await api.getStaffUsers(authToken));
+      setStaffUserMessage("Staff user deleted.");
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setStaffUserMessage(err.message);
+    }
+  }
+
+  function buildSpeechPreloadSegments() {
+    const languages = ["en", "es", "hmn", "so"];
+    const phrases = [
+      { key: "welcome_screen", text: "Welcome to Listening House. Start check-in." },
+      { key: "identity_screen", text: "Please enter your first and last name." },
+      { key: "language_screen", text: "Choose your preferred language." },
+      { key: "activities_intro", text: "What do you need today? Choose the support you need." },
+      { key: "confirmation_base", text: "Thank you. Please wait for your name to be called." }
+    ];
+    const activitySegments = (data?.activities || []).map((activity) => ({
+      key: `activity_${activity.id}`,
+      text: activity.name
+    }));
+    return languages.flatMap((language) =>
+      [...phrases, ...activitySegments].map((segment) => ({
+        ...segment,
+        language
+      }))
+    );
+  }
+
+  async function preloadSpeech() {
+    setSpeechPreloadMessage("");
+    setPreloadingSpeech(true);
+    const authToken = currentAdminToken();
+    try {
+      const result = await api.preloadSpeech(authToken, buildSpeechPreloadSegments());
+      setSpeechPreloadMessage(
+        `Speech preload finished: ${result.ready} ready, ${result.failed} failed.`
+      );
+      await refreshSpeechStatus(true);
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setSpeechPreloadMessage(err.message);
+    } finally {
+      setPreloadingSpeech(false);
+    }
+  }
+
+  function testSpeechLanguage(language) {
+    const sampleText = {
+      en: "Welcome to Listening House. Please wait for your name to be called.",
+      es: "Bienvenido a Listening House. Espere a que llamen su nombre.",
+      hmn: "Zoo siab txais tos rau Listening House. Thov tos kom hu koj lub npe.",
+      so: "Ku soo dhowow Listening House. Fadlan sug in magacaaga lagu yeero."
+    };
+    const audio = new Audio(
+      `/api/speech/best?${new URLSearchParams({
+        language,
+        text: sampleText[language]
+      }).toString()}`
+    );
+    audio.play().catch(() => {
+      setSpeechPreloadMessage("Speech test could not play in this browser.");
+    });
   }
 
   async function exitKioskScreen() {
@@ -1140,6 +1341,34 @@ export default function Admin() {
             <RefreshCw size={18} />
             Refresh voices
           </button>
+          <button
+            className="primary-button compact-button"
+            type="button"
+            disabled={!signedIn || preloadingSpeech}
+            onClick={preloadSpeech}
+          >
+            <Volume2 size={18} />
+            {preloadingSpeech ? "Preloading..." : "Preload kiosk speech"}
+          </button>
+        </div>
+
+        <div className="speech-test-actions">
+          {[
+            ["en", "Test English"],
+            ["es", "Test Spanish"],
+            ["hmn", "Test Hmong"],
+            ["so", "Test Somali"]
+          ].map(([languageCode, label]) => (
+            <button
+              className="secondary-button compact-button"
+              type="button"
+              disabled={!signedIn}
+              key={languageCode}
+              onClick={() => testSpeechLanguage(languageCode)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         <div className="speech-status-grid">
@@ -1192,6 +1421,12 @@ export default function Admin() {
             detail="Spanish, Somali, and Hmong Daw try cloud speech before any offline fallback."
           />
           <SpeechStatusCard
+            title="Server speech cache"
+            value={`${speechStatus?.speechCacheItems ?? 0} files`}
+            state={speechStatus?.speechCacheItems ? "ready" : "warning"}
+            detail="Preload kiosk speech to store reusable audio on the Raspberry Pi."
+          />
+          <SpeechStatusCard
             title="Emergency local speech"
             value={speechStatus?.serverSpeechReady ? "Ready" : "Unavailable"}
             state={speechStatus?.serverSpeechReady ? "ready" : "warning"}
@@ -1212,6 +1447,7 @@ export default function Admin() {
           </div>
         ) : null}
         {speechStatusMessage ? <p className="network-status">{speechStatusMessage}</p> : null}
+        {speechPreloadMessage ? <p className="network-status">{speechPreloadMessage}</p> : null}
       </section>
 
       <section className="card-panel system-controls-panel">
@@ -1654,12 +1890,12 @@ export default function Admin() {
         <div className="analytics-heading">
           <div>
             <h2>
-              <Mail size={24} />
+              <Download size={24} />
               Daily Spreadsheet Archive
             </h2>
             <p>
-              At the selected time, the Raspberry Pi saves yesterday&apos;s spreadsheet and emails
-              it when Gmail sender, app password, and recipient are all configured.
+              At the selected time, the Raspberry Pi saves yesterday&apos;s spreadsheet locally.
+              Email delivery has been removed; staff can download archives here.
             </p>
           </div>
           <button
@@ -1673,10 +1909,9 @@ export default function Admin() {
         </div>
 
         <div className="daily-export-help">
-          <strong>Email setup needs three things:</strong>
-          <span>1. Recipient email: where the spreadsheet goes.</span>
-          <span>2. Gmail sender: the Gmail account that sends it.</span>
-          <span>3. Gmail app password: a Google app password, not the normal Gmail password.</span>
+          <strong>Local archive only:</strong>
+          <span>Spreadsheets are saved on this computer or Raspberry Pi in data/exports.</span>
+          <span>Use Download next to an archive to open or save it on another device.</span>
         </div>
 
         <div className="daily-export-grid">
@@ -1691,82 +1926,9 @@ export default function Admin() {
               }
             />
           </label>
-          <label>
-            Recipient email
-            <input
-              type="email"
-              value={exportSettingsDraft.recipient}
-              disabled={!signedIn}
-              placeholder="reports@example.org"
-              onChange={(event) => updateExportSettingsDraft("recipient", event.target.value)}
-            />
-          </label>
-          <label>
-            Gmail sender
-            <input
-              type="email"
-              value={exportSettingsDraft.gmail_sender}
-              disabled={!signedIn}
-              placeholder="sheltergmail@gmail.com"
-              onChange={(event) => updateExportSettingsDraft("gmail_sender", event.target.value)}
-            />
-            <small>The Gmail account used to send the spreadsheet.</small>
-          </label>
-          <label>
-            Gmail app password
-            <input
-              type="password"
-              value={exportSettingsDraft.gmail_app_password}
-              disabled={!signedIn}
-              placeholder={
-                exportSettings?.gmail_app_password_configured
-                  ? "Saved password is set"
-                  : "16-character app password"
-              }
-              onChange={(event) =>
-                updateExportSettingsDraft("gmail_app_password", event.target.value)
-              }
-            />
-            <small>
-              Use a Google app password with spaces allowed; the system removes spaces when saving.
-            </small>
-          </label>
-          <label>
-            Keep raw rows at least
-            <input
-              type="number"
-              min="7"
-              max="3650"
-              value={exportSettingsDraft.raw_retention_days}
-              disabled={!signedIn}
-              onChange={(event) =>
-                updateExportSettingsDraft("raw_retention_days", Number(event.target.value))
-              }
-            />
-          </label>
-          <label className="toggle-field daily-export-clear">
-            <input
-              type="checkbox"
-              checked={Boolean(exportSettingsDraft.clear_gmail_app_password)}
-              disabled={!signedIn}
-              onChange={(event) =>
-                updateExportSettingsDraft("clear_gmail_app_password", event.target.checked)
-              }
-            />
-            Clear saved Gmail app password
-          </label>
         </div>
 
         <div className="daily-export-actions">
-          <button
-            className="secondary-button compact-button"
-            type="button"
-            disabled={!signedIn || testingExportEmail}
-            onClick={sendTestDailyExportEmail}
-          >
-            <Mail size={18} />
-            {testingExportEmail ? "Sending..." : "Send test email"}
-          </button>
           <button
             className="secondary-button compact-button"
             type="button"
@@ -1790,11 +1952,7 @@ export default function Admin() {
                 <div>
                   <strong>{archive.report_date}</strong>
                   <span>{archive.filename}</span>
-                  {archive.error_message ? <small>{archive.error_message}</small> : null}
                 </div>
-                <span className={`email-status is-${archive.email_status}`}>
-                  {formatEmailStatus(archive.email_status)}
-                </span>
                 <a
                   className="secondary-button compact-button"
                   href={api.getDailyExportDownloadUrl(currentAdminToken(), archive.id)}
@@ -1807,6 +1965,191 @@ export default function Admin() {
           )}
         </div>
       </form>
+
+      <form className="card-panel data-deletion-panel" onSubmit={saveDataDeletionSettings}>
+        <div className="analytics-heading">
+          <div>
+            <h2>
+              <Trash2 size={24} />
+              Yearly Data Deletion
+            </h2>
+            <p>
+              Choose one yearly date and time to delete guest history and spreadsheet archives.
+              Staff users, permissions, activities, and kiosk settings are kept.
+            </p>
+          </div>
+          <button
+            className="primary-button compact-button"
+            type="submit"
+            disabled={!signedIn || savingDataDeletion}
+          >
+            <Save size={18} />
+            {savingDataDeletion ? "Saving..." : "Save deletion settings"}
+          </button>
+        </div>
+        {dataDeletionSettings?.warning ? (
+          <div className="data-deletion-warning">
+            <strong>Deletion warning</strong>
+            <span>{dataDeletionSettings.warning.message}</span>
+          </div>
+        ) : null}
+        <div className="daily-export-grid">
+          <label className="toggle-field">
+            <input
+              type="checkbox"
+              checked={Boolean(dataDeletionDraft.enabled)}
+              disabled={!signedIn}
+              onChange={(event) => updateDataDeletionDraft("enabled", event.target.checked)}
+            />
+            Enable yearly deletion
+          </label>
+          <label>
+            Deletion date
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="MM-DD"
+              value={dataDeletionDraft.month_day}
+              disabled={!signedIn}
+              onChange={(event) => updateDataDeletionDraft("month_day", event.target.value)}
+            />
+            <small>Use month-day format, such as 01-15 for January 15.</small>
+          </label>
+          <label>
+            Deletion time
+            <input
+              type="time"
+              value={dataDeletionDraft.time}
+              disabled={!signedIn}
+              onInput={(event) => updateDataDeletionDraft("time", event.currentTarget.value)}
+            />
+          </label>
+        </div>
+        <div className="daily-export-actions">
+          <button
+            className="danger-button compact-button"
+            type="button"
+            disabled={!signedIn || runningDataDeletion}
+            onClick={runDataDeletionNow}
+          >
+            {runningDataDeletion ? "Deleting..." : "Run deletion now"}
+          </button>
+        </div>
+        {dataDeletionMessage ? <p className="network-status">{dataDeletionMessage}</p> : null}
+      </form>
+
+      <section className="card-panel user-control-panel">
+        <div className="analytics-heading">
+          <div>
+            <h2>
+              <ShieldCheck size={24} />
+              User Control
+            </h2>
+            <p>Add staff users and choose which pages they can open. Everyone can use the kiosk.</p>
+          </div>
+        </div>
+
+        <form className="staff-user-form" onSubmit={addStaffUser}>
+          <label>
+            Staff name
+            <input
+              value={staffUserDraft.display_name}
+              disabled={!signedIn}
+              onChange={(event) => updateStaffUserDraft("display_name", event.target.value)}
+            />
+          </label>
+          <label>
+            PIN
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={12}
+              value={staffUserDraft.pin}
+              disabled={!signedIn}
+              onChange={(event) =>
+                updateStaffUserDraft("pin", event.target.value.replace(/\D/g, "").slice(0, 12))
+              }
+            />
+          </label>
+          <div className="permission-checkboxes" aria-label="User permissions">
+            {[
+              ["dashboard", "Dashboard"],
+              ["admin", "Admin Controls"],
+              ["about", "About Page"]
+            ].map(([key, label]) => (
+              <label className="toggle-field" key={key}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(staffUserDraft.permissions[key])}
+                  disabled={!signedIn}
+                  onChange={(event) => updateStaffPermissionDraft(key, event.target.checked)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <button
+            className="primary-button compact-button"
+            type="submit"
+            disabled={!signedIn || savingStaffUser}
+          >
+            <Plus size={18} />
+            {savingStaffUser ? "Adding..." : "Add user"}
+          </button>
+        </form>
+
+        <div className="staff-user-list">
+          {staffUsers.length === 0 ? (
+            <p>No staff users yet. The owner Admin PIN still has full access.</p>
+          ) : (
+            staffUsers.map((user) => (
+              <div className="staff-user-row" key={user.id}>
+                <strong>{user.display_name}</strong>
+                <div className="permission-checkboxes">
+                  {[
+                    ["dashboard", "Dashboard"],
+                    ["admin", "Admin"],
+                    ["about", "About"]
+                  ].map(([key, label]) => (
+                    <label className="toggle-field" key={key}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(user.permissions[key])}
+                        disabled={!signedIn}
+                        onChange={(event) =>
+                          updateStaffUser(user, {
+                            permissions: { ...user.permissions, [key]: event.target.checked }
+                          })
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                <label className="toggle-field">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(user.active)}
+                    disabled={!signedIn}
+                    onChange={(event) => updateStaffUser(user, { active: event.target.checked })}
+                  />
+                  Active
+                </label>
+                <button
+                  className="icon-button delete-activity-button"
+                  type="button"
+                  disabled={!signedIn}
+                  onClick={() => deleteStaffUser(user)}
+                  aria-label={`Delete ${user.display_name}`}
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        {staffUserMessage ? <p className="network-status">{staffUserMessage}</p> : null}
+      </section>
 
       <div className="card-panel activity-admin">
         <h2>Activities</h2>
@@ -2117,6 +2460,20 @@ function ActivityOptionFields({ draft, disabled, onChange }) {
     update(key, `${month}-${String(day).padStart(2, "0")}`);
   }
 
+  function toggleWeeklyDay(day, checked) {
+    const current = new Set(
+      String(draft.weekly_days || "")
+        .split(",")
+        .filter(Boolean)
+    );
+    if (checked) current.add(day);
+    else current.delete(day);
+    update(
+      "weekly_days",
+      [...current].toSorted((a, b) => Number(a) - Number(b)).join(",") || "0,1,2,3,4,5,6"
+    );
+  }
+
   return (
     <div className="activity-option-grid">
       <section>
@@ -2143,6 +2500,37 @@ function ActivityOptionFields({ draft, disabled, onChange }) {
           </label>
         ) : (
           <p>Requests appear in the untimed service queue.</p>
+        )}
+      </section>
+
+      <section>
+        <label className="toggle-field">
+          <input
+            type="checkbox"
+            checked={Boolean(draft.weekly_window_enabled)}
+            disabled={disabled}
+            onChange={(event) => update("weekly_window_enabled", event.target.checked)}
+          />
+          Choose certain days each week
+        </label>
+        {draft.weekly_window_enabled ? (
+          <div className="weekday-checkbox-grid">
+            {weekDayOptions.map(([day, label]) => (
+              <label className="toggle-field" key={day}>
+                <input
+                  type="checkbox"
+                  checked={String(draft.weekly_days || "")
+                    .split(",")
+                    .includes(day)}
+                  disabled={disabled}
+                  onChange={(event) => toggleWeeklyDay(day, event.target.checked)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p>Available every day of the week.</p>
         )}
       </section>
 
@@ -2197,6 +2585,46 @@ function ActivityOptionFields({ draft, disabled, onChange }) {
           </label>
         ) : (
           <p>Starts when staff marks the activity In Progress and warns near the end.</p>
+        )}
+      </section>
+
+      <section className={!draft.daily_limit_enabled ? "is-disabled" : ""}>
+        <label className="toggle-field">
+          <input
+            type="checkbox"
+            checked={Boolean(draft.waitlist_enabled)}
+            disabled={disabled || !draft.daily_limit_enabled}
+            onChange={(event) => update("waitlist_enabled", event.target.checked)}
+          />
+          Use available spots plus waitlist
+        </label>
+        {draft.daily_limit_enabled && draft.waitlist_enabled ? (
+          <div className="activity-hours-grid">
+            <label>
+              Available spots
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                value={draft.confirmed_spots || 0}
+                disabled={disabled}
+                onChange={(event) => update("confirmed_spots", Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Waitlist spots
+              <input
+                type="number"
+                min="0"
+                max="1000"
+                value={draft.waitlist_spots || 0}
+                disabled={disabled}
+                onChange={(event) => update("waitlist_spots", Number(event.target.value))}
+              />
+            </label>
+          </div>
+        ) : (
+          <p>When enabled, guests after the available spots are marked waitlist until full.</p>
         )}
       </section>
 
@@ -2387,13 +2815,6 @@ function AnalyticsStat({ label, value, wide = false }) {
       <strong>{value}</strong>
     </div>
   );
-}
-
-function formatEmailStatus(status) {
-  if (status === "sent") return "Email sent";
-  if (status === "failed") return "Email failed";
-  if (status === "not_configured") return "Not emailed";
-  return "Pending";
 }
 
 function KioskCustomizationPreview({ customizationDraft, kioskPreviewStyle }) {

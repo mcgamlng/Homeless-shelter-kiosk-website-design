@@ -199,34 +199,24 @@ The update helper:
 - Pulls the latest GitHub code.
 - Installs dependencies.
 - Rebuilds the website.
-- Installs new Node dependencies such as speech and email packages when they are added.
+- Installs new Node dependencies when they are added.
 - Installs the lightweight `espeak-ng` speech fallback.
 - Refreshes the desktop shortcut named **Open Listening House Kiosk**.
 - Installs the Hmong fallback voice pack if missing.
+- Preloads common read-aloud phrases into `data/speech-cache` when a speech source is available.
 - Restarts the service and checks `http://127.0.0.1:3000/api/health`.
 
-## Daily Spreadsheet Archive and Gmail Email
+## Daily Spreadsheet Archive
 
-The server can save yesterday's spreadsheet every morning and email it through Gmail SMTP.
+The server can save yesterday's spreadsheet every morning for local download from Admin.
 
 In Admin, open **Daily Spreadsheet Archive** and enter:
 
 - Export time, default `03:00`
-- Recipient email
-- Gmail sender address
-- Gmail app password
-- Raw row retention, minimum `7` days
 
-Use a Gmail app password, not the normal Gmail login password. Press **Send test email** before
-leaving it running overnight. If the Pi is off at the scheduled time, the server catches up the next
-time it starts.
-
-If test email fails, check the exact Admin message:
-
-- Missing sender/app password means the recipient email alone is not enough.
-- Gmail rejected login means the sender must use a Google app password, not the normal Gmail
-  password.
-- Could not reach Gmail means the Raspberry Pi or laptop needs internet access.
+The email sender has been removed. The system does not store Gmail addresses, app passwords, or
+recipient email addresses. If the Pi is off at the scheduled time, the server catches up the next time
+it starts.
 
 Archives are saved in:
 
@@ -234,7 +224,17 @@ Archives are saved in:
 data/exports
 ```
 
-If email fails, the database rows are kept so staff can fix the settings and export again.
+Staff can download archived spreadsheets from Admin.
+
+## Yearly Data Deletion
+
+Admin can set one yearly deletion date and time. Warning banners appear in Admin and Dashboard 14
+days before deletion. At the scheduled time, the system deletes guest names, check-ins, scheduled
+items, status history, analytics archive records, and spreadsheet files in `data/exports`.
+
+The deletion does not remove staff user accounts, permissions, admin PIN/security settings,
+activities, kiosk customization, or app settings. If the Pi is off at the scheduled deletion time, the
+deletion runs on the next startup after that time.
 
 ## Admin Kiosk and Pi Controls
 
@@ -296,7 +296,7 @@ sudo systemctl status listening-house
 7. Turn on dashboard alarms and test an In Progress activity.
 8. Open Admin and confirm Read Aloud Voice Status shows the expected Hmong mode.
 9. Scan the About-page QR codes from a phone.
-10. Send a daily export test email from Admin.
+10. Run a manual daily spreadsheet archive from Admin and download it.
 11. Restart the Pi and confirm the server and kiosk return automatically.
 
 ## Backup

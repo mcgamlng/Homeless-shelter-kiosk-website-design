@@ -26,12 +26,19 @@ const navItems = [
 
 const protectedPaths = new Set(["/dashboard", "/admin", "/about"]);
 
+function permissionForPath(path) {
+  if (path === "/admin") return "admin";
+  if (path === "/about") return "about";
+  return "dashboard";
+}
+
 function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const isKiosk = location.pathname === "/kiosk";
   const [staffMenuOpen, setStaffMenuOpen] = useState(false);
   const [pendingPath, setPendingPath] = useState("");
+  const [entryName, setEntryName] = useState("");
   const [entryPin, setEntryPin] = useState("");
   const [entryMessage, setEntryMessage] = useState("");
   const [entryLoading, setEntryLoading] = useState(false);
@@ -80,6 +87,7 @@ function AppShell() {
 
     if (isKiosk && protectedPaths.has(path)) {
       setPendingPath(path);
+      setEntryName("");
       setEntryPin("");
       setEntryMessage("");
       return;
@@ -93,10 +101,15 @@ function AppShell() {
     setEntryMessage("");
     setEntryLoading(true);
     try {
-      const response = await api.adminLogin(entryPin);
+      const response = await api.adminLogin(entryPin, {
+        displayName: entryName,
+        path: pendingPath,
+        permission: permissionForPath(pendingPath)
+      });
       sessionStorage.setItem("lh-admin-token", response.token);
       const path = pendingPath;
       setPendingPath("");
+      setEntryName("");
       setEntryPin("");
       setStaffMenuOpen(false);
       navigate(path);
@@ -190,11 +203,19 @@ function AppShell() {
               <LockKeyhole size={28} />
             </div>
             <h2>Staff PIN required</h2>
-            <p>Enter the current Admin PIN to leave the kiosk screen.</p>
+            <p>Enter your staff name and PIN. The owner Admin PIN also works by itself.</p>
+            <label>
+              Staff name
+              <input
+                autoFocus
+                autoComplete="name"
+                onChange={(event) => setEntryName(event.target.value)}
+                value={entryName}
+              />
+            </label>
             <label>
               Entry PIN
               <input
-                autoFocus
                 inputMode="numeric"
                 maxLength={12}
                 onChange={(event) =>
@@ -256,6 +277,9 @@ function KioskLauncher() {
 }
 
 function ProtectedEntry({ children }) {
+  const location = useLocation();
+  const permission = permissionForPath(location.pathname);
+  const [displayName, setDisplayName] = useState("");
   const [pin, setPin] = useState("");
   const [state, setState] = useState("checking");
   const [message, setMessage] = useState("");
@@ -269,7 +293,7 @@ function ProtectedEntry({ children }) {
 
     let active = true;
     api
-      .getAdminSecurity(token)
+      .getStaffSession(token, permission)
       .then(() => {
         if (active) setState("unlocked");
       })
@@ -284,15 +308,20 @@ function ProtectedEntry({ children }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [permission]);
 
   async function unlockRoute(event) {
     event.preventDefault();
     setMessage("");
     setState("checking");
     try {
-      const response = await api.adminLogin(pin);
+      const response = await api.adminLogin(pin, {
+        displayName,
+        path: location.pathname,
+        permission
+      });
       sessionStorage.setItem("lh-admin-token", response.token);
+      setDisplayName("");
       setPin("");
       setState("unlocked");
     } catch (err) {
@@ -313,11 +342,19 @@ function ProtectedEntry({ children }) {
             <LockKeyhole size={30} />
           </div>
           <h1>Staff PIN required</h1>
-          <p>Enter the current Admin PIN to open this page.</p>
+          <p>Enter your staff name and PIN. The owner Admin PIN also works by itself.</p>
+          <label>
+            Staff name
+            <input
+              autoFocus
+              autoComplete="name"
+              onChange={(event) => setDisplayName(event.target.value)}
+              value={displayName}
+            />
+          </label>
           <label>
             Entry PIN
             <input
-              autoFocus
               inputMode="numeric"
               maxLength={12}
               onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 12))}

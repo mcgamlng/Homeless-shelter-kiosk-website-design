@@ -98,10 +98,16 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
-  adminLogin(pin) {
+  adminLogin(pin, options = {}) {
     return request("/api/admin/session", {
       method: "POST",
-      body: JSON.stringify({ pin })
+      body: JSON.stringify({ pin, ...options })
+    });
+  },
+  getStaffSession(token, permission) {
+    const params = new URLSearchParams({ permission });
+    return request(`/api/staff/session?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` }
     });
   },
   getAdminSecurity(token) {
@@ -185,10 +191,54 @@ export const api = {
       body: JSON.stringify(payload)
     });
   },
-  testDailyExportEmail(token) {
-    return request("/api/admin/daily-exports/test-email", {
+  getDataDeletionSettings(token) {
+    return request("/api/admin/data-deletion", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+  updateDataDeletionSettings(token, settings) {
+    return request("/api/admin/data-deletion", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(settings)
+    });
+  },
+  runYearlyDataDeletion(token) {
+    return request("/api/admin/data-deletion/run", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+  getStaffUsers(token) {
+    return request("/api/admin/users", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+  createStaffUser(token, user) {
+    return request("/api/admin/users", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(user)
+    });
+  },
+  updateStaffUser(token, id, user) {
+    return request(`/api/admin/users/${id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(user)
+    });
+  },
+  deleteStaffUser(token, id) {
+    return request(`/api/admin/users/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
+  preloadSpeech(token, segments) {
+    return request("/api/admin/speech/preload", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ segments })
     });
   },
   exitKiosk(token) {

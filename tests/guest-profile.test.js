@@ -23,7 +23,8 @@ test("name-only sign-up and returning sign-in are stored and exported", async ()
     const activity = repository.getActivities()[0];
     repository.updateActivity(activity.id, {
       availability_start: "00:00",
-      availability_end: "23:59"
+      availability_end: "23:59",
+      weekly_window_enabled: false
     });
 
     assert.throws(

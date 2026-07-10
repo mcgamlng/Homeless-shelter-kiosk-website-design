@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { tts as edgeTts } from "edge-tts/out/index.js";
@@ -7,6 +8,7 @@ import { tts as edgeTts } from "edge-tts/out/index.js";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const defaultHmongVoicePath = path.join(projectRoot, "data", "hmong-voice", "Kong");
 const defaultHmongPhrasePath = path.join(projectRoot, "data", "hmong-phrases");
+const defaultSpeechCachePath = path.join(projectRoot, "data", "speech-cache");
 const spanishAudioCache = new Map();
 const hmongAudioCache = new Map();
 const localSpeechCache = new Map();
@@ -59,6 +61,55 @@ function hmongVoicePath() {
 
 function hmongPhrasePath() {
   return path.resolve(process.env.HMONG_PHRASE_PATH || defaultHmongPhrasePath);
+}
+
+function speechCachePath() {
+  return path.resolve(process.env.SPEECH_CACHE_PATH || defaultSpeechCachePath);
+}
+
+function speechCacheFile(language, text, key = "") {
+  const hash = crypto
+    .createHash("sha256")
+    .update(`${language}:${key}:${cleanSpeechText(text)}`)
+    .digest("hex");
+  return {
+    audioPath: path.join(speechCachePath(), `${hash}.audio`),
+    metaPath: path.join(speechCachePath(), `${hash}.json`)
+  };
+}
+
+function readCachedSpeech(language, text, key = "") {
+  const cacheFile = speechCacheFile(language, text, key);
+  if (!fs.existsSync(cacheFile.audioPath) || !fs.existsSync(cacheFile.metaPath)) return null;
+  try {
+    const meta = JSON.parse(fs.readFileSync(cacheFile.metaPath, "utf8"));
+    return {
+      audio: fs.readFileSync(cacheFile.audioPath),
+      contentType: meta.contentType || "audio/mpeg",
+      source: meta.source || "cache",
+      cached: true
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedSpeech(language, text, key, result) {
+  fs.mkdirSync(speechCachePath(), { recursive: true });
+  const cacheFile = speechCacheFile(language, text, key);
+  fs.writeFileSync(cacheFile.audioPath, result.audio);
+  fs.writeFileSync(
+    cacheFile.metaPath,
+    JSON.stringify({
+      language,
+      text: cleanSpeechText(text),
+      key,
+      source: result.source,
+      contentType: result.contentType,
+      createdAt: new Date().toISOString()
+    })
+  );
+  return { ...result, cached: false };
 }
 
 function loadHmongVoiceIndex() {
@@ -176,6 +227,9 @@ export function getSpeechStatus() {
   const fallbackReady = voiceIndex.size > 1000;
   const localSpeech = inspectLocalSpeech();
   const naturalSpeech = inspectNaturalSpeech();
+  const cacheCount = fs.existsSync(speechCachePath())
+    ? fs.readdirSync(speechCachePath()).filter((item) => item.endsWith(".audio")).length
+    : 0;
   return {
     hmongSpeechMode: phraseCount
       ? "phrase-first"
@@ -195,6 +249,8 @@ export function getSpeechStatus() {
     naturalSpeechVoices,
     naturalSpeechError: naturalSpeech.error,
     cloudSpeechLanguages: Object.keys(cloudSpeechLanguages),
+    speechCachePath: speechCachePath(),
+    speechCacheItems: cacheCount,
     serverSpeechReady: localSpeech.ready,
     serverSpeechCommand: localSpeech.command,
     serverSpeechLanguages: Object.keys(localSpeechVoices),
@@ -570,6 +626,92 @@ export function createLocalSpeechAudio(text, language = "en", { spawnImpl = spaw
   );
   error.status = 503;
   throw error;
+}
+
+export async function getBestSpeechAudio(text, language = "en", { key = "" } = {}) {
+  const cleanText = cleanSpeechText(text);
+  if (!cleanText) {
+    const error = new Error("Speech text is required.");
+    error.status = 400;
+    throw error;
+  }
+  const cleanLanguage = String(language || "en").toLowerCase();
+  const cached = readCachedSpeech(cleanLanguage, cleanText, key);
+  if (cached) return cached;
+
+  const attempts =
+    cleanLanguage === "hmn"
+      ? [
+          async () => {
+            const phrase = findHmongPhrase(cleanText, key);
+            if (!phrase) throw new Error("No matching Hmong phrase recording is installed.");
+            return {
+              audio: fs.readFileSync(phrase.file),
+              contentType: "audio/wav",
+              source: "phrase"
+            };
+          },
+          async () => ({
+            audio: await getCloudSpeechAudio(cleanText, "hmn"),
+            contentType: "audio/mpeg",
+            source: "cloud"
+          }),
+          async () => {
+            const result = createHmongSpeechAudioResult(cleanText, { key });
+            return { audio: result.audio, contentType: "audio/wav", source: result.source };
+          },
+          async () => ({
+            audio: createLocalSpeechAudio(cleanText, "hmn"),
+            contentType: "audio/wav",
+            source: "local"
+          })
+        ]
+      : [
+          async () => ({
+            audio: await getNaturalSpeechAudio(cleanText, cleanLanguage),
+            contentType: "audio/mpeg",
+            source: "natural"
+          }),
+          async () => ({
+            audio: await getCloudSpeechAudio(cleanText, cleanLanguage),
+            contentType: "audio/mpeg",
+            source: "cloud"
+          }),
+          async () => ({
+            audio: createLocalSpeechAudio(cleanText, cleanLanguage),
+            contentType: "audio/wav",
+            source: "local"
+          })
+        ];
+
+  const errors = [];
+  for (const attempt of attempts) {
+    try {
+      const result = await attempt();
+      if (result.audio?.length) return writeCachedSpeech(cleanLanguage, cleanText, key, result);
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+
+  const error = new Error(
+    `Read aloud is not available for ${cleanLanguage}. ${errors.filter(Boolean).join(" ")}`
+  );
+  error.status = 503;
+  throw error;
+}
+
+export async function preloadBestSpeechAudio(segments = []) {
+  const results = [];
+  for (const segment of segments) {
+    try {
+      const result = await getBestSpeechAudio(segment.text, segment.language, { key: segment.key });
+      results.push({ ...segment, ok: true, source: result.source, cached: result.cached });
+    } catch (error) {
+      results.push({ ...segment, ok: false, error: error.message });
+    }
+  }
+  return results;
 }
 
 function localSpeechCommand() {

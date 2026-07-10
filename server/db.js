@@ -29,31 +29,58 @@ export const OLD_DEFAULT_ACTIVITY_NAMES = [
 ];
 
 export const DEFAULT_ACTIVITIES = [
-  { name: "Housing / Outreach Help", minutes: 45, icon: "housing-plus", timed: true },
-  { name: "ID Help", minutes: 30, icon: "id-card", timed: true },
-  { name: "Hygiene Items", minutes: 10, icon: "hygiene", timed: false },
-  { name: "Bus Tokens", minutes: 10, icon: "bus", timed: false },
-  { name: "Clothing Room", minutes: 25, icon: "shirt", timed: true },
-  { name: "Computers / Wi-Fi", minutes: 30, icon: "monitor", timed: true },
-  { name: "Meals / Snacks", minutes: 20, icon: "utensils", timed: false },
   {
-    name: "Bathrooms / Showers",
+    name: "Showers",
     minutes: 30,
     icon: "shower",
     timed: true,
     alarmEnabled: true,
-    alarmMinutesBefore: 5
+    alarmMinutesBefore: 5,
+    availabilityWindowEnabled: true,
+    availabilityStart: "14:00",
+    availabilityEnd: "17:00",
+    weeklyWindowEnabled: true,
+    weeklyDays: "0,1,2,3,4,6"
   },
-  { name: "Sleeping / Rest Area", minutes: 45, icon: "bed", timed: true },
-  { name: "Phones", minutes: 15, icon: "phone", timed: false },
-  { name: "Phone Charging", minutes: 20, icon: "battery", timed: false },
-  { name: "Government Phone Program", minutes: 20, icon: "public-office", timed: false },
-  { name: "OTC Meds / Vitamins", minutes: 10, icon: "heart-pulse", timed: false },
-  { name: "Employment Readiness", minutes: 45, icon: "case-legal", timed: true },
-  { name: "Social Support", minutes: 30, icon: "message-heart", timed: false },
-  { name: "Lockers / Storage", minutes: 10, icon: "lockers", timed: false },
-  { name: "First Aid", minutes: 15, icon: "stethoscope", timed: false },
-  { name: "Staff / Volunteers Ready to Listen", minutes: 20, icon: "heart-hand", timed: false }
+  {
+    name: "Vital Records",
+    minutes: 10,
+    icon: "id-card",
+    timed: false,
+    availabilityWindowEnabled: true,
+    availabilityStart: "14:00",
+    availabilityEnd: "19:00",
+    weeklyWindowEnabled: true,
+    weeklyDays: "1,2,3,4"
+  },
+  {
+    name: "Clothing",
+    minutes: 10,
+    icon: "shirt",
+    timed: false
+  },
+  {
+    name: "Beds",
+    minutes: 10,
+    icon: "bed",
+    timed: false,
+    dailyLimitEnabled: true,
+    dailyLimit: 12,
+    waitlistEnabled: true,
+    confirmedSpots: 6,
+    waitlistSpots: 6
+  },
+  {
+    name: "Quiet Rooms",
+    minutes: 10,
+    icon: "private-room",
+    timed: false,
+    dailyLimitEnabled: true,
+    dailyLimit: 6,
+    waitlistEnabled: true,
+    confirmedSpots: 3,
+    waitlistSpots: 3
+  }
 ];
 
 export function createDatabase(filename = databasePath) {
@@ -87,6 +114,8 @@ function migrateDatabase(database) {
   ensureColumn(database, "activities", "availability_window_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(database, "activities", "availability_start", "TEXT NOT NULL DEFAULT '08:00'");
   ensureColumn(database, "activities", "availability_end", "TEXT NOT NULL DEFAULT '16:00'");
+  ensureColumn(database, "activities", "weekly_window_enabled", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(database, "activities", "weekly_days", "TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6'");
   ensureColumn(database, "activities", "monthly_window_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(database, "activities", "monthly_start_day", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(database, "activities", "monthly_end_day", "INTEGER NOT NULL DEFAULT 31");
@@ -95,6 +124,9 @@ function migrateDatabase(database) {
   ensureColumn(database, "activities", "yearly_end", "TEXT NOT NULL DEFAULT '12-31'");
   ensureColumn(database, "activities", "daily_limit_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(database, "activities", "daily_limit", "INTEGER");
+  ensureColumn(database, "activities", "waitlist_enabled", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(database, "activities", "confirmed_spots", "INTEGER");
+  ensureColumn(database, "activities", "waitlist_spots", "INTEGER");
   ensureColumn(database, "activities", "alarm_enabled", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(database, "activities", "alarm_minutes_before", "INTEGER NOT NULL DEFAULT 5");
   ensureColumn(database, "scheduled_activity_items", "activity_name_es", "TEXT");
@@ -118,6 +150,18 @@ function migrateDatabase(database) {
     "activity_end_time",
     "TEXT NOT NULL DEFAULT '16:00'"
   );
+  ensureColumn(
+    database,
+    "scheduled_activity_items",
+    "service_spot_status",
+    "TEXT NOT NULL DEFAULT 'confirmed'"
+  );
+  ensureColumn(database, "scheduled_activity_items", "service_spot_number", "INTEGER");
+  database
+    .prepare(
+      "UPDATE settings SET value = '' WHERE key IN ('daily_export_recipient', 'daily_export_gmail_sender', 'daily_export_gmail_app_password')"
+    )
+    .run();
   const workdayStart =
     database.prepare("SELECT value FROM settings WHERE key = 'workday_start'").get()?.value ||
     "08:00";
@@ -399,10 +443,10 @@ export function seedBaseData(database) {
   insertSetting.run("preferred_local_url", "");
   insertSetting.run("public_base_url", "");
   insertSetting.run("daily_export_time", "03:00");
-  insertSetting.run("daily_export_recipient", "");
-  insertSetting.run("daily_export_gmail_sender", "");
-  insertSetting.run("daily_export_gmail_app_password", "");
-  insertSetting.run("daily_export_raw_retention_days", "7");
+  insertSetting.run("yearly_data_deletion_enabled", "0");
+  insertSetting.run("yearly_data_deletion_month_day", "01-01");
+  insertSetting.run("yearly_data_deletion_time", "03:00");
+  insertSetting.run("yearly_data_deletion_last_run_year", "");
   Object.entries(DEFAULT_KIOSK_CUSTOMIZATION).forEach(([key, value]) => {
     insertSetting.run(key, value);
   });
@@ -467,13 +511,15 @@ function insertPresetActivity(database, activity, sortOrder) {
        (name, name_es, name_hmn, name_so,
         duration_minutes, time_limit_enabled, availability_window_enabled,
         availability_start, availability_end,
+        weekly_window_enabled, weekly_days,
         monthly_window_enabled, monthly_start_day, monthly_end_day,
         yearly_window_enabled, yearly_start, yearly_end,
-        daily_limit_enabled, daily_limit,
+        daily_limit_enabled, daily_limit, waitlist_enabled, confirmed_spots, waitlist_spots,
         alarm_enabled, alarm_minutes_before, icon, active, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, 0, '08:00', '16:00',
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?,
                0, 1, 31, 0, '01-01', '12-31',
-               0, NULL, ?, ?, ?, 1, ?)`
+               ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`
     )
     .run(
       activity.name,
@@ -482,6 +528,16 @@ function insertPresetActivity(database, activity, sortOrder) {
       translations.name_so,
       activity.minutes,
       activity.timed === false ? 0 : 1,
+      activity.availabilityWindowEnabled ? 1 : 0,
+      activity.availabilityStart || "08:00",
+      activity.availabilityEnd || "16:00",
+      activity.weeklyWindowEnabled ? 1 : 0,
+      activity.weeklyDays || "0,1,2,3,4,5,6",
+      activity.dailyLimitEnabled ? 1 : 0,
+      activity.dailyLimit || null,
+      activity.waitlistEnabled ? 1 : 0,
+      activity.confirmedSpots ?? null,
+      activity.waitlistSpots ?? null,
       activity.alarmEnabled ? 1 : 0,
       activity.alarmMinutesBefore || 5,
       activity.icon,
@@ -496,17 +552,22 @@ function updatePresetActivity(database, id, activity, sortOrder) {
       `UPDATE activities
        SET name = ?, name_es = ?, name_hmn = ?, name_so = ?,
            duration_minutes = ?, time_limit_enabled = ?,
-           availability_window_enabled = 0,
-           availability_start = '08:00',
-           availability_end = '16:00',
+           availability_window_enabled = ?,
+           availability_start = ?,
+           availability_end = ?,
+           weekly_window_enabled = ?,
+           weekly_days = ?,
            monthly_window_enabled = 0,
            monthly_start_day = 1,
            monthly_end_day = 31,
            yearly_window_enabled = 0,
            yearly_start = '01-01',
            yearly_end = '12-31',
-           daily_limit_enabled = 0,
-           daily_limit = NULL,
+           daily_limit_enabled = ?,
+           daily_limit = ?,
+           waitlist_enabled = ?,
+           confirmed_spots = ?,
+           waitlist_spots = ?,
            alarm_enabled = ?,
            alarm_minutes_before = ?,
            icon = ?,
@@ -522,6 +583,16 @@ function updatePresetActivity(database, id, activity, sortOrder) {
       translations.name_so,
       activity.minutes,
       activity.timed === false ? 0 : 1,
+      activity.availabilityWindowEnabled ? 1 : 0,
+      activity.availabilityStart || "08:00",
+      activity.availabilityEnd || "16:00",
+      activity.weeklyWindowEnabled ? 1 : 0,
+      activity.weeklyDays || "0,1,2,3,4,5,6",
+      activity.dailyLimitEnabled ? 1 : 0,
+      activity.dailyLimit || null,
+      activity.waitlistEnabled ? 1 : 0,
+      activity.confirmedSpots ?? null,
+      activity.waitlistSpots ?? null,
       activity.alarmEnabled ? 1 : 0,
       activity.alarmMinutesBefore || 5,
       activity.icon,

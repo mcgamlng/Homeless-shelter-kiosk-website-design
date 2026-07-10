@@ -1235,8 +1235,11 @@ main {
   align-content: center;
   width: min(780px, 100%);
   max-width: min(780px, 100%);
+  max-height: calc(100vh - 190px);
   margin: 0 auto;
   padding: clamp(10px, 2vh, 24px) 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .bracelet-hero {
@@ -1259,11 +1262,13 @@ main {
   background: var(--lh-aqua-light);
   color: var(--lh-navy);
   border: 4px solid white;
-  font-size: clamp(2rem, 5vw, 4.6rem);
+  font-size: clamp(1.4rem, min(5vw, 8vh), 4.2rem);
   font-weight: 950;
   line-height: 1.05;
   text-align: center;
   overflow-wrap: anywhere;
+  word-break: break-word;
+  hyphens: auto;
 }
 
 .guest-name-badge {
@@ -2856,27 +2861,64 @@ main {
   overflow-wrap: anywhere;
 }
 
-.email-status {
-  display: inline-flex;
+.data-deletion-warning {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+  padding: 14px 16px;
+  border: 2px solid #b91c1c;
+  background: #fff1f0;
+  color: #7f1d1d;
+  font-weight: 900;
+}
+
+.staff-user-form,
+.staff-user-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(120px, 180px) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.staff-user-form label,
+.staff-user-row label {
+  display: grid;
+  gap: 6px;
+  color: var(--lh-deep-green);
+  font-weight: 900;
+}
+
+.permission-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: var(--lh-warm-white);
-  color: var(--lh-navy);
-  font-weight: 950;
-  white-space: nowrap;
 }
 
-.email-status.is-sent {
-  background: var(--lh-navy);
-  color: white;
+.staff-user-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
 }
 
-.email-status.is-failed {
-  background: var(--lh-coral);
-  color: white;
+.staff-user-row {
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 2fr) auto auto;
+  padding: 14px;
+  background: var(--lh-soft-green);
+  border: 1px solid var(--lh-border);
+}
+
+.speech-test-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.weekday-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .period-tabs {

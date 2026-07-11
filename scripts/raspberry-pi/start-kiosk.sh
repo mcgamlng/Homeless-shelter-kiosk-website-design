@@ -52,14 +52,41 @@ rm -rf "$KIOSK_PROFILE_DIR/Default/Cache" \
   "$KIOSK_PROFILE_DIR/Default/Code Cache" \
   "$KIOSK_PROFILE_DIR/Default/Service Worker" 2>/dev/null || true
 
-if command -v chromium >/dev/null 2>&1; then
-  BROWSER="chromium"
-elif command -v chromium-browser >/dev/null 2>&1; then
-  BROWSER="chromium-browser"
-else
+find_browser() {
+  if [[ -n "${KIOSK_BROWSER:-}" && -x "$KIOSK_BROWSER" ]]; then
+    echo "$KIOSK_BROWSER"
+    return 0
+  fi
+
+  for candidate in \
+    /usr/lib/chromium/chromium \
+    /usr/lib/chromium-browser/chromium-browser \
+    /snap/bin/chromium; do
+    if [[ -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  if command -v chromium >/dev/null 2>&1; then
+    command -v chromium
+    return 0
+  fi
+
+  if command -v chromium-browser >/dev/null 2>&1; then
+    command -v chromium-browser
+    return 0
+  fi
+
+  return 1
+}
+
+if ! BROWSER="$(find_browser)"; then
   echo "Chromium was not found. Install it with: sudo apt install -y chromium-browser"
   exit 1
 fi
+
+unset CHROMIUM_FLAGS CHROME_FLAGS
 
 exec "$BROWSER" \
   --user-data-dir="$KIOSK_PROFILE_DIR" \

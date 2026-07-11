@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 KIOSK_URL="${KIOSK_URL:-http://127.0.0.1:3000/kiosk}"
+KIOSK_PROFILE_DIR="${KIOSK_PROFILE_DIR:-$PROJECT_DIR/data/chromium-kiosk-profile}"
+KIOSK_LAUNCH_URL="$KIOSK_URL"
+if [[ "$KIOSK_LAUNCH_URL" == *"?"* ]]; then
+  KIOSK_LAUNCH_URL="$KIOSK_LAUNCH_URL&kioskBuild=$(date +%s)"
+else
+  KIOSK_LAUNCH_URL="$KIOSK_LAUNCH_URL?kioskBuild=$(date +%s)"
+fi
 
 export DISPLAY="${DISPLAY:-:0}"
 if [[ -z "${XAUTHORITY:-}" && -n "${HOME:-}" && -f "$HOME/.Xauthority" ]]; then
@@ -39,17 +47,23 @@ for attempt in {1..10}; do
   sleep 0.2
 done
 
-if command -v chromium-browser >/dev/null 2>&1; then
-  BROWSER="chromium-browser"
-elif command -v chromium >/dev/null 2>&1; then
+mkdir -p "$KIOSK_PROFILE_DIR"
+rm -rf "$KIOSK_PROFILE_DIR/Default/Cache" \
+  "$KIOSK_PROFILE_DIR/Default/Code Cache" \
+  "$KIOSK_PROFILE_DIR/Default/Service Worker" 2>/dev/null || true
+
+if command -v chromium >/dev/null 2>&1; then
   BROWSER="chromium"
+elif command -v chromium-browser >/dev/null 2>&1; then
+  BROWSER="chromium-browser"
 else
   echo "Chromium was not found. Install it with: sudo apt install -y chromium-browser"
   exit 1
 fi
 
 exec "$BROWSER" \
-  --kiosk "$KIOSK_URL" \
+  --user-data-dir="$KIOSK_PROFILE_DIR" \
+  --kiosk "$KIOSK_LAUNCH_URL" \
   --start-fullscreen \
   --no-first-run \
   --noerrdialogs \

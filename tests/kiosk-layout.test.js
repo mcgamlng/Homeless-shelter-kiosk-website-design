@@ -24,4 +24,6 @@ test("kiosk activity layout uses centered flex wrapping", () => {
     /\.kiosk-shell\.is-activities\s+\.kiosk-next\s*\{[^}]*position:\s*sticky/s
   );
   assert.match(cssSource, /\.topbar\.is-kiosk-topbar\s*\{[^}]*flex-wrap:\s*nowrap/s);
+  assert.match(cssSource, /\.topbar\.is-kiosk-topbar\s+\.brand\s*\{[^}]*display:\s*none/s);
+  assert.match(cssSource, /\.topbar\.is-kiosk-topbar\s*\+\s*main\s*\{[^}]*padding-top:\s*10px/s);
 });

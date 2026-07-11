@@ -457,7 +457,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
 
   return (
     <section className={`kiosk-page ${hasBack ? "has-back" : ""}`} style={kioskThemeStyle}>
-      <div className={`kiosk-stage ${hasBack ? "has-back" : ""}`}>
+      <div className={`kiosk-stage ${hasBack ? "has-back" : ""} step-${step}`}>
         {hasBack ? (
           <button className="ghost-button kiosk-back" onClick={goBack}>
             <ChevronLeft size={22} />

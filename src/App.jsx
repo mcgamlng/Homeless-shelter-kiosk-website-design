@@ -247,7 +247,7 @@ function AppShell() {
           </form>
         </div>
       ) : null}
-      {signedInUser ? <StaffSignedInBadge user={signedInUser} /> : null}
+      {signedInUser && !isKiosk ? <StaffSignedInBadge user={signedInUser} /> : null}
     </div>
   );
 }

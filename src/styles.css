@@ -5653,3 +5653,139 @@ main {
   width: 100% !important;
   padding-top: 10px !important;
 }
+
+/* Activities are the highest-use kiosk screen. Keep this page simple and reliable on Pi. */
+.kiosk-stage.step-activities {
+  width: 100% !important;
+  max-width: none !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 60px 12px 14px !important;
+}
+
+.kiosk-stage.step-activities .kiosk-back {
+  position: fixed !important;
+  top: 12px !important;
+  left: 12px !important;
+  z-index: 94 !important;
+  min-height: 46px !important;
+  margin: 0 !important;
+  padding: 0 18px !important;
+  background: var(--lh-warm-white) !important;
+  color: var(--lh-navy) !important;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.16) !important;
+}
+
+.kiosk-stage.step-activities .readout-button {
+  position: fixed !important;
+  top: 12px !important;
+  right: 64px !important;
+  z-index: 94 !important;
+  width: 46px !important;
+  min-width: 46px !important;
+  height: 46px !important;
+  min-height: 46px !important;
+  padding: 0 !important;
+  background: var(--lh-warm-white) !important;
+  color: var(--lh-navy) !important;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.16) !important;
+}
+
+.kiosk-stage.step-activities .readout-feedback {
+  position: fixed !important;
+  top: 64px !important;
+  right: 12px !important;
+  max-width: min(320px, calc(100vw - 24px)) !important;
+}
+
+.kiosk-stage.step-activities .kiosk-shell.is-activities {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  display: block !important;
+  padding: clamp(14px, 2vw, 24px) !important;
+  overflow: visible !important;
+  background: var(--lh-texture), var(--lh-kiosk-screen) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2) !important;
+}
+
+.kiosk-stage.step-activities .kiosk-shell.is-activities::after {
+  display: none !important;
+}
+
+.kiosk-stage.step-activities .kiosk-panel.wide {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+}
+
+.kiosk-stage.step-activities .kiosk-panel.wide h1 {
+  margin: 0 0 8px !important;
+  font-size: clamp(1.85rem, 4vw, 3.2rem) !important;
+  line-height: 1.05 !important;
+  text-align: left !important;
+}
+
+.kiosk-stage.step-activities .kiosk-panel.wide p {
+  margin: 0 0 14px !important;
+  font-size: clamp(1rem, 1.8vw, 1.2rem) !important;
+  text-align: left !important;
+}
+
+.kiosk-stage.step-activities .activity-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important;
+  gap: 10px !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+.kiosk-stage.step-activities .activity-choice {
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 112px !important;
+  height: auto !important;
+  display: grid !important;
+  align-content: center !important;
+  justify-items: center !important;
+  gap: 6px !important;
+  padding: 10px !important;
+  border-width: 2px !important;
+  font-size: clamp(0.92rem, 1.8vw, 1.08rem) !important;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.18) !important;
+}
+
+.kiosk-stage.step-activities .activity-choice small {
+  font-size: 0.74rem !important;
+  line-height: 1.12 !important;
+}
+
+.kiosk-stage.step-activities .activity-icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.kiosk-stage.step-activities .kiosk-next {
+  position: sticky !important;
+  bottom: 8px !important;
+  z-index: 5 !important;
+  width: min(460px, 100%) !important;
+  min-height: 58px !important;
+  margin: 14px auto 0 !important;
+}
+
+@media (max-width: 760px) {
+  .kiosk-stage.step-activities .activity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .kiosk-stage.step-activities .activity-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

@@ -5656,10 +5656,11 @@ main {
 
 /* Activities are the highest-use kiosk screen. Keep this page simple and reliable on Pi. */
 .kiosk-stage.step-activities {
-  width: 100% !important;
+  box-sizing: border-box !important;
+  width: calc(100% - 20px) !important;
   max-width: none !important;
   display: block !important;
-  margin: 0 !important;
+  margin: 0 auto !important;
   padding: 60px 12px 14px !important;
 }
 
@@ -5791,7 +5792,9 @@ main {
 }
 
 .plain-activities-shell {
-  width: min(1180px, calc(100vw - 24px));
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1180px;
   margin: 0 auto 18px;
   padding: clamp(14px, 2.2vw, 24px);
   background: var(--lh-texture), var(--lh-kiosk-screen);

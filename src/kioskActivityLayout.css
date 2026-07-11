@@ -1,30 +1,31 @@
 .kiosk-page .activity-grid {
   display: flex !important;
   flex-wrap: wrap;
-  gap: clamp(10px, 1.4vw, 16px) !important;
+  gap: clamp(8px, 1vw, 12px) !important;
   align-items: stretch;
   justify-content: center;
   width: 100%;
-  max-width: 100%;
+  max-width: min(100%, 1120px);
   margin-left: auto;
   margin-right: auto;
 }
 
 .kiosk-page .activity-choice {
-  flex: 0 1 clamp(166px, calc((100% - 64px) / 5), 224px) !important;
-  height: 100%;
+  flex: 0 1 clamp(150px, calc((100% - 48px) / 5), 198px) !important;
+  height: auto !important;
+  min-height: clamp(88px, 13vh, 130px) !important;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 @media (orientation: portrait) and (min-width: 560px) {
   .kiosk-page .activity-grid {
-    gap: 12px !important;
-    max-width: min(100%, 940px);
+    gap: 10px !important;
+    max-width: min(100%, 760px);
   }
 
   .kiosk-page .activity-choice {
-    flex-basis: clamp(180px, calc((100% - 24px) / 3), 260px) !important;
+    flex-basis: clamp(150px, calc((100% - 20px) / 3), 210px) !important;
   }
 }
 

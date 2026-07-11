@@ -169,9 +169,12 @@ a {
 
 .topbar.is-kiosk-topbar {
   position: sticky;
-  flex-wrap: wrap;
+  min-height: 66px;
+  flex-wrap: nowrap;
+  align-items: center;
   padding-right: 70px;
   background: var(--lh-texture), var(--lh-kiosk-screen);
+  overflow: visible;
 }
 
 .topbar.is-kiosk-topbar .staff-menu-toggle {
@@ -203,10 +206,18 @@ a {
 }
 
 .topbar.is-kiosk-topbar .topnav.is-staff-panel {
-  width: 100%;
+  position: absolute;
+  top: calc(100% - 1px);
+  left: 14px;
+  right: 14px;
+  width: auto;
   max-height: 0;
+  padding: 0;
   overflow: hidden;
   justify-content: flex-start;
+  border: 0;
+  background: var(--lh-texture), rgba(32, 32, 32, 0.97);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
   opacity: 0;
   transform: translateY(-8px);
   transition:
@@ -218,7 +229,8 @@ a {
 
 .topbar.is-kiosk-topbar .topnav.is-staff-panel.is-open {
   max-height: 160px;
-  padding-top: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
   opacity: 1;
   transform: translateY(0);
 }
@@ -369,6 +381,8 @@ main {
 
 .kiosk-shell.is-activities {
   place-items: start center;
+  padding-top: clamp(20px, 3vh, 34px);
+  padding-bottom: clamp(14px, 2vh, 24px);
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
@@ -507,8 +521,18 @@ main {
 }
 
 .kiosk-panel.wide .kiosk-next {
-  min-height: 62px;
-  margin-top: 16px;
+  min-height: 58px;
+  margin-top: 14px;
+}
+
+.kiosk-shell.is-activities .kiosk-next {
+  position: sticky;
+  bottom: 8px;
+  z-index: 4;
+  width: min(430px, 100%);
+  box-shadow:
+    0 0 0 4px rgba(32, 32, 32, 0.18),
+    8px 8px 0 rgba(0, 0, 0, 0.22);
 }
 
 .language-grid,
@@ -659,11 +683,13 @@ main {
 
 .kiosk-shell.is-activities .kiosk-panel.wide {
   align-self: start;
-  padding-bottom: 6px;
+  min-height: 100%;
+  align-content: start;
+  padding-bottom: 0;
 }
 
 .kiosk-panel.wide h1 {
-  font-size: clamp(2.1rem, 3.5vw, 3.5rem);
+  font-size: clamp(1.9rem, 3vw, 3.15rem);
 }
 
 .activity-grid {
@@ -671,10 +697,10 @@ main {
   flex-wrap: wrap;
   justify-content: center;
   align-items: stretch;
-  gap: 10px;
-  margin-top: 16px;
+  gap: clamp(8px, 1vw, 12px);
+  margin-top: 14px;
   width: 100%;
-  max-width: 100%;
+  max-width: min(100%, 1120px);
   text-align: center;
 }
 
@@ -684,12 +710,13 @@ main {
   grid-template-columns: 1fr;
   justify-items: center;
   align-items: center;
-  gap: 10px 14px;
-  min-height: 78px;
-  width: clamp(164px, calc((100% - 52px) / 5), 220px);
-  flex: 0 1 clamp(164px, calc((100% - 52px) / 5), 220px);
-  padding: 12px;
-  font-size: clamp(0.98rem, 1.25vw, 1.22rem);
+  align-content: center;
+  gap: 6px 10px;
+  min-height: clamp(88px, 13vh, 130px);
+  width: clamp(150px, calc((100% - 48px) / 5), 198px);
+  flex: 0 1 clamp(150px, calc((100% - 48px) / 5), 198px);
+  padding: 10px;
+  font-size: clamp(0.9rem, 1vw, 1.08rem);
   text-align: center;
 }
 
@@ -697,7 +724,8 @@ main {
   grid-column: auto;
   color: inherit;
   opacity: 0.78;
-  font-size: 0.82rem;
+  font-size: 0.76rem;
+  line-height: 1.1;
 }
 
 .activity-choice.is-full {
@@ -714,8 +742,8 @@ main {
 }
 
 .activity-icon {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
 }
 
 .checkmark {

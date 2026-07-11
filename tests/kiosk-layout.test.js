@@ -35,4 +35,8 @@ test("kiosk activity layout uses centered flex wrapping", () => {
     cssSource,
     /\.kiosk-stage\.step-activities\s+\.kiosk-shell\.is-activities\s*\{[^}]*overflow:\s*visible/s
   );
+  assert.match(kioskSource, /plain-activities-shell/);
+  assert.match(kioskSource, /plain-activity-card/);
+  assert.match(cssSource, /\.plain-activity-grid\s*\{[^}]*display:\s*grid/s);
+  assert.match(cssSource, /\.plain-activity-continue\s*\{[^}]*width:\s*min\(440px,\s*100%\)/s);
 });

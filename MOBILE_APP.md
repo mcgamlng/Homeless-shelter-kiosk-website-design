@@ -80,9 +80,9 @@ For use away from the building Wi-Fi, configure the public HTTPS address describ
 
 ## About Page Contact
 
-The About page includes a **Contact the Inventor** section. Admin staff can save the inventor phone
-number and email there. This contact information is stored only in the local Raspberry Pi SQLite
-database and is not committed into the public GitHub repository.
+The About page includes a **Contact the Inventors** section. Staff with Page customization access can
+save multiple inventor phone numbers and emails there. This contact information is stored only in
+the local Raspberry Pi SQLite database and is not committed into the public GitHub repository.
 
 ## Rebuild the Android APK
 

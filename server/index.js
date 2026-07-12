@@ -168,7 +168,7 @@ function requireAnyPermission(permissions, label) {
   };
 }
 
-const requireAdmin = requirePermission("admin", "Admin Controls");
+const requireAdmin = requirePermission("admin", "staff section access");
 const requireOwnerAdmin = (req, res, next) => {
   const session = sessionFromRequest(req);
   if (!session?.owner) {
@@ -182,7 +182,7 @@ const requireAdminActivities = requirePermission("admin_activities", "Activity C
 const requireAdminIt = requirePermission("admin_it", "IT");
 const requireDashboardAccess = requireAnyPermission(
   ["dashboard", "admin"],
-  "Dashboard or Admin Controls"
+  "Dashboard or staff section access"
 );
 
 function requireAnyStaff(req, res, next) {
@@ -242,11 +242,11 @@ function createStaffSession({ owner = false, user = null, permissions = null } =
 function requestedPermissionForPath(value) {
   const cleanValue = String(value || "").toLowerCase();
   if (cleanValue.includes("admin_excel") || cleanValue.includes("excel")) return "admin_excel";
-  if (cleanValue.includes("admin_customization") || cleanValue.includes("customization")) {
-    return "admin_customization";
-  }
   if (cleanValue.includes("admin_activities") || cleanValue.includes("activity")) {
     return "admin_activities";
+  }
+  if (cleanValue.includes("admin_customization") || cleanValue.includes("customization")) {
+    return "admin_customization";
   }
   if (cleanValue.includes("admin_it") || cleanValue.includes("it")) return "admin_it";
   if (cleanValue.includes("admin")) return "admin";
@@ -270,7 +270,8 @@ const CUSTOMIZATION_SETTING_PREFIXES = ["kiosk_"];
 const CUSTOMIZATION_SETTING_KEYS = new Set([
   "system_name",
   "inventor_contact_phone",
-  "inventor_contact_email"
+  "inventor_contact_email",
+  "inventor_contacts"
 ]);
 
 function permissionForSettingKey(key) {

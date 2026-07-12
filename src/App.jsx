@@ -20,14 +20,27 @@ import { getKioskCssVariables, getKioskCustomization } from "../shared/kioskCust
 const navItems = [
   { label: "Kiosk", to: "/kiosk" },
   { label: "Dashboard", to: "/dashboard" },
-  { label: "Admin", to: "/admin" },
+  { label: "Excel spreadsheets", to: "/excel-spreadsheets" },
+  { label: "Page customization", to: "/page-customization" },
+  { label: "Activity customization", to: "/activity-customization" },
+  { label: "IT tools", to: "/it-tools" },
   { label: "About", to: "/about" }
 ];
 
-const protectedPaths = new Set(["/dashboard", "/admin", "/about"]);
+const protectedPaths = new Set([
+  "/dashboard",
+  "/excel-spreadsheets",
+  "/page-customization",
+  "/activity-customization",
+  "/it-tools",
+  "/about"
+]);
 
 function permissionForPath(path) {
-  if (path === "/admin") return "admin";
+  if (path === "/excel-spreadsheets") return "admin_excel";
+  if (path === "/page-customization") return "admin_customization";
+  if (path === "/activity-customization") return "admin_activities";
+  if (path === "/it-tools") return "admin_it";
   if (path === "/about") return "about";
   return "dashboard";
 }
@@ -196,13 +209,38 @@ function AppShell() {
             }
           />
           <Route
-            path="/admin"
+            path="/excel-spreadsheets"
             element={
               <ProtectedEntry onSignedIn={setSignedInUser}>
-                <Admin />
+                <Admin section="excel" />
               </ProtectedEntry>
             }
           />
+          <Route
+            path="/page-customization"
+            element={
+              <ProtectedEntry onSignedIn={setSignedInUser}>
+                <Admin section="customization" />
+              </ProtectedEntry>
+            }
+          />
+          <Route
+            path="/activity-customization"
+            element={
+              <ProtectedEntry onSignedIn={setSignedInUser}>
+                <Admin section="activities" />
+              </ProtectedEntry>
+            }
+          />
+          <Route
+            path="/it-tools"
+            element={
+              <ProtectedEntry onSignedIn={setSignedInUser}>
+                <Admin section="it" />
+              </ProtectedEntry>
+            }
+          />
+          <Route path="/admin" element={<Navigate to="/activity-customization" replace />} />
           <Route
             path="/about"
             element={

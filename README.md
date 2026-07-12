@@ -47,7 +47,7 @@ medical details, or sensitive notes.
 - Staff user roles with page access and Admin-section permissions
 - Kiosk wording and color customization
 - Browser, Android download, and iPhone/iPad install QR codes on the About page
-- About-page inventor contact section saved locally on each installation
+- About-page inventor contacts section saved locally on each installation
 - Optional secure public HTTPS access through Cloudflare Tunnel
 
 ## Hardware
@@ -292,9 +292,9 @@ On iPhone or iPad, scan the **Install on iPhone or iPad** QR code on the About p
 step-by-step Safari install page with an **Open dashboard for iPhone install** button, copyable
 dashboard link, and Add to Home Screen instructions.
 
-The About page also has **Contact the Inventor**. Admin staff can save the phone number and email
-staff should use for project help. That contact information is stored in the local SQLite database
-on the laptop or Raspberry Pi and is not hard-coded into GitHub.
+The About page also has **Contact the Inventors**. Staff with Page customization access can save
+more than one phone number and email for project help. That contact information is stored in the
+local SQLite database on the laptop or Raspberry Pi and is not hard-coded into GitHub.
 
 ## Daily Reset
 
@@ -345,25 +345,21 @@ preserved.
 ## Staff User Roles
 
 The owner Admin PIN has full access. In **User Control**, the owner can create staff PINs and choose
-which pages each person can open:
+which top navigation sections each person can open:
 
 - Dashboard
-- Admin Controls
 - About Page
-
-When **Admin Controls** is enabled for a staff PIN, the owner can also choose exactly which Admin
-sections that role can use:
-
-- **Excel sheets:** analytics, spreadsheet export, and yearly data deletion.
+- **Excel spreadsheets:** analytics, spreadsheet export, and yearly data deletion.
 - **Page customization:** kiosk wording, kiosk colors, live preview, and About-page inventor
-  contact.
+  contacts.
 - **Activity customization:** schedule spacing, daily resets, activity/service setup, limits,
   waitlists, and alarms.
 - **IT tools:** phone/network access, read-aloud voice tools, Raspberry Pi update/reboot, and kiosk
   open/exit controls.
 
-Everyone can still use the kiosk page. Staff users only receive Dashboard, Admin, About, or Admin
-section access when the owner grants it.
+Everyone can still use the kiosk page. Staff users only receive Dashboard, About, Excel
+spreadsheets, Page customization, Activity customization, or IT tools access when the owner grants
+it.
 
 ## Automatic Startup
 

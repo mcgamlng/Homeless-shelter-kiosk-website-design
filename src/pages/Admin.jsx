@@ -211,16 +211,46 @@ function createStaffUserDraft() {
 
 const pagePermissionOptions = [
   ["dashboard", "Dashboard"],
-  ["admin", "Admin Controls"],
   ["about", "About Page"]
 ];
 
 const adminSectionPermissionOptions = [
-  ["admin_excel", "Excel sheets"],
+  ["admin_excel", "Excel spreadsheets"],
   ["admin_customization", "Page customization"],
   ["admin_activities", "Activity customization"],
   ["admin_it", "IT tools"]
 ];
+
+const adminSectionConfig = {
+  excel: {
+    title: "Excel spreadsheets",
+    heading: "Excel spreadsheets",
+    description: "Review analytics, download spreadsheets, and manage yearly data deletion.",
+    permissionName: "Excel spreadsheets",
+    permissionKey: "admin_excel"
+  },
+  customization: {
+    title: "Page customization",
+    heading: "Page customization",
+    description: "Change kiosk wording, colors, live preview, and About-page inventor contacts.",
+    permissionName: "Page customization",
+    permissionKey: "admin_customization"
+  },
+  activities: {
+    title: "Activity customization",
+    heading: "Activity customization",
+    description: "Set schedules, service limits, activity availability, resets, and alerts.",
+    permissionName: "Activity customization",
+    permissionKey: "admin_activities"
+  },
+  it: {
+    title: "IT tools",
+    heading: "IT tools",
+    description: "Set phone access, read-aloud voices, Raspberry Pi controls, and staff access.",
+    permissionName: "IT tools",
+    permissionKey: "admin_it"
+  }
+};
 
 function normalizePermissionToggle(permissions, permission, checked) {
   const next = { ...permissions, [permission]: checked };
@@ -291,7 +321,7 @@ function daysInMonth(month) {
   return new Date(2000, Number(month), 0).getDate();
 }
 
-export default function Admin() {
+export default function Admin({ section = "activities" }) {
   const currentPinRef = useRef(null);
   const newPinRef = useRef(null);
   const confirmPinRef = useRef(null);
@@ -345,6 +375,8 @@ export default function Admin() {
   );
 
   const signedIn = Boolean(token && adminVerified);
+  const activeSection = adminSectionConfig[section] ? section : "activities";
+  const sectionInfo = adminSectionConfig[activeSection];
   const sessionPermissions = staffSession?.permissions || {};
   const isOwnerAdmin = Boolean(staffSession?.owner);
   const canUseExcel = isOwnerAdmin || Boolean(sessionPermissions.admin_excel);
@@ -352,6 +384,8 @@ export default function Admin() {
   const canUseActivities = isOwnerAdmin || Boolean(sessionPermissions.admin_activities);
   const canUseIt = isOwnerAdmin || Boolean(sessionPermissions.admin_it);
   const canManageUsers = isOwnerAdmin;
+  const canUseActiveSection =
+    !signedIn || isOwnerAdmin || Boolean(sessionPermissions[sectionInfo.permissionKey]);
 
   function currentAdminToken() {
     return sessionStorage.getItem("lh-admin-token") || token;
@@ -1040,13 +1074,13 @@ export default function Admin() {
     <section className="admin-page">
       <div className="page-heading compact">
         <div>
-          <h1>Admin / Settings</h1>
-          <p>Manage activities, schedule spacing, and daily reset controls.</p>
+          <h1>{sectionInfo.heading}</h1>
+          <p>{sectionInfo.description}</p>
         </div>
         <div className="admin-heading-actions">
           <span className={`admin-state ${signedIn ? "is-on" : ""}`}>
             {signedIn ? <ShieldCheck size={18} /> : <Lock size={18} />}
-            {signedIn ? "Admin unlocked" : "PIN required"}
+            {signedIn ? `${sectionInfo.permissionName} unlocked` : "PIN required"}
           </span>
           {signedIn ? (
             <button
@@ -1082,43 +1116,16 @@ export default function Admin() {
 
       {message ? <p className="notice-message">{message}</p> : null}
 
-      {signedIn ? (
-        <div className="admin-section-shortcuts" aria-label="Admin sections">
-          <AdminShortcut
-            href="#admin-section-excel"
-            label="Excel sheets"
-            detail="Reports, downloads, and yearly data deletion"
-            enabled={canUseExcel}
-          />
-          <AdminShortcut
-            href="#admin-section-customization"
-            label="Page customization"
-            detail="Kiosk wording, colors, and inventor contact"
-            enabled={canUseCustomization}
-          />
-          <AdminShortcut
-            href="#admin-section-activities"
-            label="Activity customization"
-            detail="Services, limits, schedule rules, and resets"
-            enabled={canUseActivities}
-          />
-          <AdminShortcut
-            href="#admin-section-it"
-            label="IT tools"
-            detail="Network, speech, Raspberry Pi controls"
-            enabled={canUseIt}
-          />
-        </div>
+      {activeSection === "activities" ? (
+        <AdminSectionIntro
+          id="admin-section-activities"
+          title="Activity customization"
+          description="Set the working day, reset active check-ins, and customize the service/activity list."
+          allowed={canUseActiveSection}
+        />
       ) : null}
 
-      <AdminSectionIntro
-        id="admin-section-activities"
-        title="Activity customization"
-        description="Set the working day, reset active check-ins, and customize the service/activity list."
-        allowed={!signedIn || canUseActivities}
-      />
-
-      {canUseActivities || !signedIn ? (
+      {activeSection === "activities" && (canUseActivities || !signedIn) ? (
         <div className="admin-layout">
           <div className="card-panel">
             <h2>Daily totals</h2>
@@ -1198,18 +1205,20 @@ export default function Admin() {
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeSection === "activities" ? (
         <RestrictedAdminSection title="Activity customization" />
-      )}
+      ) : null}
 
-      <AdminSectionIntro
-        id="admin-section-it"
-        title="IT tools"
-        description="Set phone access, check read-aloud voice status, and control Raspberry Pi kiosk actions."
-        allowed={!signedIn || canUseIt}
-      />
+      {activeSection === "it" ? (
+        <AdminSectionIntro
+          id="admin-section-it"
+          title="IT tools"
+          description="Set phone access, check read-aloud voice status, and control Raspberry Pi kiosk actions."
+          allowed={canUseActiveSection}
+        />
+      ) : null}
 
-      {canUseIt || !signedIn ? (
+      {activeSection === "it" && (canUseIt || !signedIn) ? (
         <>
           <form className="card-panel network-settings-panel" onSubmit={saveNetworkSettings}>
             <div className="analytics-heading">
@@ -1596,18 +1605,20 @@ export default function Admin() {
             {systemControlMessage ? <p className="network-status">{systemControlMessage}</p> : null}
           </section>
         </>
-      ) : (
+      ) : activeSection === "it" ? (
         <RestrictedAdminSection title="IT tools" />
-      )}
+      ) : null}
 
-      <AdminSectionIntro
-        id="admin-section-customization"
-        title="Page customization"
-        description="Change kiosk wording, colors, live preview, and the About-page inventor contact."
-        allowed={!signedIn || canUseCustomization}
-      />
+      {activeSection === "customization" ? (
+        <AdminSectionIntro
+          id="admin-section-customization"
+          title="Page customization"
+          description="Change kiosk wording, colors, live preview, and the About-page inventor contacts."
+          allowed={canUseActiveSection}
+        />
+      ) : null}
 
-      {canUseCustomization || !signedIn ? (
+      {activeSection === "customization" && (canUseCustomization || !signedIn) ? (
         <form className="card-panel kiosk-customization-panel" onSubmit={saveKioskCustomization}>
           <div className="analytics-heading">
             <div>
@@ -1733,11 +1744,11 @@ export default function Admin() {
             </div>
           </div>
         </form>
-      ) : (
+      ) : activeSection === "customization" ? (
         <RestrictedAdminSection title="Page customization" />
-      )}
+      ) : null}
 
-      {isOwnerAdmin ? (
+      {activeSection === "it" && isOwnerAdmin ? (
         <div className="card-panel admin-security-panel">
           <div className="analytics-heading">
             <div>
@@ -1818,14 +1829,16 @@ export default function Admin() {
         </div>
       ) : null}
 
-      <AdminSectionIntro
-        id="admin-section-excel"
-        title="Excel sheets"
-        description="Review analytics, download spreadsheets, and manage yearly data deletion."
-        allowed={!signedIn || canUseExcel}
-      />
+      {activeSection === "excel" ? (
+        <AdminSectionIntro
+          id="admin-section-excel"
+          title="Excel spreadsheets"
+          description="Review analytics, download spreadsheets, and manage yearly data deletion."
+          allowed={canUseActiveSection}
+        />
+      ) : null}
 
-      {canUseExcel || !signedIn ? (
+      {activeSection === "excel" && (canUseExcel || !signedIn) ? (
         <>
           <div className="card-panel analytics-panel">
             <div className="analytics-heading">
@@ -2054,11 +2067,11 @@ export default function Admin() {
             {dataDeletionMessage ? <p className="network-status">{dataDeletionMessage}</p> : null}
           </form>
         </>
-      ) : (
-        <RestrictedAdminSection title="Excel sheets" />
-      )}
+      ) : activeSection === "excel" ? (
+        <RestrictedAdminSection title="Excel spreadsheets" />
+      ) : null}
 
-      {canManageUsers ? (
+      {activeSection === "it" && canManageUsers ? (
         <section className="card-panel user-control-panel">
           <div className="analytics-heading">
             <div>
@@ -2067,7 +2080,8 @@ export default function Admin() {
                 User Control
               </h2>
               <p>
-                Add staff users and choose which pages they can open. Everyone can use the kiosk.
+                Add staff users and choose which top navigation sections they can open. Everyone can
+                use the kiosk.
               </p>
             </div>
           </div>
@@ -2096,18 +2110,17 @@ export default function Admin() {
             </label>
             <div className="permission-groups" aria-label="User permissions">
               <PermissionGroup
-                title="Pages this person can open"
+                title="Main pages this person can open"
                 options={pagePermissionOptions}
                 permissions={staffUserDraft.permissions}
                 disabled={!signedIn}
                 onChange={updateStaffPermissionDraft}
               />
               <PermissionGroup
-                title="Admin sections this person can use"
-                helper="These only apply when Admin Controls is selected."
+                title="Staff sections this person can open"
                 options={adminSectionPermissionOptions}
                 permissions={staffUserDraft.permissions}
-                disabled={!signedIn || !staffUserDraft.permissions.admin}
+                disabled={!signedIn}
                 onChange={updateStaffPermissionDraft}
               />
             </div>
@@ -2130,7 +2143,7 @@ export default function Admin() {
                   <strong>{user.display_name}</strong>
                   <div className="staff-user-permissions">
                     <PermissionGroup
-                      title="Pages"
+                      title="Main pages"
                       options={pagePermissionOptions}
                       permissions={user.permissions}
                       disabled={!signedIn}
@@ -2142,10 +2155,10 @@ export default function Admin() {
                       }
                     />
                     <PermissionGroup
-                      title="Admin sections"
+                      title="Staff sections"
                       options={adminSectionPermissionOptions}
                       permissions={user.permissions}
-                      disabled={!signedIn || !user.permissions.admin}
+                      disabled={!signedIn}
                       compact
                       onChange={(key, checked) =>
                         updateStaffUser(user, {
@@ -2180,7 +2193,7 @@ export default function Admin() {
         </section>
       ) : null}
 
-      {canUseActivities || !signedIn ? (
+      {activeSection === "activities" && (canUseActivities || !signedIn) ? (
         <div className="card-panel activity-admin">
           <h2>Activities</h2>
           <p>
@@ -2877,15 +2890,6 @@ function PermissionGroup({
         ))}
       </div>
     </fieldset>
-  );
-}
-
-function AdminShortcut({ href, label, detail, enabled }) {
-  return (
-    <a className={`admin-section-shortcut ${enabled ? "is-enabled" : "is-restricted"}`} href={href}>
-      <strong>{label}</strong>
-      <span>{enabled ? detail : "Not included for this staff PIN."}</span>
-    </a>
   );
 }
 

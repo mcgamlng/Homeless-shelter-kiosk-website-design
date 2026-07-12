@@ -36,6 +36,16 @@ test("yearly deletion removes guest data and preserves staff users", async () =>
     assert.equal(repository.verifyStaffUserPin("1717").permissions.admin_excel, true);
     assert.equal(repository.verifyStaffUserPin("1717").permissions.admin_it, false);
 
+    repository.updateSettings({
+      inventor_contacts: [
+        { name: "Project Support", phone: "(555) 555-1212", email: "SUPPORT@EXAMPLE.ORG" },
+        { name: "Technical Help", phone: "555.555.2323", email: "TECH@EXAMPLE.ORG" }
+      ]
+    });
+    const contactSettings = repository.getSettings();
+    assert.equal(contactSettings.inventorContacts.length, 2);
+    assert.equal(contactSettings.inventorContacts[0].email, "support@example.org");
+
     const checkIn = repository.createCheckIn({
       activityIds: [openActivity.id],
       language: "en",

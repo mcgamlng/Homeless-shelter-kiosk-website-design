@@ -466,6 +466,7 @@ export function seedBaseData(database) {
   insertSetting.run("public_base_url", "");
   insertSetting.run("inventor_contact_phone", "");
   insertSetting.run("inventor_contact_email", "");
+  insertSetting.run("inventor_contacts", "[]");
   insertSetting.run("yearly_data_deletion_enabled", "0");
   insertSetting.run("yearly_data_deletion_month_day", "01-01");
   insertSetting.run("yearly_data_deletion_time", "03:00");

@@ -20,6 +20,7 @@ test("analytics reports use the requested historical period and include guest na
     repository.updateSettings({ workday_start: "00:00", workday_end: "23:59" });
     const activity = repository.getActivities()[0];
     repository.updateActivity(activity.id, {
+      time_limit_enabled: false,
       availability_window_enabled: true,
       availability_start: "00:00",
       availability_end: "23:59",

@@ -15,6 +15,7 @@ test("daily reset clears active names and zeroes live totals", async () => {
     repository.updateSettings({ workday_start: "00:00", workday_end: "23:59" });
     const activity = repository.getActivities()[0];
     repository.updateActivity(activity.id, {
+      time_limit_enabled: false,
       availability_start: "00:00",
       availability_end: "23:59",
       weekly_window_enabled: false

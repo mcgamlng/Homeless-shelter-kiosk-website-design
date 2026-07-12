@@ -36,7 +36,11 @@ const PIN_HASH_ITERATIONS = 100000;
 const KIOSK_COLOR_KEY_SET = new Set(KIOSK_COLOR_KEYS);
 const KIOSK_CUSTOMIZATION_KEY_SET = new Set(KIOSK_CUSTOMIZATION_KEYS);
 const NETWORK_URL_KEYS = new Set(["preferred_local_url", "public_base_url"]);
-const INVENTOR_CONTACT_KEYS = new Set(["inventor_contact_phone", "inventor_contact_email"]);
+const INVENTOR_CONTACT_KEYS = new Set([
+  "inventor_contact_phone",
+  "inventor_contact_email",
+  "inventor_contacts"
+]);
 const ADMIN_SECTION_PERMISSION_KEYS = [
   "admin_excel",
   "admin_customization",
@@ -99,13 +103,13 @@ function normalizeSettingValue(key, value) {
       .slice(0, 300);
   }
   if (INVENTOR_CONTACT_KEYS.has(key)) {
-    if (key === "inventor_contact_phone") {
-      return String(value || "")
-        .replace(/[^\d()+\-. xX]/g, "")
-        .trim()
-        .slice(0, 40);
+    if (key === "inventor_contacts") {
+      return JSON.stringify(normalizeInventorContacts(value));
     }
-    return cleanText(value, 160).toLowerCase();
+    if (key === "inventor_contact_phone") {
+      return normalizeInventorPhone(value);
+    }
+    return normalizeInventorEmail(value);
   }
   return value;
 }
@@ -115,6 +119,57 @@ function cleanText(value, maxLength = 160) {
     .trim()
     .replace(/\s+/g, " ")
     .slice(0, maxLength);
+}
+
+function normalizeInventorPhone(value) {
+  return String(value || "")
+    .replace(/[^\d()+\-. xX]/g, "")
+    .trim()
+    .slice(0, 40);
+}
+
+function normalizeInventorEmail(value) {
+  return cleanText(value, 160).toLowerCase();
+}
+
+function parseInventorContacts(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "object") {
+    return Array.isArray(value.contacts) ? value.contacts : [value];
+  }
+  try {
+    const parsed = JSON.parse(String(value));
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === "object") {
+      return Array.isArray(parsed.contacts) ? parsed.contacts : [parsed];
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+function normalizeInventorContacts(value) {
+  return parseInventorContacts(value)
+    .slice(0, 12)
+    .map((contact) => ({
+      name: cleanText(contact?.name, 120),
+      phone: normalizeInventorPhone(contact?.phone),
+      email: normalizeInventorEmail(contact?.email)
+    }))
+    .filter((contact) => contact.name || contact.phone || contact.email);
+}
+
+function getInventorContactsFromSettings(values) {
+  const savedContacts = normalizeInventorContacts(values.inventor_contacts);
+  if (savedContacts.length > 0) return savedContacts;
+  const legacyContact = {
+    name: "",
+    phone: normalizeInventorPhone(values.inventor_contact_phone),
+    email: normalizeInventorEmail(values.inventor_contact_email)
+  };
+  return legacyContact.phone || legacyContact.email ? [legacyContact] : [];
 }
 
 function getNameFields(payload = {}) {
@@ -327,6 +382,7 @@ export function getSettings() {
     acc[row.key] = row.value;
     return acc;
   }, {});
+  const inventorContacts = getInventorContactsFromSettings(values);
   const customization = KIOSK_CUSTOMIZATION_KEYS.reduce((acc, key) => {
     acc[key] =
       values[key] === undefined || values[key] === ""
@@ -344,10 +400,8 @@ export function getSettings() {
       public_base_url: values.public_base_url || ""
     },
     dataDeletion: getDataDeletionSettings(),
-    inventorContact: {
-      phone: values.inventor_contact_phone || "",
-      email: values.inventor_contact_email || ""
-    },
+    inventorContact: inventorContacts[0] || { name: "", phone: "", email: "" },
+    inventorContacts,
     customization
   };
 }

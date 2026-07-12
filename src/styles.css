@@ -78,6 +78,7 @@ a {
   top: 0;
   z-index: 10;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -120,6 +121,8 @@ a {
 }
 
 .topnav {
+  flex: 1 1 620px;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -138,6 +141,7 @@ a {
   color: white;
   text-decoration: none;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .topnav a.active,
@@ -2331,42 +2335,6 @@ main {
   margin-bottom: 18px;
 }
 
-.admin-section-shortcuts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.admin-section-shortcut {
-  display: grid;
-  gap: 6px;
-  min-height: 112px;
-  padding: 16px;
-  background: var(--lh-warm-white);
-  border: 2px solid var(--lh-border);
-  color: var(--lh-navy);
-  text-decoration: none;
-  box-shadow: 6px 6px 0 rgba(34, 53, 109, 0.13);
-}
-
-.admin-section-shortcut.is-enabled {
-  border-color: var(--lh-purple);
-}
-
-.admin-section-shortcut.is-restricted {
-  opacity: 0.72;
-}
-
-.admin-section-shortcut strong {
-  font-size: 1.1rem;
-}
-
-.admin-section-shortcut span {
-  color: var(--lh-muted-brown);
-  line-height: 1.35;
-}
-
 .admin-section-intro {
   display: flex;
   justify-content: space-between;
@@ -3721,7 +3689,6 @@ main {
   .admin-layout,
   .customization-layout,
   .admin-security-grid,
-  .admin-section-shortcuts,
   .analytics-summary,
   .about-grid {
     grid-template-columns: 1fr;
@@ -5767,10 +5734,24 @@ main {
   margin: 0;
 }
 
+.inventor-contact-list,
+.inventor-contact-person,
 .inventor-contact-links,
 .inventor-contact-form {
   display: grid;
   gap: 12px;
+}
+
+.inventor-contact-person {
+  gap: 8px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border-left: 6px solid var(--lh-purple);
+}
+
+.inventor-contact-person strong {
+  color: var(--lh-navy);
+  overflow-wrap: anywhere;
 }
 
 .inventor-contact-links a {
@@ -5782,6 +5763,32 @@ main {
   color: var(--lh-navy);
   font-weight: 950;
   overflow-wrap: anywhere;
+}
+
+.inventor-contact-editor {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 2px solid rgba(34, 53, 109, 0.16);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.inventor-contact-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--lh-navy);
+  font-weight: 950;
+}
+
+.inventor-contact-editor-head .icon-button {
+  width: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  border-color: var(--lh-coral);
+  color: var(--lh-coral);
+  background: white;
 }
 
 .inventor-contact-form label {

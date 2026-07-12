@@ -6,21 +6,45 @@ import {
   ListChecks,
   Mail,
   Phone,
+  Plus,
   QrCode,
   Save,
   Smartphone,
+  Trash2,
   UsersRound
 } from "lucide-react";
 import QRCode from "qrcode";
 import { api } from "../api.js";
+
+const blankInventorContact = { name: "", phone: "", email: "" };
+
+function createBlankInventorContact() {
+  return { ...blankInventorContact };
+}
+
+function normalizeContactDrafts(contacts = []) {
+  return contacts
+    .map((contact) => ({
+      name: String(contact?.name || ""),
+      phone: String(contact?.phone || ""),
+      email: String(contact?.email || "")
+    }))
+    .filter((contact) => contact.name || contact.phone || contact.email);
+}
+
+function contactsFromSettings(settings = {}) {
+  const contacts = normalizeContactDrafts(settings.inventorContacts || []);
+  if (contacts.length > 0) return contacts;
+  return normalizeContactDrafts([settings.inventorContact || {}]);
+}
 
 export default function About() {
   const [accessInfo, setAccessInfo] = useState(null);
   const [browserQr, setBrowserQr] = useState("");
   const [appQr, setAppQr] = useState("");
   const [iphoneQr, setIphoneQr] = useState("");
-  const [inventorContact, setInventorContact] = useState({ phone: "", email: "" });
-  const [contactDraft, setContactDraft] = useState({ phone: "", email: "" });
+  const [inventorContacts, setInventorContacts] = useState([]);
+  const [contactDrafts, setContactDrafts] = useState([createBlankInventorContact()]);
   const [canEditContact, setCanEditContact] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
   const [contactMessage, setContactMessage] = useState("");
@@ -55,10 +79,9 @@ export default function About() {
       .getSettings()
       .then((settings) => {
         if (!active) return;
-        const contact = settings.inventorContact || {};
-        const nextContact = { phone: contact.phone || "", email: contact.email || "" };
-        setInventorContact(nextContact);
-        setContactDraft(nextContact);
+        const contacts = contactsFromSettings(settings);
+        setInventorContacts(contacts);
+        setContactDrafts(contacts.length > 0 ? contacts : [createBlankInventorContact()]);
       })
       .catch(() => {});
 
@@ -82,26 +105,43 @@ export default function About() {
     event.preventDefault();
     const token = sessionStorage.getItem("lh-admin-token") || "";
     if (!token) {
-      setContactMessage("Sign in with Admin access before saving inventor contact information.");
+      setContactMessage("Sign in with Page customization access before saving inventor contacts.");
       return;
     }
     setSavingContact(true);
     setContactMessage("");
     try {
       const settings = await api.updateSettings(token, {
-        inventor_contact_phone: contactDraft.phone,
-        inventor_contact_email: contactDraft.email
+        inventor_contacts: contactDrafts
       });
-      const contact = settings.inventorContact || {};
-      const nextContact = { phone: contact.phone || "", email: contact.email || "" };
-      setInventorContact(nextContact);
-      setContactDraft(nextContact);
-      setContactMessage("Inventor contact saved on this system.");
+      const contacts = contactsFromSettings(settings);
+      setInventorContacts(contacts);
+      setContactDrafts(contacts.length > 0 ? contacts : [createBlankInventorContact()]);
+      setContactMessage("Inventor contacts saved on this system.");
     } catch (err) {
-      setContactMessage(err.message || "Inventor contact could not be saved.");
+      setContactMessage(err.message || "Inventor contacts could not be saved.");
     } finally {
       setSavingContact(false);
     }
+  }
+
+  function updateContactDraft(index, key, value) {
+    setContactDrafts((current) =>
+      current.map((contact, contactIndex) =>
+        contactIndex === index ? { ...contact, [key]: value } : contact
+      )
+    );
+  }
+
+  function addContactDraft() {
+    setContactDrafts((current) => [...current, createBlankInventorContact()]);
+  }
+
+  function removeContactDraft(index) {
+    setContactDrafts((current) => {
+      const nextContacts = current.filter((_, contactIndex) => contactIndex !== index);
+      return nextContacts.length > 0 ? nextContacts : [createBlankInventorContact()];
+    });
   }
 
   return (
@@ -203,31 +243,38 @@ export default function About() {
         <div className="access-qr-heading">
           <HeartHandshake size={30} />
           <div>
-            <h2>Contact the Inventor</h2>
-            <p>Save the phone number and email staff should use when they need project help.</p>
+            <h2>Contact the Inventors</h2>
+            <p>Save the phone numbers and emails staff should use when they need project help.</p>
           </div>
         </div>
 
         <div className="inventor-contact-grid">
           <article className="inventor-contact-card">
-            <h3>Saved contact</h3>
-            {inventorContact.phone || inventorContact.email ? (
-              <div className="inventor-contact-links">
-                {inventorContact.phone ? (
-                  <a href={`tel:${inventorContact.phone}`}>
-                    <Phone size={18} />
-                    {inventorContact.phone}
-                  </a>
-                ) : null}
-                {inventorContact.email ? (
-                  <a href={`mailto:${inventorContact.email}`}>
-                    <Mail size={18} />
-                    {inventorContact.email}
-                  </a>
-                ) : null}
+            <h3>Saved contacts</h3>
+            {inventorContacts.length > 0 ? (
+              <div className="inventor-contact-list">
+                {inventorContacts.map((contact, index) => (
+                  <div className="inventor-contact-person" key={`${contact.email}-${index}`}>
+                    <strong>{contact.name || `Inventor contact ${index + 1}`}</strong>
+                    <div className="inventor-contact-links">
+                      {contact.phone ? (
+                        <a href={`tel:${contact.phone}`}>
+                          <Phone size={18} />
+                          {contact.phone}
+                        </a>
+                      ) : null}
+                      {contact.email ? (
+                        <a href={`mailto:${contact.email}`}>
+                          <Mail size={18} />
+                          {contact.email}
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
-              <p className="contact-empty">No inventor contact has been saved yet.</p>
+              <p className="contact-empty">No inventor contacts have been saved yet.</p>
             )}
           </article>
 
@@ -235,37 +282,60 @@ export default function About() {
             <h3>Update contact information</h3>
             {canEditContact ? (
               <form className="inventor-contact-form" onSubmit={saveInventorContact}>
-                <label>
-                  Phone number
-                  <input
-                    type="tel"
-                    value={contactDraft.phone}
-                    onChange={(event) =>
-                      setContactDraft((current) => ({ ...current, phone: event.target.value }))
-                    }
-                    placeholder="Example: 555-555-1234"
-                  />
-                </label>
-                <label>
-                  Email
-                  <input
-                    type="email"
-                    value={contactDraft.email}
-                    onChange={(event) =>
-                      setContactDraft((current) => ({ ...current, email: event.target.value }))
-                    }
-                    placeholder="name@example.com"
-                  />
-                </label>
+                {contactDrafts.map((contact, index) => (
+                  <div className="inventor-contact-editor" key={`contact-draft-${index}`}>
+                    <div className="inventor-contact-editor-head">
+                      <strong>Inventor contact {index + 1}</strong>
+                      <button
+                        aria-label={`Remove inventor contact ${index + 1}`}
+                        className="icon-button"
+                        type="button"
+                        onClick={() => removeContactDraft(index)}
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
+                    <label>
+                      Contact name
+                      <input
+                        value={contact.name}
+                        onChange={(event) => updateContactDraft(index, "name", event.target.value)}
+                        placeholder="Example: Project support"
+                      />
+                    </label>
+                    <label>
+                      Phone number
+                      <input
+                        type="tel"
+                        value={contact.phone}
+                        onChange={(event) => updateContactDraft(index, "phone", event.target.value)}
+                        placeholder="Example: 555-555-1234"
+                      />
+                    </label>
+                    <label>
+                      Email
+                      <input
+                        type="email"
+                        value={contact.email}
+                        onChange={(event) => updateContactDraft(index, "email", event.target.value)}
+                        placeholder="name@example.com"
+                      />
+                    </label>
+                  </div>
+                ))}
+                <button className="secondary-button" type="button" onClick={addContactDraft}>
+                  <Plus size={18} />
+                  Add another contact
+                </button>
                 <button className="primary-button" type="submit" disabled={savingContact}>
                   <Save size={18} />
-                  {savingContact ? "Saving..." : "Save inventor contact"}
+                  {savingContact ? "Saving..." : "Save inventor contacts"}
                 </button>
               </form>
             ) : (
               <p className="contact-empty">
-                Sign in with Admin access to update this contact. Staff with About access can still
-                view the saved phone number and email.
+                Sign in with Page customization access to update these contacts. Staff with About
+                access can still view the saved phone numbers and emails.
               </p>
             )}
             {contactMessage ? <p className="contact-save-message">{contactMessage}</p> : null}

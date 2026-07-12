@@ -44,9 +44,10 @@ medical details, or sensitive notes.
 - SQLite persistence
 - Day, week, month, and year Excel downloads from Analytics
 - Admin PIN protection
+- Staff user roles with page access and Admin-section permissions
 - Kiosk wording and color customization
-- Browser and Android download QR codes on the About page
-- iPhone and iPad web-app installation QR code
+- Browser, Android download, and iPhone/iPad install QR codes on the About page
+- About-page inventor contact section saved locally on each installation
 - Optional secure public HTTPS access through Cloudflare Tunnel
 
 ## Hardware
@@ -287,7 +288,13 @@ public HTTPS address works from any internet connection. The app remembers the s
 automatically retries when Android reconnects to a network, and includes controls to change the
 address or open Wi-Fi settings.
 
-On iPhone or iPad, scan the browser QR code, open it in Safari, and choose **Add to Home Screen**.
+On iPhone or iPad, scan the **Install on iPhone or iPad** QR code on the About page. It opens a
+step-by-step Safari install page with an **Open dashboard for iPhone install** button, copyable
+dashboard link, and Add to Home Screen instructions.
+
+The About page also has **Contact the Inventor**. Admin staff can save the phone number and email
+staff should use for project help. That contact information is stored in the local SQLite database
+on the laptop or Raspberry Pi and is not hard-coded into GitHub.
 
 ## Daily Reset
 
@@ -334,6 +341,29 @@ scheduled items, status history, old analytics archive records, and old files in
 deleted.
 Staff user accounts, permissions, the admin PIN, activities, kiosk customization, and app settings are
 preserved.
+
+## Staff User Roles
+
+The owner Admin PIN has full access. In **User Control**, the owner can create staff PINs and choose
+which pages each person can open:
+
+- Dashboard
+- Admin Controls
+- About Page
+
+When **Admin Controls** is enabled for a staff PIN, the owner can also choose exactly which Admin
+sections that role can use:
+
+- **Excel sheets:** analytics, spreadsheet export, and yearly data deletion.
+- **Page customization:** kiosk wording, kiosk colors, live preview, and About-page inventor
+  contact.
+- **Activity customization:** schedule spacing, daily resets, activity/service setup, limits,
+  waitlists, and alarms.
+- **IT tools:** phone/network access, read-aloud voice tools, Raspberry Pi update/reboot, and kiosk
+  open/exit controls.
+
+Everyone can still use the kiosk page. Staff users only receive Dashboard, Admin, About, or Admin
+section access when the owner grants it.
 
 ## Automatic Startup
 

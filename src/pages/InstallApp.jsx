@@ -1,10 +1,23 @@
-import { CheckCircle2, Download, Globe2, Share2, Smartphone, Wifi } from "lucide-react";
+import {
+  Apple,
+  CheckCircle2,
+  Clipboard,
+  Download,
+  ExternalLink,
+  Globe2,
+  Share2,
+  Smartphone,
+  Wifi
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 
 export default function InstallApp() {
   const [accessInfo, setAccessInfo] = useState(null);
   const [error, setError] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
+
+  const dashboardUrl = accessInfo?.browserUrl || "";
 
   function loadAccessInfo() {
     setError("");
@@ -17,6 +30,20 @@ export default function InstallApp() {
   useEffect(() => {
     loadAccessInfo();
   }, []);
+
+  async function copyDashboardLink() {
+    if (!dashboardUrl) return;
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      setCopyMessage("Copy did not work. Press and hold the link below to copy it.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(dashboardUrl);
+      setCopyMessage("Dashboard link copied.");
+    } catch {
+      setCopyMessage("Copy did not work. Press and hold the link below to copy it.");
+    }
+  }
 
   return (
     <section className="install-page">
@@ -51,21 +78,93 @@ export default function InstallApp() {
         </div>
       ) : null}
 
+      <article className="ios-install-hero">
+        <div className="ios-install-main">
+          <div className="ios-install-title">
+            <Apple size={42} />
+            <div>
+              <h2>iPhone and iPad quick install</h2>
+              <p>
+                iPhone does not download an APK file. It installs this system as a Home Screen web
+                app through Safari.
+              </p>
+            </div>
+          </div>
+
+          <ol className="ios-install-steps">
+            <li>
+              <span className="ios-step-number">1</span>
+              <div>
+                <strong>Open this page in Safari.</strong>
+                <span>If it opens in Chrome, Google, or Messenger, choose Open in Safari.</span>
+              </div>
+            </li>
+            <li>
+              <span className="ios-step-number">2</span>
+              <div>
+                <strong>Open the dashboard link.</strong>
+                <span>The Home Screen app will remember this server address.</span>
+              </div>
+            </li>
+            <li>
+              <span className="ios-step-number">3</span>
+              <div>
+                <strong>
+                  Tap <Share2 size={17} aria-hidden="true" /> Share, then Add to Home Screen.
+                </strong>
+                <span>Leave Open as Web App on, then tap Add.</span>
+              </div>
+            </li>
+          </ol>
+
+          <div className="ios-install-actions">
+            <a className="primary-button" href="/dashboard">
+              <ExternalLink size={18} />
+              Open dashboard for iPhone install
+            </a>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={copyDashboardLink}
+              disabled={!dashboardUrl}
+            >
+              <Clipboard size={18} />
+              Copy dashboard link
+            </button>
+          </div>
+          {copyMessage ? <p className="install-copy-message">{copyMessage}</p> : null}
+          <code className="ios-dashboard-link">
+            {dashboardUrl || "Finding the dashboard link for this server..."}
+          </code>
+        </div>
+
+        <div className="ios-install-phone-card" aria-label="iPhone install preview">
+          <div className="ios-phone-top" />
+          <div className="ios-phone-icon">
+            <Apple size={30} />
+          </div>
+          <strong>Add to Home Screen</strong>
+          <span>Listening House Check-In</span>
+          <code>{dashboardUrl || "Finding dashboard link..."}</code>
+        </div>
+      </article>
+
       <div className="install-platform-grid">
         <article className="install-platform">
           <Smartphone size={38} />
           <h2>iPhone or iPad</h2>
-          <ol>
-            <li>Open this page in Safari.</li>
-            <li>
-              Tap <Share2 size={18} aria-hidden="true" /> Share.
-            </li>
-            <li>Choose Add to Home Screen.</li>
-            <li>Turn on Open as Web App, then tap Add.</li>
-          </ol>
+          <p>
+            Scan the iPhone QR code on the About page or open this install page directly. Safari
+            creates the app icon on the Home Screen.
+          </p>
           <a className="primary-button" href="/dashboard">
+            <ExternalLink size={18} />
             Open staff dashboard
           </a>
+          <p className="install-platform-note">
+            If staff are away from the building Wi-Fi, first configure the public HTTPS address in
+            Admin.
+          </p>
         </article>
 
         <article className="install-platform">

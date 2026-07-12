@@ -1,9 +1,28 @@
-# Listening House Android App
+# Listening House Phone App Access
 
-The Android app opens the selected local or public Listening House staff dashboard inside a
-lightweight native WebView.
+The Listening House system can be opened from iPhone, iPad, Android, tablet, laptop, or desktop.
+Android can use a lightweight APK. iPhone and iPad install the dashboard as a Safari Home Screen web
+app.
 
-## Download
+## iPhone and iPad
+
+The About page has a separate iPhone/iPad QR code. This is the easiest path for staff:
+
+1. Open the About page on the kiosk or server computer.
+2. Scan **Install on iPhone or iPad** with the iPhone camera.
+3. Open the page in Safari.
+4. Press **Open dashboard for iPhone install**.
+5. Tap the Safari **Share** button.
+6. Choose **Add to Home Screen**.
+7. Leave **Open as Web App** on, then tap **Add**.
+
+This creates a Home Screen icon with the Listening House app icon. It is not an App Store download
+and does not use an APK file.
+
+If Safari is not showing the Add to Home Screen option, copy the dashboard link from the install
+page, paste it directly into Safari, and try again.
+
+## Android Download
 
 From a phone that can reach the server:
 
@@ -56,16 +75,14 @@ The website also repeats its own sound, vibration, and visible warning until sta
 iPhone and iPad use this website alarm and must keep the dashboard web app open; a website cannot add
 an alarm to Apple Clock.
 
-## iPhone and iPad
-
-The About page now has a separate iPhone/iPad QR code. It opens an installation page in Safari.
-Choose **Add to Home Screen**, turn on **Open as Web App**, and tap **Add**.
-
-This produces an installed Home Screen web app with the Listening House icon. A separate App Store
-binary would require an Apple Developer account, signing certificates, and App Store review.
-
 For use away from the building Wi-Fi, configure the public HTTPS address described in
 `PUBLIC_ACCESS.md`.
+
+## About Page Contact
+
+The About page includes a **Contact the Inventor** section. Admin staff can save the inventor phone
+number and email there. This contact information is stored only in the local Raspberry Pi SQLite
+database and is not committed into the public GitHub repository.
 
 ## Rebuild the Android APK
 

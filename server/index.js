@@ -169,6 +169,17 @@ function requireAnyPermission(permissions, label) {
 }
 
 const requireAdmin = requirePermission("admin", "Admin Controls");
+const requireOwnerAdmin = (req, res, next) => {
+  const session = sessionFromRequest(req);
+  if (!session?.owner) {
+    return res.status(401).json({ error: "Owner Admin access required." });
+  }
+  return next();
+};
+const requireAdminExcel = requirePermission("admin_excel", "Excel Sheets");
+const requireAdminCustomization = requirePermission("admin_customization", "Page Customization");
+const requireAdminActivities = requirePermission("admin_activities", "Activity Customization");
+const requireAdminIt = requirePermission("admin_it", "IT");
 const requireDashboardAccess = requireAnyPermission(
   ["dashboard", "admin"],
   "Dashboard or Admin Controls"
@@ -195,12 +206,20 @@ function requireDownloadPermission(permission, label) {
   };
 }
 
-const requireAdminDownload = requireDownloadPermission("admin", "Admin Controls");
+const requireAdminExcelDownload = requireDownloadPermission("admin_excel", "Excel Sheets");
 
 function createStaffSession({ owner = false, user = null, permissions = null } = {}) {
   const token = crypto.randomUUID();
   const sessionPermissions = owner
-    ? { dashboard: true, admin: true, about: true }
+    ? {
+        dashboard: true,
+        admin: true,
+        about: true,
+        admin_excel: true,
+        admin_customization: true,
+        admin_activities: true,
+        admin_it: true
+      }
     : permissions || user?.permissions || {};
   adminSessions.set(token, {
     createdAt: Date.now(),
@@ -222,6 +241,14 @@ function createStaffSession({ owner = false, user = null, permissions = null } =
 
 function requestedPermissionForPath(value) {
   const cleanValue = String(value || "").toLowerCase();
+  if (cleanValue.includes("admin_excel") || cleanValue.includes("excel")) return "admin_excel";
+  if (cleanValue.includes("admin_customization") || cleanValue.includes("customization")) {
+    return "admin_customization";
+  }
+  if (cleanValue.includes("admin_activities") || cleanValue.includes("activity")) {
+    return "admin_activities";
+  }
+  if (cleanValue.includes("admin_it") || cleanValue.includes("it")) return "admin_it";
   if (cleanValue.includes("admin")) return "admin";
   if (cleanValue.includes("about")) return "about";
   return "dashboard";
@@ -235,6 +262,37 @@ function requireAdminOrPermission(req, res, next) {
     return next();
   }
   return requireAdmin(req, res, next);
+}
+
+const IT_SETTING_KEYS = new Set(["network_mode", "preferred_local_url", "public_base_url"]);
+const ACTIVITY_SETTING_KEYS = new Set(["buffer_minutes", "workday_start", "workday_end"]);
+const CUSTOMIZATION_SETTING_PREFIXES = ["kiosk_"];
+const CUSTOMIZATION_SETTING_KEYS = new Set([
+  "system_name",
+  "inventor_contact_phone",
+  "inventor_contact_email"
+]);
+
+function permissionForSettingKey(key) {
+  if (IT_SETTING_KEYS.has(key)) return "admin_it";
+  if (ACTIVITY_SETTING_KEYS.has(key)) return "admin_activities";
+  if (CUSTOMIZATION_SETTING_KEYS.has(key)) return "admin_customization";
+  if (CUSTOMIZATION_SETTING_PREFIXES.some((prefix) => String(key).startsWith(prefix))) {
+    return "admin_customization";
+  }
+  return "admin";
+}
+
+function requireSettingsPermission(req, res, next) {
+  const session = sessionFromRequest(req);
+  const bodySettings = req.params.key
+    ? { [req.params.key]: req.body?.value }
+    : req.body.settings || req.body || {};
+  const requiredPermissions = [...new Set(Object.keys(bodySettings).map(permissionForSettingKey))];
+  if (requiredPermissions.every((permission) => sessionHasPermission(session, permission))) {
+    return next();
+  }
+  return res.status(401).json({ error: "This staff user cannot change those Admin settings." });
 }
 
 function sendAnalyticsWorkbook(res, workbook) {
@@ -440,7 +498,7 @@ app.get(
 
 app.post(
   "/api/admin/speech/preload",
-  requireAdmin,
+  requireAdminIt,
   handleRoute(async (req, res) => {
     const rawSegments = Array.isArray(req.body?.segments) ? req.body.segments : [];
     const segments = rawSegments.slice(0, 300).map((segment) => ({
@@ -636,7 +694,7 @@ app.post("/api/admin/session", (req, res) => {
 
 app.get(
   "/api/admin/security",
-  requireAdmin,
+  requireOwnerAdmin,
   handleRoute((_req, res) => {
     res.json(getAdminSecuritySettings());
   })
@@ -667,7 +725,8 @@ app.put(
   handleRoute((req, res) => {
     const header = req.headers.authorization || "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-    const hasValidSession = token && sessionHasPermission(adminSessions.get(token), "admin");
+    const session = token ? adminSessions.get(token) : null;
+    const hasValidSession = Boolean(session?.owner);
     const hasValidCurrentPin = verifyAdminPin(
       req.body.currentPin ?? req.body.current_pin,
       ADMIN_PIN
@@ -685,7 +744,7 @@ app.put(
 
 app.get(
   "/api/admin/users",
-  requireAdmin,
+  requireOwnerAdmin,
   handleRoute((_req, res) => {
     res.json(listStaffUsers());
   })
@@ -693,7 +752,7 @@ app.get(
 
 app.post(
   "/api/admin/users",
-  requireAdmin,
+  requireOwnerAdmin,
   handleRoute((req, res) => {
     res.status(201).json(createStaffUser(req.body));
   })
@@ -701,7 +760,7 @@ app.post(
 
 app.patch(
   "/api/admin/users/:id",
-  requireAdmin,
+  requireOwnerAdmin,
   handleRoute((req, res) => {
     res.json(updateStaffUser(req.params.id, req.body));
   })
@@ -709,7 +768,7 @@ app.patch(
 
 app.delete(
   "/api/admin/users/:id",
-  requireAdmin,
+  requireOwnerAdmin,
   handleRoute((req, res) => {
     res.json({ ok: true, user: deleteStaffUser(req.params.id) });
   })
@@ -717,7 +776,7 @@ app.delete(
 
 app.post(
   "/api/admin/reset-day",
-  requireAdmin,
+  requireAdminActivities,
   handleRoute((req, res) => {
     const data = resetDailyData({ seedDemo: Boolean(req.body.seedDemo) });
     emitDashboard();
@@ -727,7 +786,7 @@ app.post(
 
 app.post(
   "/api/admin/clear-active",
-  requireAdmin,
+  requireAdminActivities,
   handleRoute((_req, res) => {
     const data = clearActiveCheckIns();
     emitDashboard();
@@ -737,7 +796,7 @@ app.post(
 
 app.get(
   "/api/admin/analytics",
-  requireAdmin,
+  requireAdminExcel,
   handleRoute((req, res) => {
     res.json(getAnalyticsReport({ period: req.query.period, date: req.query.date }));
   })
@@ -745,7 +804,7 @@ app.get(
 
 app.get(
   "/api/admin/analytics/export",
-  requireAdminDownload,
+  requireAdminExcelDownload,
   handleRoute((req, res) => {
     const workbook = createAnalyticsWorkbook({ period: req.query.period, date: req.query.date });
     sendAnalyticsWorkbook(res, workbook);
@@ -754,7 +813,7 @@ app.get(
 
 app.post(
   "/api/admin/analytics/export-link",
-  requireAdmin,
+  requireAdminExcel,
   handleRoute((req, res) => {
     cleanExpiredDownloads();
     const workbook = createAnalyticsWorkbook({ period: req.body.period, date: req.body.date });
@@ -786,7 +845,7 @@ app.get(
 
 app.get(
   "/api/admin/data-deletion",
-  requireAdmin,
+  requireAdminExcel,
   handleRoute((_req, res) => {
     res.json(getDataDeletionSettings());
   })
@@ -794,7 +853,7 @@ app.get(
 
 app.put(
   "/api/admin/data-deletion",
-  requireAdmin,
+  requireAdminExcel,
   handleRoute((req, res) => {
     res.json(updateDataDeletionSettings(req.body || {}));
   })
@@ -802,7 +861,7 @@ app.put(
 
 app.post(
   "/api/admin/data-deletion/run",
-  requireAdmin,
+  requireAdminExcel,
   handleRoute((_req, res) => {
     const result = runYearlyDataDeletion({ reason: "manual" });
     emitDashboard();
@@ -812,7 +871,7 @@ app.post(
 
 app.post(
   "/api/admin/system/exit-kiosk",
-  requireAdmin,
+  requireAdminIt,
   handleRoute((_req, res) => {
     res.json(exitKioskBrowser());
   })
@@ -820,7 +879,7 @@ app.post(
 
 app.post(
   "/api/admin/system/open-kiosk",
-  requireAdmin,
+  requireAdminIt,
   handleRoute((_req, res) => {
     res.json(openKioskBrowser());
   })
@@ -828,7 +887,7 @@ app.post(
 
 app.post(
   "/api/admin/system/update",
-  requireAdmin,
+  requireAdminIt,
   handleRoute((_req, res) => {
     res.json(updateFromGithub());
   })
@@ -836,7 +895,7 @@ app.post(
 
 app.post(
   "/api/admin/system/reboot",
-  requireAdmin,
+  requireAdminIt,
   handleRoute((_req, res) => {
     res.json(rebootRaspberryPi());
   })
@@ -867,7 +926,7 @@ app.post(
 
 app.post(
   "/api/admin/activities",
-  requireAdmin,
+  requireAdminActivities,
   handleRoute(async (req, res) => {
     const activity = createActivity(await enrichActivityTranslations(req.body));
     emitDashboard();
@@ -877,7 +936,7 @@ app.post(
 
 app.post(
   "/api/admin/activities/apply-listening-house-defaults",
-  requireAdmin,
+  requireAdminActivities,
   handleRoute((_req, res) => {
     const data = applyDefaultActivities();
     emitDashboard();
@@ -887,7 +946,7 @@ app.post(
 
 app.patch(
   "/api/admin/activities/:id",
-  requireAdmin,
+  requireAdminActivities,
   handleRoute(async (req, res) => {
     const activity = updateActivity(req.params.id, await enrichActivityTranslations(req.body));
     emitDashboard();
@@ -897,7 +956,7 @@ app.patch(
 
 app.post(
   "/api/admin/activity-translations",
-  requireAdmin,
+  requireAdminActivities,
   handleRoute(async (req, res) => {
     res.json(await translateActivityLabel(req.body.name));
   })
@@ -905,7 +964,7 @@ app.post(
 
 app.delete(
   "/api/admin/activities/:id",
-  requireAdmin,
+  requireAdminActivities,
   handleRoute((req, res) => {
     const activity = deleteActivity(req.params.id);
     emitDashboard();
@@ -915,7 +974,7 @@ app.delete(
 
 app.put(
   "/api/admin/settings",
-  requireAdmin,
+  requireSettingsPermission,
   handleRoute((req, res) => {
     const settings = updateSettings(req.body.settings || req.body || {});
     emitDashboard();
@@ -925,7 +984,7 @@ app.put(
 
 app.put(
   "/api/admin/settings/:key",
-  requireAdmin,
+  requireSettingsPermission,
   handleRoute((req, res) => {
     const settings = updateSetting(req.params.key, req.body.value);
     emitDashboard();
@@ -935,7 +994,7 @@ app.put(
 
 app.post(
   "/api/admin/network/test",
-  requireAdmin,
+  requireAdminIt,
   handleRoute(async (req, res) => {
     const baseUrl = normalizeServerBaseUrl(req.body.url);
     if (!baseUrl) {

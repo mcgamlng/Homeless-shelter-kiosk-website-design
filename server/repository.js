@@ -36,6 +36,13 @@ const PIN_HASH_ITERATIONS = 100000;
 const KIOSK_COLOR_KEY_SET = new Set(KIOSK_COLOR_KEYS);
 const KIOSK_CUSTOMIZATION_KEY_SET = new Set(KIOSK_CUSTOMIZATION_KEYS);
 const NETWORK_URL_KEYS = new Set(["preferred_local_url", "public_base_url"]);
+const INVENTOR_CONTACT_KEYS = new Set(["inventor_contact_phone", "inventor_contact_email"]);
+const ADMIN_SECTION_PERMISSION_KEYS = [
+  "admin_excel",
+  "admin_customization",
+  "admin_activities",
+  "admin_it"
+];
 const LOCAL_DATE_FORMATTER = new Intl.DateTimeFormat([], {
   year: "numeric",
   month: "long",
@@ -90,6 +97,15 @@ function normalizeSettingValue(key, value) {
     return String(value || "")
       .trim()
       .slice(0, 300);
+  }
+  if (INVENTOR_CONTACT_KEYS.has(key)) {
+    if (key === "inventor_contact_phone") {
+      return String(value || "")
+        .replace(/[^\d()+\-. xX]/g, "")
+        .trim()
+        .slice(0, 40);
+    }
+    return cleanText(value, 160).toLowerCase();
   }
   return value;
 }
@@ -328,6 +344,10 @@ export function getSettings() {
       public_base_url: values.public_base_url || ""
     },
     dataDeletion: getDataDeletionSettings(),
+    inventorContact: {
+      phone: values.inventor_contact_phone || "",
+      email: values.inventor_contact_email || ""
+    },
     customization
   };
 }
@@ -373,11 +393,52 @@ function normalizeStaffDisplayName(value) {
   return cleanText(value, 120);
 }
 
-function normalizeStaffPermissions(payload = {}) {
+function hasExplicitAdminSectionPermissions(payload = {}) {
+  return ADMIN_SECTION_PERMISSION_KEYS.some(
+    (key) => Object.hasOwn(payload, key) || Object.hasOwn(payload, `can_${key}`)
+  );
+}
+
+function permissionValue(payload, current, key) {
+  return payload[key] ?? payload[`can_${key}`] ?? current[key] ?? current[`can_${key}`];
+}
+
+function normalizeStaffPermissions(payload = {}, current = {}) {
+  const hasExplicitAdminSections = hasExplicitAdminSectionPermissions(payload);
+  const adminSectionValues = ADMIN_SECTION_PERMISSION_KEYS.reduce((acc, key) => {
+    acc[key] = Boolean(permissionValue(payload, current, key));
+    return acc;
+  }, {});
+  const hasAnyAdminSection = Object.values(adminSectionValues).some(Boolean);
+  const admin = Boolean(payload.admin ?? payload.can_admin ?? current.admin ?? current.can_admin);
+  const shouldDefaultSectionsForLegacyAdmin =
+    admin &&
+    !hasExplicitAdminSections &&
+    current.admin === undefined &&
+    current.can_admin === undefined;
+
   return {
-    dashboard: Boolean(payload.dashboard ?? payload.can_dashboard),
-    admin: Boolean(payload.admin ?? payload.can_admin),
-    about: Boolean(payload.about ?? payload.can_about)
+    dashboard: Boolean(
+      payload.dashboard ?? payload.can_dashboard ?? current.dashboard ?? current.can_dashboard
+    ),
+    admin: admin || hasAnyAdminSection,
+    about: Boolean(payload.about ?? payload.can_about ?? current.about ?? current.can_about),
+    admin_excel:
+      admin || hasAnyAdminSection
+        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_excel
+        : false,
+    admin_customization:
+      admin || hasAnyAdminSection
+        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_customization
+        : false,
+    admin_activities:
+      admin || hasAnyAdminSection
+        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_activities
+        : false,
+    admin_it:
+      admin || hasAnyAdminSection
+        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_it
+        : false
   };
 }
 
@@ -389,7 +450,11 @@ function publicStaffUser(row) {
     permissions: {
       dashboard: Boolean(row.can_dashboard),
       admin: Boolean(row.can_admin),
-      about: Boolean(row.can_about)
+      about: Boolean(row.can_about),
+      admin_excel: Boolean(row.can_admin_excel),
+      admin_customization: Boolean(row.can_admin_customization),
+      admin_activities: Boolean(row.can_admin_activities),
+      admin_it: Boolean(row.can_admin_it)
     },
     active: Boolean(row.active),
     created_at: row.created_at,
@@ -409,7 +474,9 @@ function requireStaffPin(pin) {
 
 export function listStaffUsers() {
   return rows(
-    `SELECT id, display_name, can_dashboard, can_admin, can_about, active, created_at, updated_at
+    `SELECT id, display_name, can_dashboard, can_admin, can_about,
+            can_admin_excel, can_admin_customization, can_admin_activities, can_admin_it,
+            active, created_at, updated_at
      FROM staff_users
      ORDER BY active DESC, lower(display_name), id`
   ).map(publicStaffUser);
@@ -428,8 +495,9 @@ export function createStaffUser(payload = {}) {
   const info = db
     .prepare(
       `INSERT INTO staff_users
-       (display_name, pin_hash, can_dashboard, can_admin, can_about, active)
-       VALUES (?, ?, ?, ?, ?, ?)`
+       (display_name, pin_hash, can_dashboard, can_admin, can_about,
+        can_admin_excel, can_admin_customization, can_admin_activities, can_admin_it, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       displayName,
@@ -437,6 +505,10 @@ export function createStaffUser(payload = {}) {
       permissions.dashboard ? 1 : 0,
       permissions.admin ? 1 : 0,
       permissions.about ? 1 : 0,
+      permissions.admin_excel ? 1 : 0,
+      permissions.admin_customization ? 1 : 0,
+      permissions.admin_activities ? 1 : 0,
+      permissions.admin_it ? 1 : 0,
       payload.active === false ? 0 : 1
     );
   return listStaffUsers().find((user) => Number(user.id) === Number(info.lastInsertRowid));
@@ -457,10 +529,14 @@ export function updateStaffUser(id, payload = {}) {
     error.status = 400;
     throw error;
   }
-  const permissions = normalizeStaffPermissions({
-    dashboard: payload.permissions?.dashboard ?? payload.dashboard ?? current.can_dashboard,
-    admin: payload.permissions?.admin ?? payload.admin ?? current.can_admin,
-    about: payload.permissions?.about ?? payload.about ?? current.can_about
+  const permissions = normalizeStaffPermissions(payload.permissions || payload, {
+    dashboard: current.can_dashboard,
+    admin: current.can_admin,
+    about: current.can_about,
+    admin_excel: current.can_admin_excel,
+    admin_customization: current.can_admin_customization,
+    admin_activities: current.can_admin_activities,
+    admin_it: current.can_admin_it
   });
   const pin = payload.pin ? requireStaffPin(payload.pin) : "";
   if (pin) ensureUniqueStaffPin(pin, Number(id));
@@ -468,6 +544,8 @@ export function updateStaffUser(id, payload = {}) {
   db.prepare(
     `UPDATE staff_users
      SET display_name = ?, pin_hash = ?, can_dashboard = ?, can_admin = ?, can_about = ?,
+         can_admin_excel = ?, can_admin_customization = ?, can_admin_activities = ?,
+         can_admin_it = ?,
          active = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ).run(
@@ -476,6 +554,10 @@ export function updateStaffUser(id, payload = {}) {
     permissions.dashboard ? 1 : 0,
     permissions.admin ? 1 : 0,
     permissions.about ? 1 : 0,
+    permissions.admin_excel ? 1 : 0,
+    permissions.admin_customization ? 1 : 0,
+    permissions.admin_activities ? 1 : 0,
+    permissions.admin_it ? 1 : 0,
     payload.active === undefined ? current.active : payload.active ? 1 : 0,
     id
   );

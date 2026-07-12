@@ -157,6 +157,28 @@ function migrateDatabase(database) {
     "TEXT NOT NULL DEFAULT 'confirmed'"
   );
   ensureColumn(database, "scheduled_activity_items", "service_spot_number", "INTEGER");
+  const staffColumnsBeforeSectionPermissions = tableColumns(database, "staff_users");
+  const hadAdminSectionPermissions =
+    staffColumnsBeforeSectionPermissions.has("can_admin_excel") &&
+    staffColumnsBeforeSectionPermissions.has("can_admin_customization") &&
+    staffColumnsBeforeSectionPermissions.has("can_admin_activities") &&
+    staffColumnsBeforeSectionPermissions.has("can_admin_it");
+  ensureColumn(database, "staff_users", "can_admin_excel", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(database, "staff_users", "can_admin_customization", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(database, "staff_users", "can_admin_activities", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(database, "staff_users", "can_admin_it", "INTEGER NOT NULL DEFAULT 0");
+  if (!hadAdminSectionPermissions) {
+    database
+      .prepare(
+        `UPDATE staff_users
+         SET can_admin_excel = can_admin,
+             can_admin_customization = can_admin,
+             can_admin_activities = can_admin,
+             can_admin_it = can_admin
+         WHERE can_admin = 1`
+      )
+      .run();
+  }
   database
     .prepare(
       "UPDATE settings SET value = '' WHERE key IN ('daily_export_recipient', 'daily_export_gmail_sender', 'daily_export_gmail_app_password')"
@@ -442,6 +464,8 @@ export function seedBaseData(database) {
   insertSetting.run("network_mode", "local");
   insertSetting.run("preferred_local_url", "");
   insertSetting.run("public_base_url", "");
+  insertSetting.run("inventor_contact_phone", "");
+  insertSetting.run("inventor_contact_email", "");
   insertSetting.run("yearly_data_deletion_enabled", "0");
   insertSetting.run("yearly_data_deletion_month_day", "01-01");
   insertSetting.run("yearly_data_deletion_time", "03:00");

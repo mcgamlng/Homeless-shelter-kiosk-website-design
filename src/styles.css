@@ -2331,6 +2331,100 @@ main {
   margin-bottom: 18px;
 }
 
+.admin-section-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.admin-section-shortcut {
+  display: grid;
+  gap: 6px;
+  min-height: 112px;
+  padding: 16px;
+  background: var(--lh-warm-white);
+  border: 2px solid var(--lh-border);
+  color: var(--lh-navy);
+  text-decoration: none;
+  box-shadow: 6px 6px 0 rgba(34, 53, 109, 0.13);
+}
+
+.admin-section-shortcut.is-enabled {
+  border-color: var(--lh-purple);
+}
+
+.admin-section-shortcut.is-restricted {
+  opacity: 0.72;
+}
+
+.admin-section-shortcut strong {
+  font-size: 1.1rem;
+}
+
+.admin-section-shortcut span {
+  color: var(--lh-muted-brown);
+  line-height: 1.35;
+}
+
+.admin-section-intro {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin: 22px 0 14px;
+  padding: 16px 18px;
+  background: var(--lh-navy);
+  color: var(--lh-warm-white);
+  border-left: 10px solid var(--lh-purple);
+}
+
+.admin-section-intro span {
+  display: block;
+  color: var(--lh-aqua-light);
+  font-weight: 950;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+
+.admin-section-intro h2,
+.admin-section-intro p {
+  margin: 0;
+}
+
+.admin-section-intro h2 {
+  color: var(--lh-warm-white);
+}
+
+.admin-section-intro p {
+  color: var(--lh-aqua-light);
+  line-height: 1.45;
+}
+
+.admin-section-intro.is-restricted {
+  background: var(--lh-muted-brown);
+}
+
+.restricted-admin-section {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 18px;
+  background: #fff3f6;
+  border-left: 8px solid var(--lh-coral);
+}
+
+.restricted-admin-section h3,
+.restricted-admin-section p {
+  margin: 0;
+}
+
+.restricted-admin-section p {
+  margin-top: 4px;
+  color: var(--lh-muted-brown);
+}
+
 .kiosk-customization-panel {
   margin-bottom: 18px;
 }
@@ -2883,8 +2977,45 @@ main {
   align-items: center;
 }
 
-.staff-user-form .permission-checkboxes {
+.staff-user-form .permission-groups {
   grid-column: 1 / -1;
+}
+
+.permission-groups,
+.staff-user-permissions {
+  display: grid;
+  gap: 12px;
+}
+
+.permission-group {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--lh-border);
+  background: var(--lh-cream);
+}
+
+.permission-group legend {
+  padding: 0 6px;
+  color: var(--lh-navy);
+  font-weight: 950;
+}
+
+.permission-group p {
+  margin: 0 0 10px;
+  color: var(--lh-muted-brown);
+  font-size: 0.9rem;
+}
+
+.permission-group.is-compact {
+  padding: 8px;
+  background: rgba(255, 253, 247, 0.62);
+}
+
+.permission-group.is-compact legend {
+  font-size: 0.9rem;
+}
+
+.staff-user-form .permission-checkboxes {
   align-items: stretch;
 }
 
@@ -2907,7 +3038,7 @@ main {
 }
 
 .staff-user-row {
-  grid-template-columns: minmax(180px, 1fr) minmax(260px, 2fr) auto auto;
+  grid-template-columns: minmax(180px, 1fr) minmax(320px, 2fr) auto auto;
   padding: 14px;
   background: var(--lh-soft-green);
   border: 1px solid var(--lh-border);
@@ -3590,6 +3721,7 @@ main {
   .admin-layout,
   .customization-layout,
   .admin-security-grid,
+  .admin-section-shortcuts,
   .analytics-summary,
   .about-grid {
     grid-template-columns: 1fr;
@@ -5340,9 +5472,157 @@ main {
   margin: 0;
 }
 
+.install-copy-message {
+  margin: 0;
+  color: var(--lh-navy);
+  font-weight: 900;
+}
+
 .install-platform-note {
   color: var(--lh-muted-brown);
   font-size: 0.9rem;
+}
+
+.ios-install-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+  gap: 18px;
+  align-items: stretch;
+  padding: clamp(20px, 3vw, 30px);
+  border: 3px solid var(--lh-navy);
+  background: var(--lh-warm-white);
+  box-shadow: 8px 8px 0 rgba(34, 53, 109, 0.16);
+}
+
+.ios-install-main,
+.ios-install-steps {
+  display: grid;
+  gap: 16px;
+}
+
+.ios-install-title {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.ios-install-title svg,
+.ios-install-title h2 {
+  color: var(--lh-navy);
+}
+
+.ios-install-title h2,
+.ios-install-title p {
+  margin: 0;
+}
+
+.ios-install-title p {
+  margin-top: 6px;
+  color: var(--lh-charcoal);
+  line-height: 1.5;
+}
+
+.ios-install-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ios-install-steps li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 13px 14px;
+  background: var(--lh-aqua-light);
+  border-left: 6px solid var(--lh-purple);
+}
+
+.ios-install-steps strong {
+  display: block;
+  color: var(--lh-navy);
+}
+
+.ios-install-steps span {
+  color: var(--lh-charcoal);
+  line-height: 1.45;
+}
+
+.ios-step-number {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--lh-purple);
+  color: var(--lh-warm-white) !important;
+  font-weight: 950;
+}
+
+.ios-install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ios-dashboard-link {
+  display: block;
+  max-width: 100%;
+  padding: 10px 12px;
+  background: var(--lh-cream);
+  color: var(--lh-navy);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.ios-install-phone-card {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 12px;
+  min-height: 100%;
+  padding: 24px;
+  background: var(--lh-navy);
+  color: var(--lh-warm-white);
+  text-align: center;
+  box-shadow: inset 0 0 0 8px rgba(255, 253, 247, 0.18);
+}
+
+.ios-phone-top {
+  width: 76px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.45);
+}
+
+.ios-phone-icon {
+  display: grid;
+  width: 74px;
+  height: 74px;
+  place-items: center;
+  border-radius: 20px;
+  background: var(--lh-aqua);
+  color: var(--lh-navy);
+}
+
+.ios-install-phone-card strong {
+  font-size: 1.35rem;
+}
+
+.ios-install-phone-card span {
+  color: var(--lh-aqua-light);
+  font-weight: 850;
+}
+
+.ios-install-phone-card code {
+  max-width: 100%;
+  padding: 9px;
+  background: rgba(255, 253, 247, 0.12);
+  color: var(--lh-warm-white);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .install-platform-grid {
@@ -5432,11 +5712,112 @@ main {
   color: var(--lh-muted-brown);
 }
 
+.iphone-install-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-top: 18px;
+  padding: 16px;
+  background: var(--lh-aqua-light);
+  border-left: 6px solid var(--lh-navy);
+}
+
+.iphone-install-callout strong,
+.iphone-install-callout span {
+  display: block;
+}
+
+.iphone-install-callout strong {
+  color: var(--lh-navy);
+}
+
+.iphone-install-callout span {
+  margin-top: 4px;
+  color: var(--lh-charcoal);
+  line-height: 1.45;
+}
+
+.inventor-contact-section {
+  margin-top: 26px;
+  padding: clamp(20px, 4vw, 36px);
+  background: var(--lh-warm-white);
+  border: 1px solid var(--lh-border);
+  box-shadow: 0 8px 24px rgba(45, 45, 42, 0.08);
+}
+
+.inventor-contact-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 18px;
+}
+
+.inventor-contact-card {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+  padding: 20px;
+  background: var(--lh-cream);
+  border: 1px solid var(--lh-border);
+}
+
+.inventor-contact-card h3,
+.inventor-contact-card p {
+  margin: 0;
+}
+
+.inventor-contact-links,
+.inventor-contact-form {
+  display: grid;
+  gap: 12px;
+}
+
+.inventor-contact-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--lh-navy);
+  font-weight: 950;
+  overflow-wrap: anywhere;
+}
+
+.inventor-contact-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--lh-navy);
+  font-weight: 900;
+}
+
+.inventor-contact-form input {
+  width: 100%;
+  min-height: 50px;
+  padding: 10px 12px;
+  border: 2px solid var(--lh-border);
+  background: white;
+  color: var(--lh-charcoal);
+  font: inherit;
+}
+
+.contact-empty,
+.contact-save-message {
+  color: var(--lh-muted-brown);
+  line-height: 1.45;
+}
+
+.contact-save-message {
+  font-weight: 900;
+}
+
 @media (max-width: 900px) {
   .activity-option-grid,
   .activity-translation-grid,
   .access-qr-grid,
   .data-deletion-grid,
+  .inventor-contact-grid,
+  .ios-install-hero,
   .install-platform-grid,
   .system-control-grid,
   .speech-status-grid {

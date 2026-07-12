@@ -4,7 +4,10 @@ import {
   Download,
   HeartHandshake,
   ListChecks,
+  Mail,
+  Phone,
   QrCode,
+  Save,
   Smartphone,
   UsersRound
 } from "lucide-react";
@@ -16,6 +19,11 @@ export default function About() {
   const [browserQr, setBrowserQr] = useState("");
   const [appQr, setAppQr] = useState("");
   const [iphoneQr, setIphoneQr] = useState("");
+  const [inventorContact, setInventorContact] = useState({ phone: "", email: "" });
+  const [contactDraft, setContactDraft] = useState({ phone: "", email: "" });
+  const [canEditContact, setCanEditContact] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactMessage, setContactMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -40,6 +48,61 @@ export default function About() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .getSettings()
+      .then((settings) => {
+        if (!active) return;
+        const contact = settings.inventorContact || {};
+        const nextContact = { phone: contact.phone || "", email: contact.email || "" };
+        setInventorContact(nextContact);
+        setContactDraft(nextContact);
+      })
+      .catch(() => {});
+
+    const token = sessionStorage.getItem("lh-admin-token") || "";
+    if (token) {
+      api
+        .getStaffSession(token, "admin_customization")
+        .then(() => {
+          if (active) setCanEditContact(true);
+        })
+        .catch(() => {
+          if (active) setCanEditContact(false);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function saveInventorContact(event) {
+    event.preventDefault();
+    const token = sessionStorage.getItem("lh-admin-token") || "";
+    if (!token) {
+      setContactMessage("Sign in with Admin access before saving inventor contact information.");
+      return;
+    }
+    setSavingContact(true);
+    setContactMessage("");
+    try {
+      const settings = await api.updateSettings(token, {
+        inventor_contact_phone: contactDraft.phone,
+        inventor_contact_email: contactDraft.email
+      });
+      const contact = settings.inventorContact || {};
+      const nextContact = { phone: contact.phone || "", email: contact.email || "" };
+      setInventorContact(nextContact);
+      setContactDraft(nextContact);
+      setContactMessage("Inventor contact saved on this system.");
+    } catch (err) {
+      setContactMessage(err.message || "Inventor contact could not be saved.");
+    } finally {
+      setSavingContact(false);
+    }
+  }
 
   return (
     <section className="about-page">
@@ -109,9 +172,10 @@ export default function About() {
           <QrAccessCard
             image={iphoneQr}
             title="Install on iPhone or iPad"
-            description="Opens the iPhone installation page with Add to Home Screen instructions."
+            description="Scan with the iPhone camera, open in Safari, then add the dashboard to the Home Screen."
             url={accessInfo?.iphoneInstallUrl}
             icon="apple"
+            actionLabel="Open iPhone install"
           />
           <QrAccessCard
             image={appQr}
@@ -122,6 +186,90 @@ export default function About() {
             extraUrl={accessInfo?.androidConfigureUrl}
             extraLabel="Connect installed app"
           />
+        </div>
+        <div className="iphone-install-callout">
+          <Apple size={24} />
+          <div>
+            <strong>iPhone installs from Safari, not from an APK download.</strong>
+            <span>
+              Open the iPhone QR code, tap the dashboard button, then use Share and Add to Home
+              Screen. The new icon opens this system like an app.
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="inventor-contact-section">
+        <div className="access-qr-heading">
+          <HeartHandshake size={30} />
+          <div>
+            <h2>Contact the Inventor</h2>
+            <p>Save the phone number and email staff should use when they need project help.</p>
+          </div>
+        </div>
+
+        <div className="inventor-contact-grid">
+          <article className="inventor-contact-card">
+            <h3>Saved contact</h3>
+            {inventorContact.phone || inventorContact.email ? (
+              <div className="inventor-contact-links">
+                {inventorContact.phone ? (
+                  <a href={`tel:${inventorContact.phone}`}>
+                    <Phone size={18} />
+                    {inventorContact.phone}
+                  </a>
+                ) : null}
+                {inventorContact.email ? (
+                  <a href={`mailto:${inventorContact.email}`}>
+                    <Mail size={18} />
+                    {inventorContact.email}
+                  </a>
+                ) : null}
+              </div>
+            ) : (
+              <p className="contact-empty">No inventor contact has been saved yet.</p>
+            )}
+          </article>
+
+          <article className="inventor-contact-card">
+            <h3>Update contact information</h3>
+            {canEditContact ? (
+              <form className="inventor-contact-form" onSubmit={saveInventorContact}>
+                <label>
+                  Phone number
+                  <input
+                    type="tel"
+                    value={contactDraft.phone}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({ ...current, phone: event.target.value }))
+                    }
+                    placeholder="Example: 555-555-1234"
+                  />
+                </label>
+                <label>
+                  Email
+                  <input
+                    type="email"
+                    value={contactDraft.email}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({ ...current, email: event.target.value }))
+                    }
+                    placeholder="name@example.com"
+                  />
+                </label>
+                <button className="primary-button" type="submit" disabled={savingContact}>
+                  <Save size={18} />
+                  {savingContact ? "Saving..." : "Save inventor contact"}
+                </button>
+              </form>
+            ) : (
+              <p className="contact-empty">
+                Sign in with Admin access to update this contact. Staff with About access can still
+                view the saved phone number and email.
+              </p>
+            )}
+            {contactMessage ? <p className="contact-save-message">{contactMessage}</p> : null}
+          </article>
         </div>
       </section>
     </section>
@@ -136,7 +284,8 @@ function QrAccessCard({
   download = false,
   icon = "phone",
   extraUrl = "",
-  extraLabel = ""
+  extraLabel = "",
+  actionLabel = ""
 }) {
   return (
     <article className="qr-access-card">
@@ -159,7 +308,7 @@ function QrAccessCard({
             ) : (
               <Smartphone size={18} />
             )}
-            {download ? "Download app" : "Open website"}
+            {actionLabel || (download ? "Download app" : "Open website")}
           </a>
         ) : null}
         {extraUrl ? (

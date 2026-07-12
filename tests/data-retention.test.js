@@ -24,9 +24,17 @@ test("yearly deletion removes guest data and preserves staff users", async () =>
     const staffUser = repository.createStaffUser({
       display_name: "Dashboard Staff",
       pin: "1717",
-      permissions: { dashboard: true, about: true }
+      permissions: {
+        dashboard: true,
+        about: true,
+        admin_excel: true,
+        admin_it: false
+      }
     });
     assert.equal(repository.verifyStaffUserPin("1717").display_name, "Dashboard Staff");
+    assert.equal(repository.verifyStaffUserPin("1717").permissions.admin, true);
+    assert.equal(repository.verifyStaffUserPin("1717").permissions.admin_excel, true);
+    assert.equal(repository.verifyStaffUserPin("1717").permissions.admin_it, false);
 
     const checkIn = repository.createCheckIn({
       activityIds: [openActivity.id],
@@ -72,6 +80,7 @@ test("yearly deletion removes guest data and preserves staff users", async () =>
     assert.equal(fs.existsSync(path.join(process.env.EXPORTS_PATH, "old-report.xlsx")), false);
     assert.equal(repository.listStaffUsers().length, 1);
     assert.equal(repository.listStaffUsers()[0].id, staffUser.id);
+    assert.equal(repository.listStaffUsers()[0].permissions.admin_excel, true);
   } finally {
     if (database?.open) database.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

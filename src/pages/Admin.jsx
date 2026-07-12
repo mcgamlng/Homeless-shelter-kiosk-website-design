@@ -196,9 +196,47 @@ function createStaffUserDraft() {
   return {
     display_name: "",
     pin: "",
-    permissions: { dashboard: true, admin: false, about: false },
+    permissions: {
+      dashboard: true,
+      admin: false,
+      about: false,
+      admin_excel: false,
+      admin_customization: false,
+      admin_activities: false,
+      admin_it: false
+    },
     active: true
   };
+}
+
+const pagePermissionOptions = [
+  ["dashboard", "Dashboard"],
+  ["admin", "Admin Controls"],
+  ["about", "About Page"]
+];
+
+const adminSectionPermissionOptions = [
+  ["admin_excel", "Excel sheets"],
+  ["admin_customization", "Page customization"],
+  ["admin_activities", "Activity customization"],
+  ["admin_it", "IT tools"]
+];
+
+function normalizePermissionToggle(permissions, permission, checked) {
+  const next = { ...permissions, [permission]: checked };
+  if (permission === "admin" && !checked) {
+    adminSectionPermissionOptions.forEach(([key]) => {
+      next[key] = false;
+    });
+  }
+  if (permission.startsWith("admin_") && checked) {
+    next.admin = true;
+  }
+  if (permission.startsWith("admin_")) {
+    next.admin =
+      checked || adminSectionPermissionOptions.some(([key]) => key !== permission && next[key]);
+  }
+  return next;
 }
 
 const piMaintenanceCommands = {
@@ -260,6 +298,13 @@ export default function Admin() {
   const analyticsRequestRef = useRef(0);
   const [pin, setPin] = useState("");
   const [token, setToken] = useState(sessionStorage.getItem("lh-admin-token") || "");
+  const [staffSession, setStaffSession] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem("lh-staff-user") || "null");
+    } catch {
+      return null;
+    }
+  });
   const [adminVerified, setAdminVerified] = useState(false);
   const [data, setData] = useState(null);
   const [message, setMessage] = useState("");
@@ -300,6 +345,13 @@ export default function Admin() {
   );
 
   const signedIn = Boolean(token && adminVerified);
+  const sessionPermissions = staffSession?.permissions || {};
+  const isOwnerAdmin = Boolean(staffSession?.owner);
+  const canUseExcel = isOwnerAdmin || Boolean(sessionPermissions.admin_excel);
+  const canUseCustomization = isOwnerAdmin || Boolean(sessionPermissions.admin_customization);
+  const canUseActivities = isOwnerAdmin || Boolean(sessionPermissions.admin_activities);
+  const canUseIt = isOwnerAdmin || Boolean(sessionPermissions.admin_it);
+  const canManageUsers = isOwnerAdmin;
 
   function currentAdminToken() {
     return sessionStorage.getItem("lh-admin-token") || token;
@@ -323,10 +375,19 @@ export default function Admin() {
 
   useEffect(() => {
     if (!signedIn) return;
-    loadAnalytics(token);
-    loadDataDeletionTools(token);
-    loadStaffUsers(token);
-  }, [signedIn, token, analyticsPeriod, analyticsDate]);
+    if (canUseExcel) {
+      loadAnalytics(token);
+      loadDataDeletionTools(token);
+    } else {
+      setAnalytics(null);
+      setDataDeletionSettings(null);
+    }
+    if (canManageUsers) {
+      loadStaffUsers(token);
+    } else {
+      setStaffUsers([]);
+    }
+  }, [signedIn, token, analyticsPeriod, analyticsDate, canUseExcel, canManageUsers]);
 
   useEffect(() => {
     if (data?.settings) {
@@ -351,6 +412,7 @@ export default function Admin() {
       sessionStorage.setItem("lh-staff-user", JSON.stringify(response.user));
       window.dispatchEvent(new CustomEvent("lh:staff-session-updated", { detail: response.user }));
       setAdminVerified(false);
+      setStaffSession(response.user);
       setToken(response.token);
       setPin("");
       setMessage("Admin access unlocked.");
@@ -365,7 +427,9 @@ export default function Admin() {
 
   async function loadSecurity(authToken = token) {
     try {
-      await api.getAdminSecurity(authToken);
+      const session = await api.getStaffSession(authToken, "admin");
+      setStaffSession(session.user);
+      sessionStorage.setItem("lh-staff-user", JSON.stringify(session.user));
       setAdminVerified(true);
     } catch (err) {
       handleAdminError(err, authToken);
@@ -385,6 +449,7 @@ export default function Admin() {
       sessionStorage.removeItem("lh-staff-user");
       window.dispatchEvent(new CustomEvent("lh:staff-session-updated", { detail: null }));
       setToken("");
+      setStaffSession(null);
       setAdminVerified(false);
       setAnalytics(null);
       setMessage("Please enter the Admin PIN again.");
@@ -468,6 +533,7 @@ export default function Admin() {
     sessionStorage.removeItem("lh-staff-user");
     window.dispatchEvent(new CustomEvent("lh:staff-session-updated", { detail: null }));
     setToken("");
+    setStaffSession(null);
     setAdminVerified(false);
     setAnalytics(null);
     setPinDraft({ currentPin: "", newPin: "", confirmPin: "" });
@@ -480,6 +546,7 @@ export default function Admin() {
     sessionStorage.removeItem("lh-staff-user");
     window.dispatchEvent(new CustomEvent("lh:staff-session-updated", { detail: null }));
     setToken("");
+    setStaffSession(null);
     setAdminVerified(false);
     setAnalytics(null);
     setPin("");
@@ -581,7 +648,7 @@ export default function Admin() {
   function updateStaffPermissionDraft(permission, checked) {
     setStaffUserDraft((current) => ({
       ...current,
-      permissions: { ...current.permissions, [permission]: checked }
+      permissions: normalizePermissionToggle(current.permissions, permission, checked)
     }));
   }
 
@@ -1015,1078 +1082,1191 @@ export default function Admin() {
 
       {message ? <p className="notice-message">{message}</p> : null}
 
-      <div className="admin-layout">
-        <div className="card-panel">
-          <h2>Daily totals</h2>
-          <div className="totals-list">
-            <span>Guests checked in</span>
-            <strong>{data.totals.guestsCheckedIn}</strong>
-            <span>Completed activities</span>
-            <strong>{data.totals.completedActivities}</strong>
-            <span>Skipped activities</span>
-            <strong>{data.totals.skippedActivities}</strong>
-            <span>Current active guests</span>
-            <strong>{data.totals.activeGuests.join(", ") || "None"}</strong>
-          </div>
-          <h3>Most requested</h3>
-          <div className="request-list">
-            {mostRequested.length === 0 ? <span>No activity requests yet.</span> : null}
-            {mostRequested.map((item) => (
-              <span key={item.name}>
-                {item.name} <strong>{item.count}</strong>
-              </span>
-            ))}
-          </div>
+      {signedIn ? (
+        <div className="admin-section-shortcuts" aria-label="Admin sections">
+          <AdminShortcut
+            href="#admin-section-excel"
+            label="Excel sheets"
+            detail="Reports, downloads, and yearly data deletion"
+            enabled={canUseExcel}
+          />
+          <AdminShortcut
+            href="#admin-section-customization"
+            label="Page customization"
+            detail="Kiosk wording, colors, and inventor contact"
+            enabled={canUseCustomization}
+          />
+          <AdminShortcut
+            href="#admin-section-activities"
+            label="Activity customization"
+            detail="Services, limits, schedule rules, and resets"
+            enabled={canUseActivities}
+          />
+          <AdminShortcut
+            href="#admin-section-it"
+            label="IT tools"
+            detail="Network, speech, Raspberry Pi controls"
+            enabled={canUseIt}
+          />
         </div>
+      ) : null}
 
-        <div className="card-panel">
-          <h2>Schedule settings</h2>
-          <div className="settings-grid">
-            <label>
-              Workday start time
-              <input
-                type="time"
-                defaultValue={data.settings.workday_start || "08:00"}
-                disabled={!signedIn}
-                onBlur={(event) => saveWorkdaySetting("workday_start", event.target.value)}
-              />
-            </label>
-            <label>
-              Workday end time
-              <input
-                type="time"
-                defaultValue={data.settings.workday_end || "16:00"}
-                disabled={!signedIn}
-                onBlur={(event) => saveWorkdaySetting("workday_end", event.target.value)}
-              />
-            </label>
-            <label>
-              Buffer time between a guest&apos;s activities
-              <input
-                type="number"
-                min="0"
-                max="30"
-                defaultValue={data.settings.buffer_minutes}
-                disabled={!signedIn}
-                onBlur={(event) => saveBuffer(Number(event.target.value))}
-              />
-            </label>
-          </div>
-          <div className="admin-actions">
-            <button
-              className="secondary-button"
-              disabled={!signedIn}
-              onClick={() => resetDay(true)}
-            >
-              <RotateCcw size={18} />
-              Reset demo data
-            </button>
-            <button className="danger-button" disabled={!signedIn} onClick={() => resetDay(false)}>
-              Reset daily schedule
-            </button>
-            <button className="secondary-button" disabled={!signedIn} onClick={clearActive}>
-              Clear active guests
-            </button>
-          </div>
-        </div>
-      </div>
+      <AdminSectionIntro
+        id="admin-section-activities"
+        title="Activity customization"
+        description="Set the working day, reset active check-ins, and customize the service/activity list."
+        allowed={!signedIn || canUseActivities}
+      />
 
-      <form className="card-panel network-settings-panel" onSubmit={saveNetworkSettings}>
-        <div className="analytics-heading">
-          <div>
-            <h2>
-              <Wifi size={24} />
-              Network & Phone Access
-            </h2>
-            <p>
-              Choose the address phones and tablets should use, test it, then connect the Android
-              app with one tap.
-            </p>
-          </div>
-          <button
-            className="secondary-button compact-button"
-            type="button"
-            onClick={() => refreshNetworkInfo(true)}
-          >
-            <RefreshCw size={18} />
-            Refresh network
-          </button>
-        </div>
-
-        <div className="network-guide">
-          <div>
-            <span>1</span>
-            <strong>Connect the server</strong>
-            <p>Use Windows or Raspberry Pi settings to join the Wi-Fi you want to use.</p>
-          </div>
-          <div>
-            <span>2</span>
-            <strong>Choose its address</strong>
-            <p>Select the matching network below and save it.</p>
-          </div>
-          <div>
-            <span>3</span>
-            <strong>Connect phones</strong>
-            <p>Join phones to that Wi-Fi, then press Connect installed app.</p>
-          </div>
-        </div>
-
-        <div className="network-current">
-          <Wifi size={22} />
-          <div>
-            <span>Wi-Fi detected on this server</span>
-            <strong>{accessInfo?.wifiName || "Network name unavailable"}</strong>
-          </div>
-          <code>{accessInfo?.localBaseUrl || "Looking for a local address..."}</code>
-        </div>
-
-        <div className="network-mode-picker" role="radiogroup" aria-label="Server access mode">
-          <label className={networkDraft.mode === "local" ? "is-selected" : ""}>
-            <input
-              type="radio"
-              name="network_mode"
-              value="local"
-              checked={networkDraft.mode === "local"}
-              disabled={!signedIn}
-              onChange={() => setNetworkDraft((current) => ({ ...current, mode: "local" }))}
-            />
-            <Wifi />
-            <span>
-              <strong>Local Wi-Fi</strong>
-              <small>Phones must use the same building Wi-Fi.</small>
-            </span>
-          </label>
-          <label className={networkDraft.mode === "public" ? "is-selected" : ""}>
-            <input
-              type="radio"
-              name="network_mode"
-              value="public"
-              checked={networkDraft.mode === "public"}
-              disabled={!signedIn}
-              onChange={() => setNetworkDraft((current) => ({ ...current, mode: "public" }))}
-            />
-            <Globe2 />
-            <span>
-              <strong>Public internet</strong>
-              <small>Uses a public HTTPS tunnel or hosted address.</small>
-            </span>
-          </label>
-        </div>
-
-        {networkDraft.mode === "local" ? (
-          <label className="network-address-field">
-            Local server address
-            <select
-              value={networkDraft.preferred_local_url}
-              disabled={!signedIn}
-              onChange={(event) =>
-                setNetworkDraft((current) => ({
-                  ...current,
-                  preferred_local_url: event.target.value
-                }))
-              }
-            >
-              <option value="">Choose this computer&apos;s network address</option>
-              {(accessInfo?.networkOptions || []).map((option) => (
-                <option key={`${option.interfaceName}-${option.address}`} value={option.url}>
-                  {option.label}
-                </option>
+      {canUseActivities || !signedIn ? (
+        <div className="admin-layout">
+          <div className="card-panel">
+            <h2>Daily totals</h2>
+            <div className="totals-list">
+              <span>Guests checked in</span>
+              <strong>{data.totals.guestsCheckedIn}</strong>
+              <span>Completed activities</span>
+              <strong>{data.totals.completedActivities}</strong>
+              <span>Skipped activities</span>
+              <strong>{data.totals.skippedActivities}</strong>
+              <span>Current active guests</span>
+              <strong>{data.totals.activeGuests.join(", ") || "None"}</strong>
+            </div>
+            <h3>Most requested</h3>
+            <div className="request-list">
+              {mostRequested.length === 0 ? <span>No activity requests yet.</span> : null}
+              {mostRequested.map((item) => (
+                <span key={item.name}>
+                  {item.name} <strong>{item.count}</strong>
+                </span>
               ))}
-              {networkDraft.preferred_local_url &&
-              !(accessInfo?.networkOptions || []).some(
-                (option) => option.url === networkDraft.preferred_local_url
-              ) ? (
-                <option value={networkDraft.preferred_local_url}>
-                  Saved address - currently unavailable
-                </option>
-              ) : null}
-            </select>
-            <small>
-              A website cannot switch the computer&apos;s Wi-Fi. Switch Wi-Fi in the device
-              settings, then press Refresh network here.
-            </small>
-          </label>
-        ) : (
-          <label className="network-address-field">
-            Public HTTPS address
-            <input
-              type="url"
-              placeholder="https://checkin.example.org"
-              value={networkDraft.public_base_url}
-              disabled={!signedIn}
-              onChange={(event) =>
-                setNetworkDraft((current) => ({
-                  ...current,
-                  public_base_url: event.target.value
-                }))
-              }
-            />
-            <small>
-              Enter the address created by your hosting service or Cloudflare Tunnel. Saving an
-              address here does not create the tunnel by itself.
-            </small>
-          </label>
-        )}
-
-        <div className="network-actions">
-          <button className="primary-button" type="submit" disabled={!signedIn || savingNetwork}>
-            <Save size={18} />
-            {savingNetwork ? "Saving and testing..." : "Save and test connection"}
-          </button>
-          {accessInfo?.browserUrl ? (
-            <a
-              className="secondary-button"
-              href={accessInfo.browserUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Link2 size={18} />
-              Open selected address
-            </a>
-          ) : null}
-          {accessInfo?.androidConfigureUrl ? (
-            <a className="secondary-button" href={accessInfo.androidConfigureUrl}>
-              <Smartphone size={18} />
-              Connect installed Android app
-            </a>
-          ) : null}
-        </div>
-        {networkStatus ? <p className="network-status">{networkStatus}</p> : null}
-      </form>
-
-      <section className="card-panel speech-status-panel">
-        <div className="analytics-heading">
-          <div>
-            <h2>
-              <Volume2 size={24} />
-              Read Aloud Voice Status
-            </h2>
-            <p>
-              Hmong reads best when native full-phrase recordings are installed. If they are not
-              present, the kiosk uses the local Hmong syllable voice pack as a fallback.
-            </p>
+            </div>
           </div>
-          <button
-            className="secondary-button compact-button"
-            type="button"
-            onClick={() => refreshSpeechStatus(true)}
-          >
-            <RefreshCw size={18} />
-            Refresh voices
-          </button>
-          <button
-            className="primary-button compact-button"
-            type="button"
-            disabled={!signedIn || preloadingSpeech}
-            onClick={preloadSpeech}
-          >
-            <Volume2 size={18} />
-            {preloadingSpeech ? "Preloading..." : "Preload kiosk speech"}
-          </button>
-        </div>
 
-        <div className="speech-test-actions">
-          {[
-            ["en", "Test English"],
-            ["es", "Test Spanish"],
-            ["hmn", "Test Hmong"],
-            ["so", "Test Somali"]
-          ].map(([languageCode, label]) => (
-            <button
-              className="secondary-button compact-button"
-              type="button"
-              disabled={!signedIn}
-              key={languageCode}
-              onClick={() => testSpeechLanguage(languageCode)}
-            >
-              {label}
-            </button>
-          ))}
+          <div className="card-panel">
+            <h2>Schedule settings</h2>
+            <div className="settings-grid">
+              <label>
+                Workday start time
+                <input
+                  type="time"
+                  defaultValue={data.settings.workday_start || "08:00"}
+                  disabled={!signedIn}
+                  onBlur={(event) => saveWorkdaySetting("workday_start", event.target.value)}
+                />
+              </label>
+              <label>
+                Workday end time
+                <input
+                  type="time"
+                  defaultValue={data.settings.workday_end || "16:00"}
+                  disabled={!signedIn}
+                  onBlur={(event) => saveWorkdaySetting("workday_end", event.target.value)}
+                />
+              </label>
+              <label>
+                Buffer time between a guest&apos;s activities
+                <input
+                  type="number"
+                  min="0"
+                  max="30"
+                  defaultValue={data.settings.buffer_minutes}
+                  disabled={!signedIn}
+                  onBlur={(event) => saveBuffer(Number(event.target.value))}
+                />
+              </label>
+            </div>
+            <div className="admin-actions">
+              <button
+                className="secondary-button"
+                disabled={!signedIn}
+                onClick={() => resetDay(true)}
+              >
+                <RotateCcw size={18} />
+                Reset demo data
+              </button>
+              <button
+                className="danger-button"
+                disabled={!signedIn}
+                onClick={() => resetDay(false)}
+              >
+                Reset daily schedule
+              </button>
+              <button className="secondary-button" disabled={!signedIn} onClick={clearActive}>
+                Clear active guests
+              </button>
+            </div>
+          </div>
         </div>
+      ) : (
+        <RestrictedAdminSection title="Activity customization" />
+      )}
 
-        <div className="speech-status-grid">
-          <SpeechStatusCard
-            title="Hmong mode"
-            value={formatSpeechMode(speechStatus?.hmongSpeechMode)}
-            state={
-              !speechStatus
-                ? "checking"
-                : speechStatus.hmongSpeechMode === "phrase-first"
-                  ? "ready"
-                  : "warning"
-            }
-            detail={
-              !speechStatus
-                ? "Checking installed phrase and fallback voice files."
-                : speechStatus.hmongSpeechMode === "phrase-first"
-                  ? "Using native phrase recordings first."
-                  : speechStatus.hmongSpeechMode === "fallback-syllable"
-                    ? "Using the syllable voice pack until phrase recordings are added."
-                    : "Hmong voice files are not installed yet."
-            }
-          />
-          <SpeechStatusCard
-            title="Phrase recordings"
-            value={`${speechStatus?.hmongPhraseCount ?? 0} installed`}
-            state={speechStatus?.hmongPhraseReady ? "ready" : "warning"}
-            detail="Put approved native phrase WAV files in data/hmong-phrases and list them in manifest.json."
-          />
-          <SpeechStatusCard
-            title="Fallback voice pack"
-            value={`${speechStatus?.hmongVoiceSamples ?? 0} samples`}
-            state={speechStatus?.hmongVoiceReady ? "ready" : "warning"}
-            detail={
-              speechStatus?.hmongVoiceReady
-                ? "The offline Yuhalu syllable pack is available."
-                : "Run npm run speech:install-hmong on this server."
-            }
-          />
-          <SpeechStatusCard
-            title="Natural online speech"
-            value={speechStatus?.naturalSpeechReady ? "Ready" : "Unavailable"}
-            state={speechStatus?.naturalSpeechReady ? "ready" : "warning"}
-            detail="English, Spanish, and Somali try natural speech first when the Pi has internet."
-          />
-          <SpeechStatusCard
-            title="Cloud language fallback"
-            value={speechStatus?.cloudSpeechLanguages?.length ? "Ready" : "Unavailable"}
-            state={speechStatus?.cloudSpeechLanguages?.length ? "ready" : "warning"}
-            detail="Spanish, Somali, and Hmong Daw try cloud speech before any offline fallback."
-          />
-          <SpeechStatusCard
-            title="Server speech cache"
-            value={`${speechStatus?.speechCacheItems ?? 0} files`}
-            state={speechStatus?.speechCacheItems ? "ready" : "warning"}
-            detail="Preload kiosk speech to store reusable audio on the Raspberry Pi."
-          />
-          <SpeechStatusCard
-            title="Emergency local speech"
-            value={speechStatus?.serverSpeechReady ? "Ready" : "Unavailable"}
-            state={speechStatus?.serverSpeechReady ? "ready" : "warning"}
-            detail={
-              speechStatus?.serverSpeechReady
-                ? "espeak-ng is installed and will be used when natural or cloud speech is unavailable."
-                : "Run sudo apt-get install -y espeak-ng on the Raspberry Pi."
-            }
-          />
-        </div>
+      <AdminSectionIntro
+        id="admin-section-it"
+        title="IT tools"
+        description="Set phone access, check read-aloud voice status, and control Raspberry Pi kiosk actions."
+        allowed={!signedIn || canUseIt}
+      />
 
-        {speechStatus?.hmongPhraseErrors?.length ? (
-          <div className="speech-status-errors">
-            <strong>Phrase setup needs attention</strong>
-            {speechStatus.hmongPhraseErrors.map((item) => (
-              <span key={item}>{item}</span>
+      {canUseIt || !signedIn ? (
+        <>
+          <form className="card-panel network-settings-panel" onSubmit={saveNetworkSettings}>
+            <div className="analytics-heading">
+              <div>
+                <h2>
+                  <Wifi size={24} />
+                  Network & Phone Access
+                </h2>
+                <p>
+                  Choose the address phones and tablets should use, test it, then connect the
+                  Android app with one tap.
+                </p>
+              </div>
+              <button
+                className="secondary-button compact-button"
+                type="button"
+                onClick={() => refreshNetworkInfo(true)}
+              >
+                <RefreshCw size={18} />
+                Refresh network
+              </button>
+            </div>
+
+            <div className="network-guide">
+              <div>
+                <span>1</span>
+                <strong>Connect the server</strong>
+                <p>Use Windows or Raspberry Pi settings to join the Wi-Fi you want to use.</p>
+              </div>
+              <div>
+                <span>2</span>
+                <strong>Choose its address</strong>
+                <p>Select the matching network below and save it.</p>
+              </div>
+              <div>
+                <span>3</span>
+                <strong>Connect phones</strong>
+                <p>Join phones to that Wi-Fi, then press Connect installed app.</p>
+              </div>
+            </div>
+
+            <div className="network-current">
+              <Wifi size={22} />
+              <div>
+                <span>Wi-Fi detected on this server</span>
+                <strong>{accessInfo?.wifiName || "Network name unavailable"}</strong>
+              </div>
+              <code>{accessInfo?.localBaseUrl || "Looking for a local address..."}</code>
+            </div>
+
+            <div className="network-mode-picker" role="radiogroup" aria-label="Server access mode">
+              <label className={networkDraft.mode === "local" ? "is-selected" : ""}>
+                <input
+                  type="radio"
+                  name="network_mode"
+                  value="local"
+                  checked={networkDraft.mode === "local"}
+                  disabled={!signedIn}
+                  onChange={() => setNetworkDraft((current) => ({ ...current, mode: "local" }))}
+                />
+                <Wifi />
+                <span>
+                  <strong>Local Wi-Fi</strong>
+                  <small>Phones must use the same building Wi-Fi.</small>
+                </span>
+              </label>
+              <label className={networkDraft.mode === "public" ? "is-selected" : ""}>
+                <input
+                  type="radio"
+                  name="network_mode"
+                  value="public"
+                  checked={networkDraft.mode === "public"}
+                  disabled={!signedIn}
+                  onChange={() => setNetworkDraft((current) => ({ ...current, mode: "public" }))}
+                />
+                <Globe2 />
+                <span>
+                  <strong>Public internet</strong>
+                  <small>Uses a public HTTPS tunnel or hosted address.</small>
+                </span>
+              </label>
+            </div>
+
+            {networkDraft.mode === "local" ? (
+              <label className="network-address-field">
+                Local server address
+                <select
+                  value={networkDraft.preferred_local_url}
+                  disabled={!signedIn}
+                  onChange={(event) =>
+                    setNetworkDraft((current) => ({
+                      ...current,
+                      preferred_local_url: event.target.value
+                    }))
+                  }
+                >
+                  <option value="">Choose this computer&apos;s network address</option>
+                  {(accessInfo?.networkOptions || []).map((option) => (
+                    <option key={`${option.interfaceName}-${option.address}`} value={option.url}>
+                      {option.label}
+                    </option>
+                  ))}
+                  {networkDraft.preferred_local_url &&
+                  !(accessInfo?.networkOptions || []).some(
+                    (option) => option.url === networkDraft.preferred_local_url
+                  ) ? (
+                    <option value={networkDraft.preferred_local_url}>
+                      Saved address - currently unavailable
+                    </option>
+                  ) : null}
+                </select>
+                <small>
+                  A website cannot switch the computer&apos;s Wi-Fi. Switch Wi-Fi in the device
+                  settings, then press Refresh network here.
+                </small>
+              </label>
+            ) : (
+              <label className="network-address-field">
+                Public HTTPS address
+                <input
+                  type="url"
+                  placeholder="https://checkin.example.org"
+                  value={networkDraft.public_base_url}
+                  disabled={!signedIn}
+                  onChange={(event) =>
+                    setNetworkDraft((current) => ({
+                      ...current,
+                      public_base_url: event.target.value
+                    }))
+                  }
+                />
+                <small>
+                  Enter the address created by your hosting service or Cloudflare Tunnel. Saving an
+                  address here does not create the tunnel by itself.
+                </small>
+              </label>
+            )}
+
+            <div className="network-actions">
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={!signedIn || savingNetwork}
+              >
+                <Save size={18} />
+                {savingNetwork ? "Saving and testing..." : "Save and test connection"}
+              </button>
+              {accessInfo?.browserUrl ? (
+                <a
+                  className="secondary-button"
+                  href={accessInfo.browserUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Link2 size={18} />
+                  Open selected address
+                </a>
+              ) : null}
+              {accessInfo?.androidConfigureUrl ? (
+                <a className="secondary-button" href={accessInfo.androidConfigureUrl}>
+                  <Smartphone size={18} />
+                  Connect installed Android app
+                </a>
+              ) : null}
+            </div>
+            {networkStatus ? <p className="network-status">{networkStatus}</p> : null}
+          </form>
+
+          <section className="card-panel speech-status-panel">
+            <div className="analytics-heading">
+              <div>
+                <h2>
+                  <Volume2 size={24} />
+                  Read Aloud Voice Status
+                </h2>
+                <p>
+                  Hmong reads best when native full-phrase recordings are installed. If they are not
+                  present, the kiosk uses the local Hmong syllable voice pack as a fallback.
+                </p>
+              </div>
+              <button
+                className="secondary-button compact-button"
+                type="button"
+                onClick={() => refreshSpeechStatus(true)}
+              >
+                <RefreshCw size={18} />
+                Refresh voices
+              </button>
+              <button
+                className="primary-button compact-button"
+                type="button"
+                disabled={!signedIn || preloadingSpeech}
+                onClick={preloadSpeech}
+              >
+                <Volume2 size={18} />
+                {preloadingSpeech ? "Preloading..." : "Preload kiosk speech"}
+              </button>
+            </div>
+
+            <div className="speech-test-actions">
+              {[
+                ["en", "Test English"],
+                ["es", "Test Spanish"],
+                ["hmn", "Test Hmong"],
+                ["so", "Test Somali"]
+              ].map(([languageCode, label]) => (
+                <button
+                  className="secondary-button compact-button"
+                  type="button"
+                  disabled={!signedIn}
+                  key={languageCode}
+                  onClick={() => testSpeechLanguage(languageCode)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="speech-status-grid">
+              <SpeechStatusCard
+                title="Hmong mode"
+                value={formatSpeechMode(speechStatus?.hmongSpeechMode)}
+                state={
+                  !speechStatus
+                    ? "checking"
+                    : speechStatus.hmongSpeechMode === "phrase-first"
+                      ? "ready"
+                      : "warning"
+                }
+                detail={
+                  !speechStatus
+                    ? "Checking installed phrase and fallback voice files."
+                    : speechStatus.hmongSpeechMode === "phrase-first"
+                      ? "Using native phrase recordings first."
+                      : speechStatus.hmongSpeechMode === "fallback-syllable"
+                        ? "Using the syllable voice pack until phrase recordings are added."
+                        : "Hmong voice files are not installed yet."
+                }
+              />
+              <SpeechStatusCard
+                title="Phrase recordings"
+                value={`${speechStatus?.hmongPhraseCount ?? 0} installed`}
+                state={speechStatus?.hmongPhraseReady ? "ready" : "warning"}
+                detail="Put approved native phrase WAV files in data/hmong-phrases and list them in manifest.json."
+              />
+              <SpeechStatusCard
+                title="Fallback voice pack"
+                value={`${speechStatus?.hmongVoiceSamples ?? 0} samples`}
+                state={speechStatus?.hmongVoiceReady ? "ready" : "warning"}
+                detail={
+                  speechStatus?.hmongVoiceReady
+                    ? "The offline Yuhalu syllable pack is available."
+                    : "Run npm run speech:install-hmong on this server."
+                }
+              />
+              <SpeechStatusCard
+                title="Natural online speech"
+                value={speechStatus?.naturalSpeechReady ? "Ready" : "Unavailable"}
+                state={speechStatus?.naturalSpeechReady ? "ready" : "warning"}
+                detail="English, Spanish, and Somali try natural speech first when the Pi has internet."
+              />
+              <SpeechStatusCard
+                title="Cloud language fallback"
+                value={speechStatus?.cloudSpeechLanguages?.length ? "Ready" : "Unavailable"}
+                state={speechStatus?.cloudSpeechLanguages?.length ? "ready" : "warning"}
+                detail="Spanish, Somali, and Hmong Daw try cloud speech before any offline fallback."
+              />
+              <SpeechStatusCard
+                title="Server speech cache"
+                value={`${speechStatus?.speechCacheItems ?? 0} files`}
+                state={speechStatus?.speechCacheItems ? "ready" : "warning"}
+                detail="Preload kiosk speech to store reusable audio on the Raspberry Pi."
+              />
+              <SpeechStatusCard
+                title="Emergency local speech"
+                value={speechStatus?.serverSpeechReady ? "Ready" : "Unavailable"}
+                state={speechStatus?.serverSpeechReady ? "ready" : "warning"}
+                detail={
+                  speechStatus?.serverSpeechReady
+                    ? "espeak-ng is installed and will be used when natural or cloud speech is unavailable."
+                    : "Run sudo apt-get install -y espeak-ng on the Raspberry Pi."
+                }
+              />
+            </div>
+
+            {speechStatus?.hmongPhraseErrors?.length ? (
+              <div className="speech-status-errors">
+                <strong>Phrase setup needs attention</strong>
+                {speechStatus.hmongPhraseErrors.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+              </div>
+            ) : null}
+            {speechStatusMessage ? <p className="network-status">{speechStatusMessage}</p> : null}
+            {speechPreloadMessage ? <p className="network-status">{speechPreloadMessage}</p> : null}
+          </section>
+
+          <section className="card-panel system-controls-panel">
+            <div className="analytics-heading">
+              <div>
+                <h2>
+                  <Power size={24} />
+                  Kiosk & Raspberry Pi Controls
+                </h2>
+                <p>
+                  Use these when the kiosk is full-screen, stuck, or needs the newest GitHub update.
+                  Saved check-ins and spreadsheet archives stay on disk, but phones disconnect while
+                  the Pi reboots and any unsaved Admin form edits are lost.
+                </p>
+              </div>
+            </div>
+
+            <div className="system-control-grid">
+              <div className="system-control-card">
+                <MonitorX size={26} />
+                <div>
+                  <strong>Exit full-screen kiosk</strong>
+                  <p>
+                    Tries to close only the Chromium kiosk window on Raspberry Pi. The server keeps
+                    running.
+                  </p>
+                </div>
+                <button
+                  className="secondary-button compact-button"
+                  type="button"
+                  disabled={!signedIn || Boolean(runningSystemAction)}
+                  onClick={exitKioskScreen}
+                >
+                  {runningSystemAction === "exitKiosk" ? "Exiting..." : "Exit kiosk screen"}
+                </button>
+              </div>
+
+              <div className="system-control-card">
+                <RefreshCw size={26} />
+                <div>
+                  <strong>Update from GitHub</strong>
+                  <p>Pulls the newest code, rebuilds the website, and restarts the app.</p>
+                </div>
+                <button
+                  className="secondary-button compact-button"
+                  type="button"
+                  disabled={!signedIn || Boolean(runningSystemAction)}
+                  onClick={() => runPiSystemAction("update", "GitHub update", api.updateFromGithub)}
+                >
+                  {runningSystemAction === "update" ? "Updating..." : "Run update now"}
+                </button>
+              </div>
+
+              <div className="system-control-card">
+                <Power size={26} />
+                <div>
+                  <strong>Reboot Raspberry Pi</strong>
+                  <p>
+                    Rebooting does not delete saved database data, but wait until exports or
+                    check-ins finish first.
+                  </p>
+                </div>
+                <button
+                  className="danger-button compact-button"
+                  type="button"
+                  disabled={!signedIn || Boolean(runningSystemAction)}
+                  onClick={() => runPiSystemAction("reboot", "Reboot", api.rebootPi)}
+                >
+                  {runningSystemAction === "reboot" ? "Rebooting..." : "Reboot Pi now"}
+                </button>
+              </div>
+
+              <div className="system-control-card">
+                <Globe2 size={26} />
+                <div>
+                  <strong>Open kiosk again</strong>
+                  <p>Reopens Chromium in full-screen kiosk mode after exiting it.</p>
+                </div>
+                <button
+                  className="secondary-button compact-button"
+                  type="button"
+                  disabled={!signedIn || Boolean(runningSystemAction)}
+                  onClick={() => runPiSystemAction("openKiosk", "Open kiosk", api.openKiosk)}
+                >
+                  {runningSystemAction === "openKiosk" ? "Opening..." : "Open kiosk now"}
+                </button>
+              </div>
+            </div>
+            {systemControlMessage ? <p className="network-status">{systemControlMessage}</p> : null}
+          </section>
+        </>
+      ) : (
+        <RestrictedAdminSection title="IT tools" />
+      )}
+
+      <AdminSectionIntro
+        id="admin-section-customization"
+        title="Page customization"
+        description="Change kiosk wording, colors, live preview, and the About-page inventor contact."
+        allowed={!signedIn || canUseCustomization}
+      />
+
+      {canUseCustomization || !signedIn ? (
+        <form className="card-panel kiosk-customization-panel" onSubmit={saveKioskCustomization}>
+          <div className="analytics-heading">
+            <div>
+              <h2>
+                <Palette size={24} />
+                Customization of Kiosk
+              </h2>
+              <p>
+                Rename the kiosk and adjust the main colors so this system can fit another shelter
+                or community site.
+              </p>
+            </div>
+            <div className="customization-actions">
+              <button
+                className="secondary-button compact-button"
+                type="button"
+                disabled={!signedIn}
+                onClick={resetCustomizationDraft}
+              >
+                Reset defaults
+              </button>
+              <button className="primary-button compact-button" disabled={!signedIn} type="submit">
+                <Save size={18} />
+                Save customization
+              </button>
+            </div>
+          </div>
+
+          <div className="customization-guide" aria-label="How to customize the kiosk">
+            {customizationGuideCards.map((card) => (
+              <div className="customization-guide-card" key={card.title}>
+                <CustomizationIllustration type={card.art} />
+                <strong>{card.title}</strong>
+                <span>{card.text}</span>
+              </div>
             ))}
           </div>
-        ) : null}
-        {speechStatusMessage ? <p className="network-status">{speechStatusMessage}</p> : null}
-        {speechPreloadMessage ? <p className="network-status">{speechPreloadMessage}</p> : null}
-      </section>
 
-      <section className="card-panel system-controls-panel">
-        <div className="analytics-heading">
-          <div>
-            <h2>
-              <Power size={24} />
-              Kiosk & Raspberry Pi Controls
-            </h2>
-            <p>
-              Use these when the kiosk is full-screen, stuck, or needs the newest GitHub update.
-              Saved check-ins and spreadsheet archives stay on disk, but phones disconnect while the
-              Pi reboots and any unsaved Admin form edits are lost.
-            </p>
-          </div>
-        </div>
-
-        <div className="system-control-grid">
-          <div className="system-control-card">
-            <MonitorX size={26} />
-            <div>
-              <strong>Exit full-screen kiosk</strong>
-              <p>
-                Tries to close only the Chromium kiosk window on Raspberry Pi. The server keeps
-                running.
-              </p>
+          <div className="customization-layout">
+            <div className="customization-fields">
+              {kioskTextSections.map((section) => (
+                <section className="customization-step-section" id={section.id} key={section.id}>
+                  <div className="customization-section-heading">
+                    <CustomizationIllustration type={section.art} />
+                    <div>
+                      <h3>{section.title}</h3>
+                      <p>{section.helper}</p>
+                    </div>
+                  </div>
+                  <div className="customization-text-grid">
+                    {section.fields.map((field) => (
+                      <label key={field.key} className={field.multiline ? "is-wide" : ""}>
+                        {field.label}
+                        {field.multiline ? (
+                          <textarea
+                            value={customizationDraft[field.key]}
+                            disabled={!signedIn}
+                            maxLength={260}
+                            rows={3}
+                            onChange={(event) =>
+                              updateCustomizationDraft(field.key, event.target.value)
+                            }
+                          />
+                        ) : (
+                          <input
+                            value={customizationDraft[field.key]}
+                            disabled={!signedIn}
+                            maxLength={120}
+                            onChange={(event) =>
+                              updateCustomizationDraft(field.key, event.target.value)
+                            }
+                          />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </section>
+              ))}
             </div>
-            <button
-              className="secondary-button compact-button"
-              type="button"
-              disabled={!signedIn || Boolean(runningSystemAction)}
-              onClick={exitKioskScreen}
-            >
-              {runningSystemAction === "exitKiosk" ? "Exiting..." : "Exit kiosk screen"}
-            </button>
-          </div>
 
-          <div className="system-control-card">
-            <RefreshCw size={26} />
-            <div>
-              <strong>Update from GitHub</strong>
-              <p>Pulls the newest code, rebuilds the website, and restarts the app.</p>
-            </div>
-            <button
-              className="secondary-button compact-button"
-              type="button"
-              disabled={!signedIn || Boolean(runningSystemAction)}
-              onClick={() => runPiSystemAction("update", "GitHub update", api.updateFromGithub)}
-            >
-              {runningSystemAction === "update" ? "Updating..." : "Run update now"}
-            </button>
-          </div>
-
-          <div className="system-control-card">
-            <Power size={26} />
-            <div>
-              <strong>Reboot Raspberry Pi</strong>
-              <p>
-                Rebooting does not delete saved database data, but wait until exports or check-ins
-                finish first.
-              </p>
-            </div>
-            <button
-              className="danger-button compact-button"
-              type="button"
-              disabled={!signedIn || Boolean(runningSystemAction)}
-              onClick={() => runPiSystemAction("reboot", "Reboot", api.rebootPi)}
-            >
-              {runningSystemAction === "reboot" ? "Rebooting..." : "Reboot Pi now"}
-            </button>
-          </div>
-
-          <div className="system-control-card">
-            <Globe2 size={26} />
-            <div>
-              <strong>Open kiosk again</strong>
-              <p>Reopens Chromium in full-screen kiosk mode after exiting it.</p>
-            </div>
-            <button
-              className="secondary-button compact-button"
-              type="button"
-              disabled={!signedIn || Boolean(runningSystemAction)}
-              onClick={() => runPiSystemAction("openKiosk", "Open kiosk", api.openKiosk)}
-            >
-              {runningSystemAction === "openKiosk" ? "Opening..." : "Open kiosk now"}
-            </button>
-          </div>
-        </div>
-        {systemControlMessage ? <p className="network-status">{systemControlMessage}</p> : null}
-      </section>
-
-      <form className="card-panel kiosk-customization-panel" onSubmit={saveKioskCustomization}>
-        <div className="analytics-heading">
-          <div>
-            <h2>
-              <Palette size={24} />
-              Customization of Kiosk
-            </h2>
-            <p>
-              Rename the kiosk and adjust the main colors so this system can fit another shelter or
-              community site.
-            </p>
-          </div>
-          <div className="customization-actions">
-            <button
-              className="secondary-button compact-button"
-              type="button"
-              disabled={!signedIn}
-              onClick={resetCustomizationDraft}
-            >
-              Reset defaults
-            </button>
-            <button className="primary-button compact-button" disabled={!signedIn} type="submit">
-              <Save size={18} />
-              Save customization
-            </button>
-          </div>
-        </div>
-
-        <div className="customization-guide" aria-label="How to customize the kiosk">
-          {customizationGuideCards.map((card) => (
-            <div className="customization-guide-card" key={card.title}>
-              <CustomizationIllustration type={card.art} />
-              <strong>{card.title}</strong>
-              <span>{card.text}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="customization-layout">
-          <div className="customization-fields">
-            {kioskTextSections.map((section) => (
-              <section className="customization-step-section" id={section.id} key={section.id}>
+            <div className="customization-side">
+              <section className="customization-step-section">
                 <div className="customization-section-heading">
-                  <CustomizationIllustration type={section.art} />
+                  <CustomizationIllustration type="colors" />
                   <div>
-                    <h3>{section.title}</h3>
-                    <p>{section.helper}</p>
+                    <h3>Kiosk colors</h3>
+                    <p>
+                      Use these to match another shelter&apos;s colors or keep the Listening House
+                      style.
+                    </p>
                   </div>
                 </div>
-                <div className="customization-text-grid">
-                  {section.fields.map((field) => (
-                    <label key={field.key} className={field.multiline ? "is-wide" : ""}>
-                      {field.label}
-                      {field.multiline ? (
-                        <textarea
-                          value={customizationDraft[field.key]}
-                          disabled={!signedIn}
-                          maxLength={260}
-                          rows={3}
-                          onChange={(event) =>
-                            updateCustomizationDraft(field.key, event.target.value)
-                          }
-                        />
-                      ) : (
-                        <input
-                          value={customizationDraft[field.key]}
-                          disabled={!signedIn}
-                          maxLength={120}
-                          onChange={(event) =>
-                            updateCustomizationDraft(field.key, event.target.value)
-                          }
-                        />
-                      )}
+                <div className="customization-color-grid">
+                  {kioskColorFields.map((field) => (
+                    <label key={field.key} className="color-setting-row">
+                      <span>{field.label}</span>
+                      <input
+                        type="color"
+                        value={customizationDraft[field.key]}
+                        disabled={!signedIn}
+                        onChange={(event) =>
+                          updateCustomizationDraft(field.key, event.target.value)
+                        }
+                      />
+                      <input
+                        type="text"
+                        value={customizationDraft[field.key]}
+                        disabled={!signedIn}
+                        maxLength={7}
+                        onChange={(event) =>
+                          updateCustomizationDraft(field.key, event.target.value)
+                        }
+                      />
                     </label>
                   ))}
                 </div>
               </section>
-            ))}
-          </div>
 
-          <div className="customization-side">
-            <section className="customization-step-section">
-              <div className="customization-section-heading">
-                <CustomizationIllustration type="colors" />
-                <div>
-                  <h3>Kiosk colors</h3>
-                  <p>
-                    Use these to match another shelter&apos;s colors or keep the Listening House
-                    style.
-                  </p>
-                </div>
+              <KioskCustomizationPreview
+                customizationDraft={customizationDraft}
+                kioskPreviewStyle={kioskPreviewStyle}
+              />
+            </div>
+          </div>
+        </form>
+      ) : (
+        <RestrictedAdminSection title="Page customization" />
+      )}
+
+      {isOwnerAdmin ? (
+        <div className="card-panel admin-security-panel">
+          <div className="analytics-heading">
+            <div>
+              <h2>
+                <KeyRound size={24} />
+                Admin PIN
+              </h2>
+              <p>Update the local admin PIN after signing in.</p>
+            </div>
+          </div>
+          <div className="admin-security-grid">
+            <form className="security-form" onSubmit={saveNewAdminPin}>
+              <h3>Change PIN</h3>
+              <label>
+                Current PIN
+                <input
+                  ref={currentPinRef}
+                  type="password"
+                  name="current_pin"
+                  disabled={!signedIn}
+                  maxLength={12}
+                  onInput={(event) => {
+                    const cleanValue = cleanPinInput(event);
+                    setPinDraft((current) => ({
+                      ...current,
+                      currentPin: cleanValue
+                    }));
+                  }}
+                  inputMode="numeric"
+                />
+              </label>
+              <label>
+                New PIN
+                <input
+                  ref={newPinRef}
+                  type="password"
+                  name="new_pin"
+                  disabled={!signedIn}
+                  maxLength={12}
+                  onInput={(event) => {
+                    const cleanValue = cleanPinInput(event);
+                    setPinDraft((current) => ({
+                      ...current,
+                      newPin: cleanValue
+                    }));
+                  }}
+                  inputMode="numeric"
+                />
+              </label>
+              <label>
+                Confirm new PIN
+                <input
+                  ref={confirmPinRef}
+                  type="password"
+                  name="confirm_pin"
+                  disabled={!signedIn}
+                  maxLength={12}
+                  onInput={(event) => {
+                    const cleanValue = cleanPinInput(event);
+                    setPinDraft((current) => ({
+                      ...current,
+                      confirmPin: cleanValue
+                    }));
+                  }}
+                  inputMode="numeric"
+                />
+              </label>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={!signedIn || savingPin}
+                onClick={saveNewAdminPin}
+              >
+                {savingPin ? "Saving..." : "Save new PIN"}
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      <AdminSectionIntro
+        id="admin-section-excel"
+        title="Excel sheets"
+        description="Review analytics, download spreadsheets, and manage yearly data deletion."
+        allowed={!signedIn || canUseExcel}
+      />
+
+      {canUseExcel || !signedIn ? (
+        <>
+          <div className="card-panel analytics-panel">
+            <div className="analytics-heading">
+              <div>
+                <h2>
+                  <BarChart3 size={24} />
+                  Data & Analytics
+                </h2>
+                <p>
+                  Track which supports are used most often and export a spreadsheet for a day, week,
+                  month, or year.
+                </p>
               </div>
-              <div className="customization-color-grid">
-                {kioskColorFields.map((field) => (
-                  <label key={field.key} className="color-setting-row">
-                    <span>{field.label}</span>
-                    <input
-                      type="color"
-                      value={customizationDraft[field.key]}
-                      disabled={!signedIn}
-                      onChange={(event) => updateCustomizationDraft(field.key, event.target.value)}
-                    />
-                    <input
-                      type="text"
-                      value={customizationDraft[field.key]}
-                      disabled={!signedIn}
-                      maxLength={7}
-                      onChange={(event) => updateCustomizationDraft(field.key, event.target.value)}
-                    />
-                  </label>
+              <button
+                className="primary-button compact-button"
+                disabled={!signedIn || exporting}
+                onClick={exportAnalytics}
+              >
+                <Download size={18} />
+                {exporting ? "Creating..." : "Export Excel"}
+              </button>
+            </div>
+
+            <div className="analytics-controls">
+              <div className="period-tabs" role="tablist" aria-label="Analytics period">
+                {["day", "week", "month", "year"].map((period) => (
+                  <button
+                    key={period}
+                    className={analyticsPeriod === period ? "is-active" : ""}
+                    disabled={!signedIn}
+                    onClick={() => setAnalyticsPeriod(period)}
+                    type="button"
+                  >
+                    {period}
+                  </button>
                 ))}
               </div>
-            </section>
+              <label>
+                Report date
+                <input
+                  type="date"
+                  value={analyticsDate}
+                  disabled={!signedIn}
+                  onInput={(event) => setAnalyticsDate(event.currentTarget.value)}
+                />
+              </label>
+            </div>
+            {lastExportUrl ? (
+              <div className="download-fallback-panel">
+                <button
+                  className="download-fallback-link"
+                  type="button"
+                  onClick={() => window.location.assign(lastExportUrl)}
+                >
+                  Download Excel now
+                </button>
+                <span>{lastExportFilename}</span>
+              </div>
+            ) : null}
 
-            <KioskCustomizationPreview
-              customizationDraft={customizationDraft}
-              kioskPreviewStyle={kioskPreviewStyle}
-            />
+            {!signedIn ? (
+              <p className="analytics-empty">Unlock admin access to view and export analytics.</p>
+            ) : analyticsLoading ? (
+              <p className="analytics-empty">Loading analytics...</p>
+            ) : analytics ? (
+              <>
+                <div className="analytics-range">{analytics.label}</div>
+                <div className="analytics-summary">
+                  <AnalyticsStat
+                    label="Guests checked in"
+                    value={analytics.summary.guestsCheckedIn}
+                  />
+                  <AnalyticsStat
+                    label="Different people"
+                    value={analytics.summary.uniqueKnownGuests}
+                  />
+                  <AnalyticsStat
+                    label="Activity requests"
+                    value={analytics.summary.activityRequests}
+                  />
+                  <AnalyticsStat label="Completed" value={analytics.summary.completedActivities} />
+                  <AnalyticsStat label="Skipped" value={analytics.summary.skippedActivities} />
+                  <AnalyticsStat
+                    label="Most used"
+                    value={analytics.summary.mostRequestedActivity}
+                    wide
+                  />
+                </div>
+
+                <div className="analytics-table-wrap">
+                  <table className="analytics-table">
+                    <thead>
+                      <tr>
+                        <th>Activity</th>
+                        <th>Requests</th>
+                        <th>Guests</th>
+                        <th>Waiting</th>
+                        <th>In Progress</th>
+                        <th>Completed</th>
+                        <th>Skipped</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.activityTotals.length === 0 ? (
+                        <tr>
+                          <td colSpan="7">No activity data for this report period yet.</td>
+                        </tr>
+                      ) : null}
+                      {analytics.activityTotals.map((item) => (
+                        <tr key={item.activity}>
+                          <td>{item.activity}</td>
+                          <td>{item.requests}</td>
+                          <td>{item.uniqueGuests}</td>
+                          <td>{item.waiting}</td>
+                          <td>{item.inProgress}</td>
+                          <td>{item.completed}</td>
+                          <td>{item.skipped}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <h3 className="analytics-subheading">People in this report</h3>
+                <div className="analytics-table-wrap">
+                  <table className="analytics-table">
+                    <thead>
+                      <tr>
+                        <th>Guest name</th>
+                        <th>Check-ins</th>
+                        <th>Days visited</th>
+                        <th>Visit dates</th>
+                        <th>Activities requested</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.people.length === 0 ? (
+                        <tr>
+                          <td colSpan="5">No guest check-ins for this report period.</td>
+                        </tr>
+                      ) : null}
+                      {analytics.people.map((person) => (
+                        <tr key={person.guestId}>
+                          <td>{person.guestName}</td>
+                          <td>{person.checkIns}</td>
+                          <td>{person.daysVisited}</td>
+                          <td>{person.visitDates}</td>
+                          <td>{person.activities || "No activities recorded"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : null}
           </div>
-        </div>
-      </form>
 
-      <div className="card-panel admin-security-panel">
-        <div className="analytics-heading">
-          <div>
-            <h2>
-              <KeyRound size={24} />
-              Admin PIN
-            </h2>
-            <p>Update the local admin PIN after signing in.</p>
-          </div>
-        </div>
-        <div className="admin-security-grid">
-          <form className="security-form" onSubmit={saveNewAdminPin}>
-            <h3>Change PIN</h3>
-            <label>
-              Current PIN
-              <input
-                ref={currentPinRef}
-                type="password"
-                name="current_pin"
-                disabled={!signedIn}
-                maxLength={12}
-                onInput={(event) => {
-                  const cleanValue = cleanPinInput(event);
-                  setPinDraft((current) => ({
-                    ...current,
-                    currentPin: cleanValue
-                  }));
-                }}
-                inputMode="numeric"
-              />
-            </label>
-            <label>
-              New PIN
-              <input
-                ref={newPinRef}
-                type="password"
-                name="new_pin"
-                disabled={!signedIn}
-                maxLength={12}
-                onInput={(event) => {
-                  const cleanValue = cleanPinInput(event);
-                  setPinDraft((current) => ({
-                    ...current,
-                    newPin: cleanValue
-                  }));
-                }}
-                inputMode="numeric"
-              />
-            </label>
-            <label>
-              Confirm new PIN
-              <input
-                ref={confirmPinRef}
-                type="password"
-                name="confirm_pin"
-                disabled={!signedIn}
-                maxLength={12}
-                onInput={(event) => {
-                  const cleanValue = cleanPinInput(event);
-                  setPinDraft((current) => ({
-                    ...current,
-                    confirmPin: cleanValue
-                  }));
-                }}
-                inputMode="numeric"
-              />
-            </label>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={!signedIn || savingPin}
-              onClick={saveNewAdminPin}
-            >
-              {savingPin ? "Saving..." : "Save new PIN"}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <div className="card-panel analytics-panel">
-        <div className="analytics-heading">
-          <div>
-            <h2>
-              <BarChart3 size={24} />
-              Data & Analytics
-            </h2>
-            <p>
-              Track which supports are used most often and export a spreadsheet for a day, week,
-              month, or year.
-            </p>
-          </div>
-          <button
-            className="primary-button compact-button"
-            disabled={!signedIn || exporting}
-            onClick={exportAnalytics}
-          >
-            <Download size={18} />
-            {exporting ? "Creating..." : "Export Excel"}
-          </button>
-        </div>
-
-        <div className="analytics-controls">
-          <div className="period-tabs" role="tablist" aria-label="Analytics period">
-            {["day", "week", "month", "year"].map((period) => (
+          <form className="card-panel data-deletion-panel" onSubmit={saveDataDeletionSettings}>
+            <div className="analytics-heading">
+              <div>
+                <h2>
+                  <Trash2 size={24} />
+                  Yearly Data Deletion
+                </h2>
+                <p>
+                  Choose one yearly date and time to delete guest history and spreadsheet archives.
+                  Staff users, permissions, activities, and kiosk settings are kept.
+                </p>
+              </div>
               <button
-                key={period}
-                className={analyticsPeriod === period ? "is-active" : ""}
-                disabled={!signedIn}
-                onClick={() => setAnalyticsPeriod(period)}
-                type="button"
+                className="primary-button compact-button"
+                type="submit"
+                disabled={!signedIn || savingDataDeletion}
               >
-                {period}
+                <Save size={18} />
+                {savingDataDeletion ? "Saving..." : "Save deletion settings"}
               </button>
-            ))}
-          </div>
-          <label>
-            Report date
-            <input
-              type="date"
-              value={analyticsDate}
-              disabled={!signedIn}
-              onInput={(event) => setAnalyticsDate(event.currentTarget.value)}
-            />
-          </label>
-        </div>
-        {lastExportUrl ? (
-          <div className="download-fallback-panel">
-            <button
-              className="download-fallback-link"
-              type="button"
-              onClick={() => window.location.assign(lastExportUrl)}
-            >
-              Download Excel now
-            </button>
-            <span>{lastExportFilename}</span>
-          </div>
-        ) : null}
-
-        {!signedIn ? (
-          <p className="analytics-empty">Unlock admin access to view and export analytics.</p>
-        ) : analyticsLoading ? (
-          <p className="analytics-empty">Loading analytics...</p>
-        ) : analytics ? (
-          <>
-            <div className="analytics-range">{analytics.label}</div>
-            <div className="analytics-summary">
-              <AnalyticsStat label="Guests checked in" value={analytics.summary.guestsCheckedIn} />
-              <AnalyticsStat label="Different people" value={analytics.summary.uniqueKnownGuests} />
-              <AnalyticsStat label="Activity requests" value={analytics.summary.activityRequests} />
-              <AnalyticsStat label="Completed" value={analytics.summary.completedActivities} />
-              <AnalyticsStat label="Skipped" value={analytics.summary.skippedActivities} />
-              <AnalyticsStat
-                label="Most used"
-                value={analytics.summary.mostRequestedActivity}
-                wide
-              />
             </div>
-
-            <div className="analytics-table-wrap">
-              <table className="analytics-table">
-                <thead>
-                  <tr>
-                    <th>Activity</th>
-                    <th>Requests</th>
-                    <th>Guests</th>
-                    <th>Waiting</th>
-                    <th>In Progress</th>
-                    <th>Completed</th>
-                    <th>Skipped</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analytics.activityTotals.length === 0 ? (
-                    <tr>
-                      <td colSpan="7">No activity data for this report period yet.</td>
-                    </tr>
-                  ) : null}
-                  {analytics.activityTotals.map((item) => (
-                    <tr key={item.activity}>
-                      <td>{item.activity}</td>
-                      <td>{item.requests}</td>
-                      <td>{item.uniqueGuests}</td>
-                      <td>{item.waiting}</td>
-                      <td>{item.inProgress}</td>
-                      <td>{item.completed}</td>
-                      <td>{item.skipped}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <h3 className="analytics-subheading">People in this report</h3>
-            <div className="analytics-table-wrap">
-              <table className="analytics-table">
-                <thead>
-                  <tr>
-                    <th>Guest name</th>
-                    <th>Check-ins</th>
-                    <th>Days visited</th>
-                    <th>Visit dates</th>
-                    <th>Activities requested</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analytics.people.length === 0 ? (
-                    <tr>
-                      <td colSpan="5">No guest check-ins for this report period.</td>
-                    </tr>
-                  ) : null}
-                  {analytics.people.map((person) => (
-                    <tr key={person.guestId}>
-                      <td>{person.guestName}</td>
-                      <td>{person.checkIns}</td>
-                      <td>{person.daysVisited}</td>
-                      <td>{person.visitDates}</td>
-                      <td>{person.activities || "No activities recorded"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : null}
-      </div>
-
-      <form className="card-panel data-deletion-panel" onSubmit={saveDataDeletionSettings}>
-        <div className="analytics-heading">
-          <div>
-            <h2>
-              <Trash2 size={24} />
-              Yearly Data Deletion
-            </h2>
-            <p>
-              Choose one yearly date and time to delete guest history and spreadsheet archives.
-              Staff users, permissions, activities, and kiosk settings are kept.
-            </p>
-          </div>
-          <button
-            className="primary-button compact-button"
-            type="submit"
-            disabled={!signedIn || savingDataDeletion}
-          >
-            <Save size={18} />
-            {savingDataDeletion ? "Saving..." : "Save deletion settings"}
-          </button>
-        </div>
-        {dataDeletionSettings?.warning ? (
-          <div className="data-deletion-warning">
-            <strong>Deletion warning</strong>
-            <span>{dataDeletionSettings.warning.message}</span>
-          </div>
-        ) : null}
-        <div className="data-deletion-grid">
-          <label className="toggle-field">
-            <input
-              type="checkbox"
-              checked={Boolean(dataDeletionDraft.enabled)}
-              disabled={!signedIn}
-              onChange={(event) => updateDataDeletionDraft("enabled", event.target.checked)}
-            />
-            Enable yearly deletion
-          </label>
-          <label>
-            Deletion date
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="MM-DD"
-              value={dataDeletionDraft.month_day}
-              disabled={!signedIn}
-              onChange={(event) => updateDataDeletionDraft("month_day", event.target.value)}
-            />
-            <small>Use month-day format, such as 01-15 for January 15.</small>
-          </label>
-          <label>
-            Deletion time
-            <input
-              type="time"
-              value={dataDeletionDraft.time}
-              disabled={!signedIn}
-              onInput={(event) => updateDataDeletionDraft("time", event.currentTarget.value)}
-            />
-          </label>
-        </div>
-        <div className="data-deletion-actions">
-          <button
-            className="danger-button compact-button"
-            type="button"
-            disabled={!signedIn || runningDataDeletion}
-            onClick={runDataDeletionNow}
-          >
-            {runningDataDeletion ? "Deleting..." : "Run deletion now"}
-          </button>
-        </div>
-        {dataDeletionMessage ? <p className="network-status">{dataDeletionMessage}</p> : null}
-      </form>
-
-      <section className="card-panel user-control-panel">
-        <div className="analytics-heading">
-          <div>
-            <h2>
-              <ShieldCheck size={24} />
-              User Control
-            </h2>
-            <p>Add staff users and choose which pages they can open. Everyone can use the kiosk.</p>
-          </div>
-        </div>
-
-        <form className="staff-user-form" onSubmit={addStaffUser}>
-          <label>
-            Staff name
-            <input
-              value={staffUserDraft.display_name}
-              disabled={!signedIn}
-              onChange={(event) => updateStaffUserDraft("display_name", event.target.value)}
-            />
-          </label>
-          <label>
-            PIN
-            <input
-              type="password"
-              inputMode="numeric"
-              maxLength={12}
-              value={staffUserDraft.pin}
-              disabled={!signedIn}
-              onChange={(event) =>
-                updateStaffUserDraft("pin", event.target.value.replace(/\D/g, "").slice(0, 12))
-              }
-            />
-          </label>
-          <div className="permission-checkboxes" aria-label="User permissions">
-            {[
-              ["dashboard", "Dashboard"],
-              ["admin", "Admin Controls"],
-              ["about", "About Page"]
-            ].map(([key, label]) => (
-              <label className="toggle-field" key={key}>
+            {dataDeletionSettings?.warning ? (
+              <div className="data-deletion-warning">
+                <strong>Deletion warning</strong>
+                <span>{dataDeletionSettings.warning.message}</span>
+              </div>
+            ) : null}
+            <div className="data-deletion-grid">
+              <label className="toggle-field">
                 <input
                   type="checkbox"
-                  checked={Boolean(staffUserDraft.permissions[key])}
+                  checked={Boolean(dataDeletionDraft.enabled)}
                   disabled={!signedIn}
-                  onChange={(event) => updateStaffPermissionDraft(key, event.target.checked)}
+                  onChange={(event) => updateDataDeletionDraft("enabled", event.target.checked)}
                 />
-                {label}
+                Enable yearly deletion
               </label>
-            ))}
-          </div>
-          <button
-            className="primary-button compact-button"
-            type="submit"
-            disabled={!signedIn || savingStaffUser}
-          >
-            <Plus size={18} />
-            {savingStaffUser ? "Adding..." : "Add user"}
-          </button>
-        </form>
-
-        <div className="staff-user-list">
-          {staffUsers.length === 0 ? (
-            <p>No staff users yet. The owner Admin PIN still has full access.</p>
-          ) : (
-            staffUsers.map((user) => (
-              <div className="staff-user-row" key={user.id}>
-                <strong>{user.display_name}</strong>
-                <div className="permission-checkboxes">
-                  {[
-                    ["dashboard", "Dashboard"],
-                    ["admin", "Admin"],
-                    ["about", "About"]
-                  ].map(([key, label]) => (
-                    <label className="toggle-field" key={key}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(user.permissions[key])}
-                        disabled={!signedIn}
-                        onChange={(event) =>
-                          updateStaffUser(user, {
-                            permissions: { ...user.permissions, [key]: event.target.checked }
-                          })
-                        }
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-                <label className="toggle-field">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(user.active)}
-                    disabled={!signedIn}
-                    onChange={(event) => updateStaffUser(user, { active: event.target.checked })}
-                  />
-                  Active
-                </label>
-                <button
-                  className="icon-button delete-activity-button"
-                  type="button"
+              <label>
+                Deletion date
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="MM-DD"
+                  value={dataDeletionDraft.month_day}
                   disabled={!signedIn}
-                  onClick={() => deleteStaffUser(user)}
-                  aria-label={`Delete ${user.display_name}`}
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-        {staffUserMessage ? <p className="network-status">{staffUserMessage}</p> : null}
-      </section>
+                  onChange={(event) => updateDataDeletionDraft("month_day", event.target.value)}
+                />
+                <small>Use month-day format, such as 01-15 for January 15.</small>
+              </label>
+              <label>
+                Deletion time
+                <input
+                  type="time"
+                  value={dataDeletionDraft.time}
+                  disabled={!signedIn}
+                  onInput={(event) => updateDataDeletionDraft("time", event.currentTarget.value)}
+                />
+              </label>
+            </div>
+            <div className="data-deletion-actions">
+              <button
+                className="danger-button compact-button"
+                type="button"
+                disabled={!signedIn || runningDataDeletion}
+                onClick={runDataDeletionNow}
+              >
+                {runningDataDeletion ? "Deleting..." : "Run deletion now"}
+              </button>
+            </div>
+            {dataDeletionMessage ? <p className="network-status">{dataDeletionMessage}</p> : null}
+          </form>
+        </>
+      ) : (
+        <RestrictedAdminSection title="Excel sheets" />
+      )}
 
-      <div className="card-panel activity-admin">
-        <h2>Activities</h2>
-        <p>
-          Add a service, then independently choose calendar time, a daily quantity limit, a
-          countdown alarm, available hours, monthly dates, yearly dates, or any combination.
-        </p>
-        <button
-          className="secondary-button compact-button"
-          type="button"
-          disabled={!signedIn}
-          onClick={applyListeningHouseDefaults}
-        >
-          <RefreshCw size={18} />
-          Apply Listening House defaults
-        </button>
-        <form
-          className="add-activity activity-config-card is-new"
-          data-testid="add-activity-form"
-          onSubmit={addActivity}
-        >
-          <div className="activity-config-heading">
+      {canManageUsers ? (
+        <section className="card-panel user-control-panel">
+          <div className="analytics-heading">
             <div>
-              <strong>Add a new activity</strong>
-              <p>Create it here first. It will appear in the activity list immediately.</p>
+              <h2>
+                <ShieldCheck size={24} />
+                User Control
+              </h2>
+              <p>
+                Add staff users and choose which pages they can open. Everyone can use the kiosk.
+              </p>
             </div>
           </div>
-          <div className="activity-config-grid">
+
+          <form className="staff-user-form" onSubmit={addStaffUser}>
             <label>
-              Activity name
+              Staff name
               <input
-                placeholder="New activity name"
-                value={newActivity.name}
+                value={staffUserDraft.display_name}
+                disabled={!signedIn}
+                onChange={(event) => updateStaffUserDraft("display_name", event.target.value)}
+              />
+            </label>
+            <label>
+              PIN
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={12}
+                value={staffUserDraft.pin}
                 disabled={!signedIn}
                 onChange={(event) =>
-                  setNewActivity((current) => updateActivityNameDraft(current, event.target.value))
+                  updateStaffUserDraft("pin", event.target.value.replace(/\D/g, "").slice(0, 12))
                 }
               />
             </label>
-            <label>
-              Icon
-              <ActivityIconPicker
-                value={newActivity.icon}
+            <div className="permission-groups" aria-label="User permissions">
+              <PermissionGroup
+                title="Pages this person can open"
+                options={pagePermissionOptions}
+                permissions={staffUserDraft.permissions}
                 disabled={!signedIn}
-                onChange={(icon) =>
-                  setNewActivity((current) => ({
-                    ...current,
-                    icon
-                  }))
-                }
+                onChange={updateStaffPermissionDraft}
               />
-            </label>
+              <PermissionGroup
+                title="Admin sections this person can use"
+                helper="These only apply when Admin Controls is selected."
+                options={adminSectionPermissionOptions}
+                permissions={staffUserDraft.permissions}
+                disabled={!signedIn || !staffUserDraft.permissions.admin}
+                onChange={updateStaffPermissionDraft}
+              />
+            </div>
+            <button
+              className="primary-button compact-button"
+              type="submit"
+              disabled={!signedIn || savingStaffUser}
+            >
+              <Plus size={18} />
+              {savingStaffUser ? "Adding..." : "Add user"}
+            </button>
+          </form>
+
+          <div className="staff-user-list">
+            {staffUsers.length === 0 ? (
+              <p>No staff users yet. The owner Admin PIN still has full access.</p>
+            ) : (
+              staffUsers.map((user) => (
+                <div className="staff-user-row" key={user.id}>
+                  <strong>{user.display_name}</strong>
+                  <div className="staff-user-permissions">
+                    <PermissionGroup
+                      title="Pages"
+                      options={pagePermissionOptions}
+                      permissions={user.permissions}
+                      disabled={!signedIn}
+                      compact
+                      onChange={(key, checked) =>
+                        updateStaffUser(user, {
+                          permissions: normalizePermissionToggle(user.permissions, key, checked)
+                        })
+                      }
+                    />
+                    <PermissionGroup
+                      title="Admin sections"
+                      options={adminSectionPermissionOptions}
+                      permissions={user.permissions}
+                      disabled={!signedIn || !user.permissions.admin}
+                      compact
+                      onChange={(key, checked) =>
+                        updateStaffUser(user, {
+                          permissions: normalizePermissionToggle(user.permissions, key, checked)
+                        })
+                      }
+                    />
+                  </div>
+                  <label className="toggle-field">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(user.active)}
+                      disabled={!signedIn}
+                      onChange={(event) => updateStaffUser(user, { active: event.target.checked })}
+                    />
+                    Active
+                  </label>
+                  <button
+                    className="icon-button delete-activity-button"
+                    type="button"
+                    disabled={!signedIn}
+                    onClick={() => deleteStaffUser(user)}
+                    aria-label={`Delete ${user.display_name}`}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
-          <ActivityTranslationFields
-            draft={newActivity}
-            disabled={!signedIn}
-            onChange={setNewActivity}
-          />
-          <ActivityOptionFields
-            draft={newActivity}
-            disabled={!signedIn}
-            onChange={setNewActivity}
-          />
+          {staffUserMessage ? <p className="network-status">{staffUserMessage}</p> : null}
+        </section>
+      ) : null}
+
+      {canUseActivities || !signedIn ? (
+        <div className="card-panel activity-admin">
+          <h2>Activities</h2>
+          <p>
+            Add a service, then independently choose calendar time, a daily quantity limit, a
+            countdown alarm, available hours, monthly dates, yearly dates, or any combination.
+          </p>
           <button
-            className="primary-button add-activity-submit"
-            type="submit"
-            disabled={!signedIn || addingActivity || !newActivity.name.trim()}
+            className="secondary-button compact-button"
+            type="button"
+            disabled={!signedIn}
+            onClick={applyListeningHouseDefaults}
           >
-            <Plus size={18} />
-            {addingActivity ? "Adding activity..." : "Add activity"}
+            <RefreshCw size={18} />
+            Apply Listening House defaults
           </button>
-        </form>
-        <div className="activity-admin-list">
-          {data.activities.map((activity) => (
-            <ActivityRow
-              key={activity.id}
-              activity={activity}
+          <form
+            className="add-activity activity-config-card is-new"
+            data-testid="add-activity-form"
+            onSubmit={addActivity}
+          >
+            <div className="activity-config-heading">
+              <div>
+                <strong>Add a new activity</strong>
+                <p>Create it here first. It will appear in the activity list immediately.</p>
+              </div>
+            </div>
+            <div className="activity-config-grid">
+              <label>
+                Activity name
+                <input
+                  placeholder="New activity name"
+                  value={newActivity.name}
+                  disabled={!signedIn}
+                  onChange={(event) =>
+                    setNewActivity((current) =>
+                      updateActivityNameDraft(current, event.target.value)
+                    )
+                  }
+                />
+              </label>
+              <label>
+                Icon
+                <ActivityIconPicker
+                  value={newActivity.icon}
+                  disabled={!signedIn}
+                  onChange={(icon) =>
+                    setNewActivity((current) => ({
+                      ...current,
+                      icon
+                    }))
+                  }
+                />
+              </label>
+            </div>
+            <ActivityTranslationFields
+              draft={newActivity}
               disabled={!signedIn}
-              onSave={saveActivity}
-              onDelete={deleteActivity}
+              onChange={setNewActivity}
             />
-          ))}
+            <ActivityOptionFields
+              draft={newActivity}
+              disabled={!signedIn}
+              onChange={setNewActivity}
+            />
+            <button
+              className="primary-button add-activity-submit"
+              type="submit"
+              disabled={!signedIn || addingActivity || !newActivity.name.trim()}
+            >
+              <Plus size={18} />
+              {addingActivity ? "Adding activity..." : "Add activity"}
+            </button>
+          </form>
+          <div className="activity-admin-list">
+            {data.activities.map((activity) => (
+              <ActivityRow
+                key={activity.id}
+                activity={activity}
+                disabled={!signedIn}
+                onSave={saveActivity}
+                onDelete={deleteActivity}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }
@@ -2666,6 +2846,70 @@ function AnalyticsStat({ label, value, wide = false }) {
     <div className={`analytics-stat ${wide ? "is-wide" : ""}`}>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function PermissionGroup({
+  title,
+  helper = "",
+  options,
+  permissions,
+  disabled,
+  compact = false,
+  onChange
+}) {
+  return (
+    <fieldset className={`permission-group ${compact ? "is-compact" : ""}`}>
+      <legend>{title}</legend>
+      {helper ? <p>{helper}</p> : null}
+      <div className="permission-checkboxes">
+        {options.map(([key, label]) => (
+          <label className="toggle-field" key={key}>
+            <input
+              type="checkbox"
+              checked={Boolean(permissions[key])}
+              disabled={disabled}
+              onChange={(event) => onChange(key, event.target.checked)}
+            />
+            {label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function AdminShortcut({ href, label, detail, enabled }) {
+  return (
+    <a className={`admin-section-shortcut ${enabled ? "is-enabled" : "is-restricted"}`} href={href}>
+      <strong>{label}</strong>
+      <span>{enabled ? detail : "Not included for this staff PIN."}</span>
+    </a>
+  );
+}
+
+function AdminSectionIntro({ id, title, description, allowed }) {
+  return (
+    <section className={`admin-section-intro ${allowed ? "" : "is-restricted"}`} id={id}>
+      <div>
+        <span>Admin section</span>
+        <h2>{title}</h2>
+        <p>{description}</p>
+      </div>
+      {!allowed ? <strong>Restricted for this staff PIN</strong> : null}
+    </section>
+  );
+}
+
+function RestrictedAdminSection({ title }) {
+  return (
+    <div className="card-panel restricted-admin-section">
+      <Lock size={24} />
+      <div>
+        <h3>{title} is not available for this staff PIN.</h3>
+        <p>Ask the owner admin to turn on this section in User Control.</p>
+      </div>
     </div>
   );
 }

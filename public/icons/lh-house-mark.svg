@@ -2,20 +2,11 @@
   <title id="title">Listening House logo mark</title>
   <desc id="desc">A navy house-shaped H mark inspired by The Listening House logo.</desc>
   <path
-    d="M52 170L256 48L460 170V115L256 0L52 115V170Z"
+    d="M28 150L256 18L484 150V210L256 80L28 210Z"
     fill="#22356D"
   />
   <path
-    d="M118 166V334H184V233L328 245V334H394V166H328V210L184 198V166H118Z"
+    d="M128 178C128 169 134 162 143 160L188 148V222L324 234V160L369 172C378 174 384 181 384 190V331C384 339 378 345 370 345H324C316 345 310 339 310 331V263L202 254V331C202 339 196 345 188 345H142C134 345 128 339 128 331V178Z"
     fill="#22356D"
-  />
-  <path
-    d="M52 170L256 48L460 170"
-    fill="none"
-    stroke="#FFFDF7"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    stroke-width="8"
-    opacity="0.72"
   />
 </svg>

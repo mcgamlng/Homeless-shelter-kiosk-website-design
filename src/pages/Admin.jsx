@@ -51,6 +51,22 @@ function cleanPinValue(value) {
     .slice(0, 12);
 }
 
+function formatWorkdayTime(value) {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return value || "";
+  const hours = Number(match[1]);
+  const minutes = match[2];
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${minutes} ${period}`;
+}
+
+function formatWorkdayRange(settings = {}) {
+  const start = settings.workday_start || "08:00";
+  const end = settings.workday_end || "16:00";
+  return `${formatWorkdayTime(start)} to ${formatWorkdayTime(end)}`;
+}
+
 const customizationGuideCards = [
   {
     art: "name",
@@ -135,8 +151,8 @@ const kioskColorFields = [
 
 const kioskPreviewPages = [
   { id: "welcome", label: "Welcome" },
-  { id: "identity", label: "Name" },
   { id: "language", label: "Language" },
+  { id: "identity", label: "Name" },
   { id: "activities", label: "Activities" },
   { id: "confirmation", label: "Confirmation" }
 ];
@@ -922,6 +938,21 @@ export default function Admin({ section = "activities" }) {
     }
   }
 
+  async function saveFullDayWorkday() {
+    setMessage("");
+    const authToken = currentAdminToken();
+    try {
+      await api.updateSettings(authToken, {
+        workday_start: "00:00",
+        workday_end: "23:59"
+      });
+      await refresh();
+      setMessage("Workday saved as 12:00 AM to 11:59 PM.");
+    } catch (err) {
+      handleAdminError(err, authToken);
+    }
+  }
+
   async function refreshNetworkInfo(showMessage = true) {
     try {
       const info = await api.getAccessInfo();
@@ -1152,6 +1183,11 @@ export default function Admin({ section = "activities" }) {
 
           <div className="card-panel">
             <h2>Schedule settings</h2>
+            <p className="schedule-settings-note">
+              Current workday: <strong>{formatWorkdayRange(data.settings)}</strong>. The kiosk only
+              accepts check-ins inside this window. For a full-day schedule, use 12:00 AM to 11:59
+              PM. 12:00 PM means noon.
+            </p>
             <div className="settings-grid">
               <label>
                 Workday start time
@@ -1187,7 +1223,16 @@ export default function Admin({ section = "activities" }) {
               <button
                 className="secondary-button"
                 disabled={!signedIn}
+                onClick={saveFullDayWorkday}
+                type="button"
+              >
+                Set full-day hours
+              </button>
+              <button
+                className="secondary-button"
+                disabled={!signedIn}
                 onClick={() => resetDay(true)}
+                type="button"
               >
                 <RotateCcw size={18} />
                 Reset demo data
@@ -1196,10 +1241,16 @@ export default function Admin({ section = "activities" }) {
                 className="danger-button"
                 disabled={!signedIn}
                 onClick={() => resetDay(false)}
+                type="button"
               >
                 Reset daily schedule
               </button>
-              <button className="secondary-button" disabled={!signedIn} onClick={clearActive}>
+              <button
+                className="secondary-button"
+                disabled={!signedIn}
+                onClick={clearActive}
+                type="button"
+              >
                 Clear active guests
               </button>
             </div>

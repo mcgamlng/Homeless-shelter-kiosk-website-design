@@ -387,7 +387,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
   function beginIdentity() {
     setIdentity(DEFAULT_IDENTITY);
     setError("");
-    setStep(STEPS.IDENTITY);
+    setStep(STEPS.LANGUAGE);
   }
 
   function updateIdentity(field, value) {
@@ -405,7 +405,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
     setError("");
     try {
       await api.inspectNameCheckIn({ mode: "auto", ...identity });
-      setStep(STEPS.LANGUAGE);
+      setStep(STEPS.ACTIVITIES);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -448,9 +448,9 @@ export default function Kiosk({ settings: shellSettings = null }) {
 
   function goBack() {
     setError("");
-    if (step === STEPS.IDENTITY) setStep(STEPS.WELCOME);
-    if (step === STEPS.LANGUAGE) setStep(STEPS.IDENTITY);
-    if (step === STEPS.ACTIVITIES) setStep(STEPS.LANGUAGE);
+    if (step === STEPS.LANGUAGE) setStep(STEPS.WELCOME);
+    if (step === STEPS.IDENTITY) setStep(STEPS.LANGUAGE);
+    if (step === STEPS.ACTIVITIES) setStep(STEPS.IDENTITY);
   }
 
   const hasBack = ![STEPS.WELCOME, STEPS.CONFIRMATION].includes(step);
@@ -569,7 +569,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
                 <p className="kiosk-lede">{t.kioskPurpose}</p>
                 <button className="primary-button kiosk-start" onClick={beginIdentity}>
                   <span>{t.checkInButton}</span>
-                  <small>{t.checkInButtonHelp}</small>
+                  <small>{t.chooseLanguage}</small>
                 </button>
               </div>
             ) : null}
@@ -615,7 +615,9 @@ export default function Kiosk({ settings: shellSettings = null }) {
                       className="choice-button"
                       onClick={() => {
                         setLanguage(option.code);
-                        setStep(STEPS.ACTIVITIES);
+                        setIdentity(DEFAULT_IDENTITY);
+                        setError("");
+                        setStep(STEPS.IDENTITY);
                       }}
                     >
                       {option.label}

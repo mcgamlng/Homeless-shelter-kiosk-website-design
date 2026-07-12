@@ -86,6 +86,13 @@ function setSettingValue(key, value) {
 }
 
 function normalizeSettingValue(key, value) {
+  if (key === "workday_start" || key === "workday_end") {
+    const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return key === "workday_start" ? "08:00" : "16:00";
+    const hours = Math.min(23, Math.max(0, Number(match[1])));
+    const minutes = Math.min(59, Math.max(0, Number(match[2])));
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  }
   if (KIOSK_COLOR_KEY_SET.has(key)) {
     return normalizeKioskColor(value, DEFAULT_KIOSK_CUSTOMIZATION[key]);
   }

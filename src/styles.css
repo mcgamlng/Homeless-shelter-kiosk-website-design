@@ -5277,6 +5277,16 @@ main {
   font-weight: 850;
 }
 
+.schedule-settings-note {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-left: 6px solid var(--lh-purple);
+  background: var(--lh-aqua-light);
+  color: var(--lh-navy);
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .speech-status-panel {
   display: grid;
   gap: 18px;
@@ -6024,8 +6034,9 @@ main {
 }
 
 .topbar.is-kiosk-topbar .topnav.is-staff-panel.is-open {
-  max-height: 280px !important;
+  max-height: min(480px, calc(100vh - 86px)) !important;
   padding: 10px !important;
+  overflow-y: auto !important;
   border: 1px solid rgba(255, 255, 255, 0.24) !important;
   opacity: 1 !important;
   pointer-events: auto !important;

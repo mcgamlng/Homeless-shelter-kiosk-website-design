@@ -86,6 +86,29 @@ test("overnight workday schedules after a late-night check-in instead of next ev
   assert.equal(start.getMinutes(), 0);
 });
 
+test("full-day workday settings allow evening kiosk scheduling", () => {
+  const [result] = scheduleActivities({
+    activities: [
+      {
+        ...timedActivity(1, "Evening Support", 30),
+        availability_window_enabled: false
+      }
+    ],
+    guestId: 24,
+    existingItems: [],
+    bufferMinutes: 5,
+    now: new Date(2026, 5, 23, 21, 10),
+    settings: { workday_start: "00:00", workday_end: "23:59" }
+  });
+
+  const start = new Date(result.scheduled_start);
+  const end = new Date(result.scheduled_end);
+  assert.equal(start.getHours(), 21);
+  assert.equal(start.getMinutes(), 10);
+  assert.equal(end.getHours(), 21);
+  assert.equal(end.getMinutes(), 40);
+});
+
 test("check-ins are rejected when the workday is closed", () => {
   assert.throws(
     () =>

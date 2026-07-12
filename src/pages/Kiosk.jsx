@@ -42,6 +42,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
   const speechRunRef = useRef(0);
   const speechVoicesRef = useRef([]);
   const speechAudioRef = useRef(null);
+  const lastNameInputRef = useRef(null);
 
   const baseTranslations = { ...translations.en, ...(translations[language] || {}) };
   const t = useMemo(
@@ -395,6 +396,18 @@ export default function Kiosk({ settings: shellSettings = null }) {
     setError("");
   }
 
+  function handleFirstNameKeyDown(event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    lastNameInputRef.current?.focus();
+  }
+
+  function handleLastNameKeyDown(event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.currentTarget.form?.requestSubmit();
+  }
+
   async function submitIdentity(event) {
     event.preventDefault();
     if (!identity.firstName.trim() || !identity.lastName.trim()) {
@@ -589,21 +602,32 @@ export default function Kiosk({ settings: shellSettings = null }) {
                       <span>{t.firstName} *</span>
                       <input
                         autoComplete="given-name"
+                        autoCapitalize="words"
+                        enterKeyHint="next"
                         value={identity.firstName}
                         onChange={(event) => updateIdentity("firstName", event.target.value)}
+                        onKeyDown={handleFirstNameKeyDown}
                       />
                     </label>
                     <label>
                       <span>{t.lastName} *</span>
                       <input
+                        ref={lastNameInputRef}
                         autoComplete="family-name"
+                        autoCapitalize="words"
+                        enterKeyHint="done"
                         value={identity.lastName}
                         onChange={(event) => updateIdentity("lastName", event.target.value)}
+                        onKeyDown={handleLastNameKeyDown}
                       />
                     </label>
                   </div>
                   {error ? <p className="error-message">{error}</p> : null}
-                  <button className="primary-button kiosk-next" disabled={checkingIdentity}>
+                  <button
+                    className="primary-button kiosk-next"
+                    disabled={checkingIdentity}
+                    type="submit"
+                  >
                     {checkingIdentity ? t.checkingSignIn : t.continue}
                   </button>
                 </form>

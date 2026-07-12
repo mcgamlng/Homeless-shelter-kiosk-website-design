@@ -6364,3 +6364,36 @@ main {
     grid-template-columns: 1fr;
   }
 }
+
+/* Raspberry Pi kiosk centering guard.
+   Non-activity kiosk screens should sit in the visual middle of the display,
+   not hug the top and leave unused blue space at the bottom. */
+.topbar.is-kiosk-topbar + main:has(.kiosk-stage:not(.step-activities)) {
+  min-height: 100svh !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: clamp(10px, 2svh, 18px) clamp(10px, 1.6vw, 18px) !important;
+}
+
+.kiosk-page:has(.kiosk-stage:not(.step-activities)),
+.kiosk-page.has-back:has(.kiosk-stage:not(.step-activities)) {
+  min-height: calc(100svh - clamp(20px, 4svh, 36px)) !important;
+  display: grid !important;
+  place-items: center !important;
+}
+
+.kiosk-stage:not(.step-activities),
+.kiosk-stage.has-back:not(.step-activities) {
+  width: min(1240px, calc(100vw - clamp(20px, 3.2vw, 36px))) !important;
+  min-height: calc(100svh - clamp(20px, 4svh, 36px)) !important;
+  display: grid !important;
+  align-content: center !important;
+  margin: auto !important;
+  padding: 0 !important;
+}
+
+.kiosk-stage:not(.step-activities) .kiosk-shell,
+.kiosk-stage:not(.step-activities) .kiosk-shell.has-back {
+  height: min(660px, calc(100svh - clamp(28px, 6svh, 54px))) !important;
+  min-height: 0 !important;
+}

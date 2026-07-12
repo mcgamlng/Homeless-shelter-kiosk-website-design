@@ -108,6 +108,47 @@ export default function Kiosk({ settings: shellSettings = null }) {
     return () => window.clearInterval(timer);
   }, [step, confirmation]);
 
+  useEffect(() => {
+    function isEditableTarget(target) {
+      if (!(target instanceof HTMLElement)) return false;
+      const tagName = target.tagName.toLowerCase();
+      return (
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        target.isContentEditable
+      );
+    }
+
+    function handlePageEnter(event) {
+      if (event.key !== "Enter" || event.repeat || isEditableTarget(event.target)) return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+
+      if (step === STEPS.WELCOME) {
+        if (target?.closest(".readout-button")) return;
+        event.preventDefault();
+        beginIdentity();
+        return;
+      }
+
+      if (step === STEPS.ACTIVITIES) {
+        if (target?.closest(".plain-activity-back, .plain-activity-readout")) return;
+        if (selectedIds.length === 0 || submitting) return;
+        event.preventDefault();
+        submitCheckIn();
+        return;
+      }
+
+      if (step === STEPS.CONFIRMATION && confirmation) {
+        event.preventDefault();
+        resetFlow();
+      }
+    }
+
+    window.addEventListener("keydown", handlePageEnter, true);
+    return () => window.removeEventListener("keydown", handlePageEnter, true);
+  }, [step, selectedIds.length, submitting, confirmation]);
+
   function resetFlow() {
     setStep(STEPS.WELCOME);
     setLanguage("en");

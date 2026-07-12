@@ -500,6 +500,14 @@ main {
   background: var(--lh-aqua);
   color: var(--lh-navy);
   border-radius: 0;
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.2);
+}
+
+.kiosk-house-logo {
+  display: block;
+  width: 86%;
+  height: 76%;
+  object-fit: contain;
 }
 
 .kiosk-center h1,

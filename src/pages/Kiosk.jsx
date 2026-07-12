@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, HandHeart, Volume2, VolumeX } from "lucide-react";
+import { Check, ChevronLeft, Volume2, VolumeX } from "lucide-react";
 import { api } from "../api.js";
 import { ActivityIcon } from "../icons.jsx";
 import {
@@ -563,7 +563,12 @@ export default function Kiosk({ settings: shellSettings = null }) {
             {step === STEPS.WELCOME ? (
               <div className="kiosk-center">
                 <div className="kiosk-symbol">
-                  <HandHeart size={58} />
+                  <img
+                    src="/icons/lh-house-mark.svg"
+                    alt=""
+                    className="kiosk-house-logo"
+                    aria-hidden="true"
+                  />
                 </div>
                 <h1>{t.welcome}</h1>
                 <p className="kiosk-lede">{t.kioskPurpose}</p>

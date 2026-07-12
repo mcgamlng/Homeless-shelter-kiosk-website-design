@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 360" role="img" aria-labelledby="title desc">
+  <title id="title">Listening House logo mark</title>
+  <desc id="desc">A navy house-shaped H mark inspired by The Listening House logo.</desc>
+  <path
+    d="M52 170L256 48L460 170V115L256 0L52 115V170Z"
+    fill="#22356D"
+  />
+  <path
+    d="M118 166V334H184V233L328 245V334H394V166H328V210L184 198V166H118Z"
+    fill="#22356D"
+  />
+  <path
+    d="M52 170L256 48L460 170"
+    fill="none"
+    stroke="#FFFDF7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="8"
+    opacity="0.72"
+  />
+</svg>

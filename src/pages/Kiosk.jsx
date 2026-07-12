@@ -120,34 +120,80 @@ export default function Kiosk({ settings: shellSettings = null }) {
       );
     }
 
-    function handlePageEnter(event) {
-      if (event.key !== "Enter" || event.repeat || isEditableTarget(event.target)) return;
+    function shortcutDigit(event) {
+      if (event.key >= "0" && event.key <= "9") return Number(event.key);
+      if (/^Numpad[0-9]$/.test(event.code)) return Number(event.code.replace("Numpad", ""));
+      return null;
+    }
+
+    function activityIndexFromDigit(digit) {
+      if (digit === null) return -1;
+      return digit === 0 ? 9 : digit - 1;
+    }
+
+    function handlePageShortcut(event) {
+      if (event.repeat || isEditableTarget(event.target)) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
+      const key = event.key.toLowerCase();
+      const digit = shortcutDigit(event);
+      const isBackShortcut = key === "escape" || key === "backspace" || key === "b";
+      const canGoBack = ![STEPS.WELCOME, STEPS.CONFIRMATION].includes(step);
+
+      if (key === "r") {
+        event.preventDefault();
+        readCurrentScreen();
+        return;
+      }
+
+      if (isBackShortcut && canGoBack) {
+        if (target?.closest(".readout-button, .plain-activity-readout")) return;
+        event.preventDefault();
+        goBack();
+        return;
+      }
 
       if (step === STEPS.WELCOME) {
         if (target?.closest(".readout-button")) return;
+        if (!["enter", " ", "s"].includes(key) && digit !== 1) return;
         event.preventDefault();
         beginIdentity();
         return;
       }
 
+      if (step === STEPS.LANGUAGE && digit) {
+        const option = languageOptions[digit - 1];
+        if (!option) return;
+        event.preventDefault();
+        chooseLanguage(option.code);
+        return;
+      }
+
       if (step === STEPS.ACTIVITIES) {
         if (target?.closest(".plain-activity-back, .plain-activity-readout")) return;
-        if (selectedIds.length === 0 || submitting) return;
+        const activityIndex = activityIndexFromDigit(digit);
+        if (activityIndex >= 0) {
+          const activity = activities[activityIndex];
+          if (!activity || activity.is_full || activity.is_unavailable) return;
+          event.preventDefault();
+          toggleActivity(activity);
+          return;
+        }
+        if (!["enter", "c"].includes(key) || selectedIds.length === 0 || submitting) return;
         event.preventDefault();
-        submitCheckIn();
+        void submitCheckIn();
         return;
       }
 
       if (step === STEPS.CONFIRMATION && confirmation) {
+        if (!["enter", "f"].includes(key) && digit !== 1) return;
         event.preventDefault();
         resetFlow();
       }
     }
 
-    window.addEventListener("keydown", handlePageEnter, true);
-    return () => window.removeEventListener("keydown", handlePageEnter, true);
-  }, [step, selectedIds.length, submitting, confirmation]);
+    window.addEventListener("keydown", handlePageShortcut, true);
+    return () => window.removeEventListener("keydown", handlePageShortcut, true);
+  }, [step, selectedIds.length, submitting, confirmation, activities]);
 
   function resetFlow() {
     setStep(STEPS.WELCOME);
@@ -432,6 +478,18 @@ export default function Kiosk({ settings: shellSettings = null }) {
     setStep(STEPS.LANGUAGE);
   }
 
+  function chooseLanguage(code) {
+    setLanguage(code);
+    setIdentity(DEFAULT_IDENTITY);
+    setError("");
+    setStep(STEPS.IDENTITY);
+  }
+
+  function shortcutForChoice(index) {
+    if (index < 0 || index > 9) return undefined;
+    return index === 9 ? "0" : String(index + 1);
+  }
+
   function updateIdentity(field, value) {
     setIdentity((current) => ({ ...current, [field]: value }));
     setError("");
@@ -514,7 +572,11 @@ export default function Kiosk({ settings: shellSettings = null }) {
     <section className={`kiosk-page ${hasBack ? "has-back" : ""}`} style={kioskThemeStyle}>
       <div className={`kiosk-stage ${hasBack ? "has-back" : ""} step-${step}`}>
         {hasBack && !isActivitiesStep ? (
-          <button className="ghost-button kiosk-back" onClick={goBack}>
+          <button
+            className="ghost-button kiosk-back"
+            onClick={goBack}
+            aria-keyshortcuts="Escape Backspace B"
+          >
             <ChevronLeft size={22} />
             {t.back}
           </button>
@@ -526,6 +588,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
               className={`readout-button ${speaking ? "is-speaking" : ""}`}
               onClick={readCurrentScreen}
               aria-label={speaking ? t.stopReading : t.readPage}
+              aria-keyshortcuts="R"
             >
               {speaking ? <VolumeX size={24} /> : <Volume2 size={24} />}
               <span className="readout-label">{speaking ? t.stopReading : t.readPage}</span>
@@ -537,7 +600,12 @@ export default function Kiosk({ settings: shellSettings = null }) {
         {step === STEPS.ACTIVITIES ? (
           <div className="plain-activities-shell">
             <div className="plain-activity-toolbar">
-              <button className="plain-activity-back" onClick={goBack} type="button">
+              <button
+                className="plain-activity-back"
+                onClick={goBack}
+                type="button"
+                aria-keyshortcuts="Escape Backspace B"
+              >
                 <ChevronLeft size={22} />
                 {t.back}
               </button>
@@ -546,6 +614,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
                 className={`plain-activity-readout ${speaking ? "is-speaking" : ""}`}
                 onClick={readCurrentScreen}
                 aria-label={speaking ? t.stopReading : t.readPage}
+                aria-keyshortcuts="R"
               >
                 {speaking ? <VolumeX size={24} /> : <Volume2 size={24} />}
               </button>
@@ -561,7 +630,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
               }`}
               data-activity-count={activities.length}
             >
-              {activities.map((activity) => {
+              {activities.map((activity, index) => {
                 const selected = selectedIds.includes(activity.id);
                 const unavailable = activity.is_full || activity.is_unavailable;
                 return (
@@ -572,6 +641,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
                     }`}
                     disabled={unavailable}
                     onClick={() => toggleActivity(activity)}
+                    aria-keyshortcuts={shortcutForChoice(index)}
                   >
                     <ActivityIcon name={activity.icon} className="plain-activity-icon" />
                     <span>{translateActivityName(activity, language)}</span>
@@ -606,6 +676,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
               disabled={submitting}
               onClick={submitCheckIn}
               type="button"
+              aria-keyshortcuts="Enter C"
             >
               {submitting ? t.saving : t.continue}
             </button>
@@ -626,7 +697,11 @@ export default function Kiosk({ settings: shellSettings = null }) {
                 </div>
                 <h1>{t.welcome}</h1>
                 <p className="kiosk-lede">{t.kioskPurpose}</p>
-                <button className="primary-button kiosk-start" onClick={beginIdentity}>
+                <button
+                  className="primary-button kiosk-start"
+                  onClick={beginIdentity}
+                  aria-keyshortcuts="Enter Space 1 S"
+                >
                   <span>{t.checkInButton}</span>
                   <small>{t.chooseLanguage}</small>
                 </button>
@@ -679,16 +754,12 @@ export default function Kiosk({ settings: shellSettings = null }) {
               <div className="kiosk-panel">
                 <h1>{t.chooseLanguage}</h1>
                 <div className="language-grid">
-                  {languageOptions.map((option) => (
+                  {languageOptions.map((option, index) => (
                     <button
                       key={option.code}
                       className="choice-button"
-                      onClick={() => {
-                        setLanguage(option.code);
-                        setIdentity(DEFAULT_IDENTITY);
-                        setError("");
-                        setStep(STEPS.IDENTITY);
-                      }}
+                      onClick={() => chooseLanguage(option.code)}
+                      aria-keyshortcuts={shortcutForChoice(index)}
                     >
                       {option.label}
                     </button>
@@ -714,7 +785,11 @@ export default function Kiosk({ settings: shellSettings = null }) {
                     </div>
                   ))}
                 </div>
-                <button className="primary-button kiosk-start" onClick={resetFlow}>
+                <button
+                  className="primary-button kiosk-start"
+                  onClick={resetFlow}
+                  aria-keyshortcuts="Enter F 1"
+                >
                   {t.finish}
                 </button>
                 <p className="auto-reset-note">

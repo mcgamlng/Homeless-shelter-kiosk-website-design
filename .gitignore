@@ -17,6 +17,7 @@ tmp-*-qa.png
 code-review/
 prototype/
 public/downloads/*.apk
+!public/downloads/ListeningHouseKiosk-debug.apk
 mobile/android/.gradle/
 mobile/android/build/
 mobile/android/app/build/

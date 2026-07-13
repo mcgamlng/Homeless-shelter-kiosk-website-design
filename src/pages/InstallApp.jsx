@@ -242,7 +242,10 @@ function AndroidInstallHero({ accessInfo }) {
             <span className="ios-step-number">1</span>
             <div>
               <strong>Press Download Android app.</strong>
-              <span>If Android asks for permission, allow downloads from this browser.</span>
+              <span>
+                If Chrome says the file cannot be downloaded securely, press Keep. The download
+                should be the APK app file, not a tiny web page.
+              </span>
             </div>
           </li>
           <li>

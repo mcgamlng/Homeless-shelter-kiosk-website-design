@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import dotenv from "dotenv";
 import express from "express";
@@ -1034,6 +1035,22 @@ app.use("/api", (_req, res) => {
 });
 
 const distPath = path.join(__dirname, "..", "dist");
+const androidApkFileName = "ListeningHouseKiosk-debug.apk";
+const androidApkCandidates = [
+  path.join(PROJECT_ROOT, "public", "downloads", androidApkFileName),
+  path.join(PROJECT_ROOT, "dist", "downloads", androidApkFileName)
+];
+
+function setAndroidApkHeaders(res) {
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Content-Type", "application/vnd.android.package-archive");
+  res.setHeader("Content-Disposition", `attachment; filename="${androidApkFileName}"`);
+}
+
+function findAndroidApkPath() {
+  return androidApkCandidates.find((candidate) => fs.existsSync(candidate));
+}
+
 const staticOptions = {
   setHeaders(res, filePath) {
     if (filePath.endsWith(".html")) {
@@ -1042,15 +1059,24 @@ const staticOptions = {
     }
 
     if (filePath.endsWith(".apk")) {
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Content-Type", "application/vnd.android.package-archive");
-      res.setHeader("Content-Disposition", 'attachment; filename="ListeningHouseKiosk-debug.apk"');
+      setAndroidApkHeaders(res);
       return;
     }
 
     res.setHeader("Cache-Control", "no-cache");
   }
 };
+
+app.get(`/downloads/${androidApkFileName}`, (_req, res) => {
+  const apkPath = findAndroidApkPath();
+  if (!apkPath) {
+    res.status(404).send("Android app file not found. Update the project and rebuild the app.");
+    return;
+  }
+
+  setAndroidApkHeaders(res);
+  res.sendFile(apkPath);
+});
 
 app.use(express.static(distPath, staticOptions));
 app.get("*", (_req, res) => {

@@ -163,21 +163,21 @@ function AppShell() {
             <small>{customization.system_name}</small>
           </span>
         </Link>
-        {isKiosk ? (
-          <button
-            className="staff-menu-toggle"
-            type="button"
-            onClick={() => setStaffMenuOpen((open) => !open)}
-            aria-expanded={staffMenuOpen}
-            aria-controls="staff-navigation"
-          >
-            {staffMenuOpen ? <X size={20} /> : <Menu size={20} />}
-            <span className="staff-menu-label">Staff menu</span>
-          </button>
-        ) : null}
+        <button
+          className={`staff-menu-toggle ${isKiosk ? "" : "main-menu-toggle"}`}
+          type="button"
+          onClick={() => setStaffMenuOpen((open) => !open)}
+          aria-expanded={staffMenuOpen}
+          aria-controls={isKiosk ? "staff-navigation" : "main-navigation"}
+        >
+          {staffMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          <span className="staff-menu-label">{isKiosk ? "Staff menu" : "Main menu"}</span>
+        </button>
         <nav
-          className={`topnav ${isKiosk ? "is-staff-panel" : ""} ${staffMenuOpen ? "is-open" : ""}`}
-          id="staff-navigation"
+          className={`topnav ${isKiosk ? "is-staff-panel" : "is-main-panel"} ${
+            staffMenuOpen ? "is-open" : ""
+          }`}
+          id={isKiosk ? "staff-navigation" : "main-navigation"}
           aria-label={isKiosk ? "Staff navigation" : "Main navigation"}
           aria-hidden={isKiosk && !staffMenuOpen}
         >

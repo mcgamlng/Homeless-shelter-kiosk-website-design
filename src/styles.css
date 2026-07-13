@@ -6406,49 +6406,33 @@ main {
   min-height: 0 !important;
 }
 
-/* Final phone header guard.
-   Earlier desktop/tablet nav rules gave the phone header a large flex-basis,
-   which stretched the menu into huge empty rows. Keep phone navigation compact. */
-@media (min-width: 641px) and (max-width: 980px) {
-  .topbar:not(.is-kiosk-topbar) {
-    align-items: stretch !important;
-    gap: 12px !important;
-  }
-
-  .topbar:not(.is-kiosk-topbar) .topnav {
-    flex: 0 0 auto !important;
-    width: 100% !important;
-    min-height: 0 !important;
-    align-items: stretch !important;
-    justify-content: flex-start !important;
-    gap: 8px !important;
-  }
-
-  .topbar:not(.is-kiosk-topbar) .topnav a,
-  .topbar:not(.is-kiosk-topbar) .topnav button {
-    min-height: 44px !important;
-    height: auto !important;
-    justify-content: center !important;
-    padding: 8px 14px !important;
-    line-height: 1.12 !important;
-    text-align: center !important;
-    white-space: normal !important;
-  }
-}
-
-@media (max-width: 640px) {
+/* Final small-screen navigation guard.
+   Phone and tablet staff pages should show a compact menu button first.
+   The full page list opens only when requested, so it does not cover the app by default. */
+@media (max-width: 980px) {
   .topbar:not(.is-kiosk-topbar) {
     position: sticky;
     top: 0;
-    align-items: stretch !important;
-    gap: 12px !important;
-    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 12px !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px !important;
+    overflow: visible !important;
   }
 
   .topbar:not(.is-kiosk-topbar) .brand {
-    width: 100%;
+    flex: 1 1 auto;
+    width: auto;
     min-width: 0 !important;
-    max-width: 100%;
+    max-width: calc(100% - 54px);
+  }
+
+  .topbar:not(.is-kiosk-topbar) .brand-mark {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    border-radius: 10px;
   }
 
   .topbar:not(.is-kiosk-topbar) .brand > span:last-child {
@@ -6457,40 +6441,93 @@ main {
 
   .topbar:not(.is-kiosk-topbar) .brand strong,
   .topbar:not(.is-kiosk-topbar) .brand small {
-    max-width: calc(100vw - 86px);
+    max-width: calc(100vw - 112px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .topbar:not(.is-kiosk-topbar) .topnav {
-    flex: 0 0 auto !important;
-    width: 100% !important;
-    min-height: 0 !important;
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    grid-auto-rows: minmax(44px, auto) !important;
-    align-items: stretch !important;
-    gap: 8px !important;
+  .topbar:not(.is-kiosk-topbar) .main-menu-toggle {
+    width: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    display: inline-flex !important;
+    margin-left: auto;
+    border-color: rgba(255, 255, 255, 0.38);
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    opacity: 0.92;
   }
 
-  .topbar:not(.is-kiosk-topbar) .topnav a,
-  .topbar:not(.is-kiosk-topbar) .topnav button {
+  .topbar:not(.is-kiosk-topbar) .main-menu-toggle:hover,
+  .topbar:not(.is-kiosk-topbar) .main-menu-toggle:focus-visible,
+  .topbar:not(.is-kiosk-topbar) .main-menu-toggle[aria-expanded="true"] {
+    border-color: rgba(255, 255, 255, 0.68);
+    background: rgba(155, 107, 170, 0.9);
+    color: white;
+    opacity: 1;
+    outline: none;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav.is-main-panel {
+    position: absolute;
+    top: calc(100% - 1px);
+    right: 12px;
+    left: auto;
+    width: min(360px, calc(100vw - 24px)) !important;
+    max-height: 0;
+    flex: 0 0 auto !important;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    padding: 0 10px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0 0 18px 18px;
+    background: var(--lh-texture), rgba(32, 32, 32, 0.98);
+    box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-8px);
+    transition:
+      max-height 180ms ease,
+      opacity 180ms ease,
+      transform 180ms ease,
+      padding 180ms ease,
+      visibility 180ms ease;
+    visibility: hidden;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav.is-main-panel.is-open {
+    max-height: min(70vh, 430px);
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    opacity: 1;
+    overflow-y: auto;
+    pointer-events: auto;
+    transform: translateY(0);
+    visibility: visible;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav.is-main-panel button {
     width: 100% !important;
     min-width: 0 !important;
     min-height: 44px !important;
     height: auto !important;
-    justify-content: center !important;
-    padding: 8px 10px !important;
-    border-radius: 14px !important;
+    justify-content: flex-start !important;
+    padding: 9px 14px !important;
+    border-radius: 12px !important;
     line-height: 1.12 !important;
-    text-align: center !important;
+    text-align: left !important;
     white-space: normal !important;
   }
 
-  .topbar:not(.is-kiosk-topbar) .topnav a.active,
-  .topbar:not(.is-kiosk-topbar) .topnav button.active {
-    border-radius: 14px !important;
+  .topbar:not(.is-kiosk-topbar) .topnav.is-main-panel button.active {
+    border-radius: 12px !important;
+  }
+
+  main {
+    padding-top: 18px !important;
   }
 
   .kiosk-start {
@@ -6507,11 +6544,5 @@ main {
     display: block;
     width: 100%;
     text-align: center;
-  }
-}
-
-@media (max-width: 380px) {
-  .topbar:not(.is-kiosk-topbar) .topnav {
-    grid-template-columns: 1fr !important;
   }
 }

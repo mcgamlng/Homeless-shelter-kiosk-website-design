@@ -6405,3 +6405,113 @@ main {
   height: min(660px, calc(100svh - clamp(28px, 6svh, 54px))) !important;
   min-height: 0 !important;
 }
+
+/* Final phone header guard.
+   Earlier desktop/tablet nav rules gave the phone header a large flex-basis,
+   which stretched the menu into huge empty rows. Keep phone navigation compact. */
+@media (min-width: 641px) and (max-width: 980px) {
+  .topbar:not(.is-kiosk-topbar) {
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav a,
+  .topbar:not(.is-kiosk-topbar) .topnav button {
+    min-height: 44px !important;
+    height: auto !important;
+    justify-content: center !important;
+    padding: 8px 14px !important;
+    line-height: 1.12 !important;
+    text-align: center !important;
+    white-space: normal !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar:not(.is-kiosk-topbar) {
+    position: sticky;
+    top: 0;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 12px !important;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .brand {
+    width: 100%;
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .brand > span:last-child {
+    min-width: 0;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .brand strong,
+  .topbar:not(.is-kiosk-topbar) .brand small {
+    max-width: calc(100vw - 86px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-auto-rows: minmax(44px, auto) !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav a,
+  .topbar:not(.is-kiosk-topbar) .topnav button {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 44px !important;
+    height: auto !important;
+    justify-content: center !important;
+    padding: 8px 10px !important;
+    border-radius: 14px !important;
+    line-height: 1.12 !important;
+    text-align: center !important;
+    white-space: normal !important;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav a.active,
+  .topbar:not(.is-kiosk-topbar) .topnav button.active {
+    border-radius: 14px !important;
+  }
+
+  .kiosk-start {
+    flex-direction: column;
+    gap: 2px;
+    padding-block: 10px;
+    line-height: 1.12;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .kiosk-start span,
+  .kiosk-start small {
+    display: block;
+    width: 100%;
+    text-align: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .topbar:not(.is-kiosk-topbar) .topnav {
+    grid-template-columns: 1fr !important;
+  }
+}

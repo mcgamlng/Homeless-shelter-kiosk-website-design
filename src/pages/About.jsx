@@ -58,7 +58,11 @@ export default function About() {
         setAccessInfo(info);
         const [browserImage, appImage, iphoneImage] = await Promise.all([
           QRCode.toDataURL(info.browserUrl, { width: 320, margin: 2, color: qrColors }),
-          QRCode.toDataURL(info.appDownloadUrl, { width: 320, margin: 2, color: qrColors }),
+          QRCode.toDataURL(info.androidInstallUrl || info.appDownloadUrl, {
+            width: 320,
+            margin: 2,
+            color: qrColors
+          }),
           QRCode.toDataURL(info.iphoneInstallUrl, { width: 320, margin: 2, color: qrColors })
         ]);
         if (active) {
@@ -219,12 +223,11 @@ export default function About() {
           />
           <QrAccessCard
             image={appQr}
-            title="Download the Android app"
-            description="Downloads the Listening House Android app that opens this local system."
-            url={accessInfo?.appDownloadUrl}
-            download
-            extraUrl={accessInfo?.androidConfigureUrl}
-            extraLabel="Connect installed app"
+            title="Install on Android"
+            description="Opens a step-by-step Android install page with the APK download and connect button."
+            url={accessInfo?.androidInstallUrl || accessInfo?.appDownloadUrl}
+            icon="android"
+            actionLabel="Open Android install"
           />
         </div>
         <div className="iphone-install-callout">

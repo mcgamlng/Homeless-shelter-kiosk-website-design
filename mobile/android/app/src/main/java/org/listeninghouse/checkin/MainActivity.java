@@ -63,24 +63,41 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient());
         webView.addJavascriptInterface(new AppBridge(), "LHCheckIn");
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            String fileName = URLUtil.guessFileName(url, contentDisposition, mimeType);
+            boolean isAndroidAppDownload = fileName != null && fileName.toLowerCase().endsWith(".apk");
+            String effectiveMimeType = mimeType;
+            if (effectiveMimeType == null || effectiveMimeType.length() == 0) {
+                effectiveMimeType = isAndroidAppDownload
+                    ? "application/vnd.android.package-archive"
+                    : "application/octet-stream";
+            }
+
             DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
             String cookies = CookieManager.getInstance().getCookie(url);
             if (cookies != null) {
                 request.addRequestHeader("Cookie", cookies);
             }
             request.addRequestHeader("User-Agent", userAgent);
-            request.setMimeType(mimeType);
-            request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType));
-            request.setDescription("Downloading Listening House spreadsheet");
+            request.setMimeType(effectiveMimeType);
+            request.setTitle(fileName);
+            request.setDescription(
+                isAndroidAppDownload
+                    ? "Downloading Listening House Android app"
+                    : "Downloading Listening House file"
+            );
             request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setDestinationInExternalPublicDir(
                 Environment.DIRECTORY_DOWNLOADS,
-                URLUtil.guessFileName(url, contentDisposition, mimeType)
+                fileName
             );
 
             DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
             manager.enqueue(request);
-            Toast.makeText(this, "Excel download started", Toast.LENGTH_LONG).show();
+            Toast.makeText(
+                this,
+                isAndroidAppDownload ? "Android app download started" : "Download started",
+                Toast.LENGTH_LONG
+            ).show();
         });
         webView.setWebViewClient(new WebViewClient() {
             @Override

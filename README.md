@@ -277,11 +277,14 @@ When `PUBLIC_URL` is set, all QR codes use that public HTTPS address. See
 
 ## Android App
 
-The Android wrapper opens the staff dashboard. Download it from:
+The Android wrapper opens the staff dashboard. The About page QR opens the Android install helper:
 
 ```text
-http://YOUR-SERVER:3000/downloads/ListeningHouseKiosk-debug.apk
+http://YOUR-SERVER:3000/install?platform=android
 ```
+
+That page has **Download Android app** and **Connect installed app** buttons. The direct APK fallback
+is still available at `http://YOUR-SERVER:3000/downloads/ListeningHouseKiosk-debug.apk`.
 
 The server must be running. A local address requires the phone and server to use the same Wi-Fi. A
 public HTTPS address works from any internet connection. The app remembers the selected address,

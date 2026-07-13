@@ -452,6 +452,7 @@ app.get("/api/access-info", (req, res) => {
     browserUrl: `${baseUrl}/dashboard`,
     kioskUrl: `${baseUrl}/kiosk`,
     iphoneInstallUrl: `${baseUrl}/install?platform=ios`,
+    androidInstallUrl: `${baseUrl}/install?platform=android`,
     appDownloadUrl: `${baseUrl}/downloads/ListeningHouseKiosk-debug.apk`,
     androidConfigureUrl: `lhcheckin://save?url=${encodeURIComponent(baseUrl)}`,
     selectedServerUrl: baseUrl,
@@ -1037,6 +1038,13 @@ const staticOptions = {
   setHeaders(res, filePath) {
     if (filePath.endsWith(".html")) {
       res.setHeader("Cache-Control", "no-store");
+      return;
+    }
+
+    if (filePath.endsWith(".apk")) {
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Content-Type", "application/vnd.android.package-archive");
+      res.setHeader("Content-Disposition", 'attachment; filename="ListeningHouseKiosk-debug.apk"');
       return;
     }
 

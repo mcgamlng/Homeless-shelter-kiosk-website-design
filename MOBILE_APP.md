@@ -24,13 +24,24 @@ page, paste it directly into Safari, and try again.
 
 ## Android Download
 
-From a phone that can reach the server:
+From a phone that can reach the server, open the Android install helper page:
+
+```text
+http://YOUR-SERVER:3000/install?platform=android
+```
+
+The About page displays a QR code for this Android install helper page. That page has two separate
+buttons:
+
+1. **Download Android app** downloads the APK file.
+2. **Connect installed app** saves the current laptop, Raspberry Pi, or public server address inside
+   the Android app after it is installed.
+
+The direct APK is still available here if staff need it:
 
 ```text
 http://YOUR-SERVER:3000/downloads/ListeningHouseKiosk-debug.apk
 ```
-
-The About page also displays a QR code for this download.
 
 ## Network Requirement
 

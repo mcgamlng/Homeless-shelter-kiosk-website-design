@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private String serverBaseUrl;
     private boolean connectionHelpVisible;
+    private boolean dashboardLoadPending;
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
 
@@ -123,6 +124,7 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) {
+                    dashboardLoadPending = false;
                     showConnectionHelp(error.getDescription().toString());
                 }
             }
@@ -134,6 +136,7 @@ public class MainActivity extends Activity {
                 WebResourceResponse errorResponse
             ) {
                 if (request.isForMainFrame()) {
+                    dashboardLoadPending = false;
                     showConnectionHelp("The server answered, but the app could not open the dashboard.");
                 }
             }
@@ -141,6 +144,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 if (serverBaseUrl != null && url != null && url.startsWith(serverBaseUrl)) {
+                    dashboardLoadPending = false;
                     connectionHelpVisible = false;
                 }
             }
@@ -256,8 +260,21 @@ public class MainActivity extends Activity {
             return;
         }
         runOnUiThread(() -> {
+            dashboardLoadPending = true;
+            connectionHelpVisible = false;
             webView.stopLoading();
             webView.loadUrl(getDashboardUrl() + "?androidReconnect=" + System.currentTimeMillis());
+            new Handler(Looper.getMainLooper()).postDelayed(
+                () -> {
+                    if (dashboardLoadPending && !connectionHelpVisible) {
+                        dashboardLoadPending = false;
+                        showConnectionHelp(
+                            "The dashboard did not finish loading. Check the website address and Wi-Fi connection."
+                        );
+                    }
+                },
+                6000
+            );
         });
     }
 
@@ -374,6 +391,7 @@ public class MainActivity extends Activity {
     }
 
     private void showConnectionHelp(String errorMessage) {
+        dashboardLoadPending = false;
         connectionHelpVisible = true;
         String dashboardUrl = getDashboardUrl();
         String kioskUrl = getKioskUrl();

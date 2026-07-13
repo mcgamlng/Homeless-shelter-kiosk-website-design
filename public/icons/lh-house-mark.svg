@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 360" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Listening House logo mark</title>
-  <desc id="desc">A navy house-shaped H mark inspired by The Listening House logo.</desc>
+  <desc id="desc">A navy house-shaped H mark inspired by the Listening House logo.</desc>
   <path
-    d="M28 150L256 18L484 150V210L256 80L28 210Z"
+    d="M34 183L256 48L478 183V244L256 119L34 244Z"
     fill="#22356D"
   />
   <path
-    d="M128 178C128 169 134 162 143 160L188 148V222L324 234V160L369 172C378 174 384 181 384 190V331C384 339 378 345 370 345H324C316 345 310 339 310 331V263L202 254V331C202 339 196 345 188 345H142C134 345 128 339 128 331V178Z"
+    d="M123 222C123 213 130 205 139 203L198 188V280L314 292V203L373 218C382 220 389 228 389 237V437C389 446 382 453 373 453H314C305 453 298 446 298 437V330L214 321V437C214 446 207 453 198 453H139C130 453 123 446 123 437V222Z"
     fill="#22356D"
   />
 </svg>

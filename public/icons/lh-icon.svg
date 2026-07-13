@@ -1,12 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Listening House check-in app icon</title>
-  <desc id="desc">A Listening House-inspired navy house mark on teal and purple.</desc>
-  <rect width="512" height="512" rx="96" fill="#8BC9C2"/>
-  <path d="M352 512H512V334L440 310L352 512Z" fill="#9B6BAA" opacity="0.92"/>
-  <path d="M0 512H120L188 324L0 374V512Z" fill="#9B6BAA" opacity="0.78"/>
+  <desc id="desc">A Listening House-inspired navy house mark on teal with a purple accent.</desc>
+  <rect width="512" height="512" rx="72" fill="#8BC9C2"/>
+  <path d="M0 512H154L212 330L0 386V512Z" fill="#9B6BAA"/>
+  <path d="M372 512H512V330L452 310L372 512Z" fill="#9B6BAA" opacity="0.82"/>
   <path
-    d="M54 226L256 106L458 226V166L256 48L54 166V226ZM145 222V416H205V314L307 324V416H367V222H307V270L205 260V222H145Z"
+    d="M54 213L256 95L458 213V265L256 151L54 265V213ZM139 231C139 223 145 216 153 214L201 202V270L311 281V214L359 226C367 228 373 235 373 243V374C373 382 367 388 359 388H311C303 388 297 382 297 374V313L215 305V374C215 382 209 388 201 388H153C145 388 139 382 139 374V231Z"
     fill="#22356D"
   />
-  <path d="M54 226L256 106L458 226" fill="none" stroke="#F7F7F2" stroke-width="8" stroke-linejoin="round" opacity="0.76"/>
 </svg>

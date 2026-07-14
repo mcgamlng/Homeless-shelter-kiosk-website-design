@@ -468,9 +468,11 @@ export function seedBaseData(database) {
   insertSetting.run("inventor_contact_email", "");
   insertSetting.run("inventor_contacts", "[]");
   insertSetting.run("yearly_data_deletion_enabled", "0");
+  insertSetting.run("yearly_data_deletion_date", "");
   insertSetting.run("yearly_data_deletion_month_day", "01-01");
   insertSetting.run("yearly_data_deletion_time", "03:00");
   insertSetting.run("yearly_data_deletion_last_run_year", "");
+  insertSetting.run("yearly_data_deletion_last_run_date", "");
   Object.entries(DEFAULT_KIOSK_CUSTOMIZATION).forEach(([key, value]) => {
     insertSetting.run(key, value);
   });

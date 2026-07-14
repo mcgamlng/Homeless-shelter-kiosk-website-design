@@ -415,8 +415,27 @@ function updateFromGithub() {
     actionName: "Update from GitHub",
     command,
     message:
-      "GitHub update started. The server may restart for a minute while it installs the newest version.",
-    requiresSudo: true
+      "GitHub update started. The server may restart for a minute while it installs the newest version."
+  });
+}
+
+function installAutoUpdateTimer() {
+  const installCommand =
+    "chmod +x scripts/raspberry-pi/*.sh && ./scripts/raspberry-pi/install-auto-update.sh";
+  const command = [
+    "sudo -n systemd-run",
+    "--unit=listening-house-install-auto-update",
+    "--collect",
+    `--working-directory=${shellQuote(PROJECT_ROOT)}`,
+    "/bin/bash",
+    "-lc",
+    shellQuote(installCommand)
+  ].join(" ");
+  return runDetachedSystemAction({
+    actionName: "Install auto-update",
+    command,
+    message:
+      "Auto-update setup started. The Raspberry Pi will check GitHub and rebuild the app every two months."
   });
 }
 
@@ -424,8 +443,7 @@ function rebootRaspberryPi() {
   return runDetachedSystemAction({
     actionName: "Reboot Raspberry Pi",
     command: SYSTEM_ACTION_COMMANDS.reboot,
-    message: "Reboot command sent. The Raspberry Pi will disconnect briefly.",
-    requiresSudo: true
+    message: "Reboot command sent. The Raspberry Pi will disconnect briefly."
   });
 }
 
@@ -893,6 +911,14 @@ app.post(
   requireAdminIt,
   handleRoute((_req, res) => {
     res.json(updateFromGithub());
+  })
+);
+
+app.post(
+  "/api/admin/system/install-auto-update",
+  requireAdminIt,
+  handleRoute((_req, res) => {
+    res.json(installAutoUpdateTimer());
   })
 );
 

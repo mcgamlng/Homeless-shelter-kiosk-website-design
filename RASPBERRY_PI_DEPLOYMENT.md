@@ -208,9 +208,10 @@ The update helper:
 
 ## Yearly Data Deletion
 
-Admin can set one yearly deletion date and time. Warning banners appear in Admin and Dashboard 14
-days before deletion. At the scheduled time, the system deletes guest names, check-ins, scheduled
-items, status history, analytics archive records, and spreadsheet files in `data/exports`.
+Admin can set one yearly deletion date and time with a full year, month, and day. Warning banners
+appear in Admin and Dashboard 14 days before deletion. At the scheduled time, the system deletes
+guest names, check-ins, scheduled items, status history, analytics archive records, and spreadsheet
+files in `data/exports`.
 
 The deletion does not remove staff user accounts, permissions, admin PIN/security settings,
 activities, kiosk customization, or app settings. If the Pi is off at the scheduled deletion time, the
@@ -223,12 +224,20 @@ Admin includes **Kiosk & Raspberry Pi Controls**:
 
 - **Exit kiosk screen** tries to close only the Chromium kiosk window on Raspberry Pi/Linux.
 - **Run update now** pulls the newest GitHub code, rebuilds the app, and restarts the server.
+- **Install auto-update** creates a Raspberry Pi timer that runs the GitHub update every two months.
 - **Reboot Pi now** sends a Raspberry Pi reboot command.
-- **Open kiosk now** reopens Chromium in kiosk mode when the web app is still open.
 
 The update script also installs a desktop shortcut named **Open Listening House Kiosk**. If Chromium
 is completely closed and staff cannot press a web button, double-click that desktop icon to reopen
 the kiosk without rebooting.
+
+To install the two-month updater from the terminal instead of Admin:
+
+```bash
+cd ~/listening-house-project
+chmod +x scripts/raspberry-pi/*.sh
+sudo ./scripts/raspberry-pi/install-auto-update.sh
+```
 
 Rebooting does not delete saved check-ins because they are stored in SQLite. Do wait for any active
 check-in or Excel export to finish first. Unsaved Admin form edits are lost, and phones/tablets

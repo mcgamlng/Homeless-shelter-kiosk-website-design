@@ -66,9 +66,10 @@ test("yearly deletion removes guest data and preserves staff users", async () =>
 
     repository.updateDataDeletionSettings({
       enabled: true,
-      month_day: "07-06",
+      date: "2026-07-06",
       time: "03:00"
     });
+    assert.equal(repository.getDataDeletionSettings().date, "2026-07-06");
     const warning = repository.getDataDeletionSettings(new Date(2026, 5, 25, 12, 0)).warning;
     assert.ok(warning);
     assert.match(warning.message, /Yearly data deletion/);
@@ -91,6 +92,7 @@ test("yearly deletion removes guest data and preserves staff users", async () =>
     assert.equal(repository.listStaffUsers().length, 1);
     assert.equal(repository.listStaffUsers()[0].id, staffUser.id);
     assert.equal(repository.listStaffUsers()[0].permissions.admin_excel, true);
+    assert.equal(repository.runDueYearlyDataDeletion({ now: new Date(2026, 6, 7, 4, 0) }), null);
   } finally {
     if (database?.open) database.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

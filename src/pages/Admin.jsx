@@ -203,6 +203,7 @@ function createNewActivityDraft() {
 function createDataDeletionDraft(settings = {}) {
   return {
     enabled: Boolean(settings.enabled),
+    date: settings.date || todayKey(),
     month_day: settings.month_day || "01-01",
     time: settings.time || "03:00"
   };
@@ -288,7 +289,7 @@ function normalizePermissionToggle(permissions, permission, checked) {
 const piMaintenanceCommands = {
   update: "cd ~/listening-house-project && ./scripts/raspberry-pi/update-from-github.sh",
   exitKiosk: "pkill -f '(^|/)(chromium|chromium-browser).*--kiosk.*(:3000/kiosk|/kiosk)'",
-  openKiosk: "cd ~/listening-house-project && ./scripts/raspberry-pi/start-kiosk.sh",
+  autoUpdate: "cd ~/listening-house-project && sudo ./scripts/raspberry-pi/install-auto-update.sh",
   reboot: "sudo reboot"
 };
 
@@ -1638,18 +1639,23 @@ export default function Admin({ section = "activities" }) {
               </div>
 
               <div className="system-control-card">
-                <Globe2 size={26} />
+                <RefreshCw size={26} />
                 <div>
-                  <strong>Open kiosk again</strong>
-                  <p>Reopens Chromium in full-screen kiosk mode after exiting it.</p>
+                  <strong>Auto-update every two months</strong>
+                  <p>
+                    Installs a Raspberry Pi timer that checks GitHub, rebuilds the app, and restarts
+                    the server every two months.
+                  </p>
                 </div>
                 <button
                   className="secondary-button compact-button"
                   type="button"
                   disabled={!signedIn || Boolean(runningSystemAction)}
-                  onClick={() => runPiSystemAction("openKiosk", "Open kiosk", api.openKiosk)}
+                  onClick={() =>
+                    runPiSystemAction("autoUpdate", "Auto-update setup", api.installAutoUpdate)
+                  }
                 >
-                  {runningSystemAction === "openKiosk" ? "Opening..." : "Open kiosk now"}
+                  {runningSystemAction === "autoUpdate" ? "Installing..." : "Install auto-update"}
                 </button>
               </div>
             </div>
@@ -2086,14 +2092,12 @@ export default function Admin({ section = "activities" }) {
               <label>
                 Deletion date
                 <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="MM-DD"
-                  value={dataDeletionDraft.month_day}
+                  type="date"
+                  value={dataDeletionDraft.date}
                   disabled={!signedIn}
-                  onChange={(event) => updateDataDeletionDraft("month_day", event.target.value)}
+                  onChange={(event) => updateDataDeletionDraft("date", event.target.value)}
                 />
-                <small>Use month-day format, such as 01-15 for January 15.</small>
+                <small>Choose the exact year, month, and day for this deletion.</small>
               </label>
               <label>
                 Deletion time

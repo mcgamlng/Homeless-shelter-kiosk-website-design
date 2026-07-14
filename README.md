@@ -338,10 +338,10 @@ Admin can download Excel reports directly from the Analytics section for a selec
 or year. Spreadsheet emailing is not part of the app; staff should use the Analytics export button
 when they need a spreadsheet.
 
-Admin can set a once-a-year data deletion date and time. Starting 14 days before that date, warning
-banners appear in Admin and Dashboard. When the scheduled deletion runs, guest names, check-ins,
-scheduled items, status history, old analytics archive records, and old files in `data/exports` are
-deleted.
+Admin can set a once-a-year data deletion date and time with the exact year, month, and day.
+Starting 14 days before that date, warning banners appear in Admin and Dashboard. When the scheduled
+deletion runs, guest names, check-ins, scheduled items, status history, old analytics archive
+records, and old files in `data/exports` are deleted.
 Staff user accounts, permissions, the admin PIN, activities, kiosk customization, and app settings are
 preserved.
 
@@ -357,8 +357,8 @@ which top navigation sections each person can open:
   contacts.
 - **Activity customization:** schedule spacing, daily resets, activity/service setup, limits,
   waitlists, and alarms.
-- **IT tools:** phone/network access, read-aloud voice tools, Raspberry Pi update/reboot, and kiosk
-  open/exit controls.
+- **IT tools:** phone/network access, read-aloud voice tools, Raspberry Pi update/reboot,
+  automatic updater setup, and kiosk exit controls.
 
 Everyone can still use the kiosk page. Staff users only receive Dashboard, About, Excel
 spreadsheets, Page customization, Activity customization, or IT tools access when the owner grants
@@ -394,12 +394,11 @@ Codex does not need to run on the Raspberry Pi for the kiosk to work. The Pi onl
 the project files, and the local database. If you choose to install Codex CLI on the Pi, treat it as
 a developer tool, not part of the production kiosk startup.
 
-Admin also includes **Kiosk & Raspberry Pi Controls**. Staff can run the GitHub update, reboot the
-Pi, reopen the full-screen kiosk, or try to exit only the Chromium kiosk window. Rebooting does not
-delete saved SQLite data, but unsaved form edits are lost and staff phones disconnect while the Pi
-restarts. The Raspberry Pi update also installs a desktop shortcut
-called **Open Listening House Kiosk** so staff can reopen the kiosk without rebooting if Chromium is
-closed.
+Admin also includes **Kiosk & Raspberry Pi Controls**. Staff can run the GitHub update, install a
+two-month automatic GitHub updater, reboot the Pi, or try to exit only the Chromium kiosk window.
+Rebooting does not delete saved SQLite data, but unsaved form edits are lost and staff phones
+disconnect while the Pi restarts. The Raspberry Pi update also installs a desktop shortcut called
+**Open Listening House Kiosk** so staff can reopen the kiosk without rebooting if Chromium is closed.
 
 Chromium kiosk command:
 

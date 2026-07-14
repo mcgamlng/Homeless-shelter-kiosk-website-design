@@ -59,6 +59,10 @@ const LOCAL_DATE_TIME_FORMATTER = new Intl.DateTimeFormat([], {
   hour: "numeric",
   minute: "2-digit"
 });
+const LOCAL_TIME_FORMATTER = new Intl.DateTimeFormat([], {
+  hour: "numeric",
+  minute: "2-digit"
+});
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const exportDirectory = path.resolve(
@@ -2101,11 +2105,22 @@ export function createAnalyticsWorkbook({ period = "day", date } = {}) {
 }
 
 export function getDataDeletionSettings(now = new Date()) {
+  const monthDay = normalizeMonthDay(getSettingValue("yearly_data_deletion_month_day"), "01-01");
+  const storedDate = getSettingValue("yearly_data_deletion_date");
+  const date = normalizeDeletionDate(
+    storedDate,
+    deletionDateFromMonthDay(now.getFullYear(), monthDay)
+  );
+  const legacyLastRunYear = getSettingValue("yearly_data_deletion_last_run_year");
+  const lastRunDate = getSettingValue("yearly_data_deletion_last_run_date");
   const settings = {
     enabled: getSettingValue("yearly_data_deletion_enabled") === "1",
-    month_day: normalizeMonthDay(getSettingValue("yearly_data_deletion_month_day"), "01-01"),
+    date,
+    month_day: date.slice(5),
     time: normalizeClockTime(getSettingValue("yearly_data_deletion_time"), "03:00"),
-    last_run_year: getSettingValue("yearly_data_deletion_last_run_year")
+    last_run_year: legacyLastRunYear,
+    last_run_date:
+      lastRunDate || (!storedDate && legacyLastRunYear === date.slice(0, 4) ? date : "")
   };
   return {
     ...settings,
@@ -2118,10 +2133,17 @@ export function updateDataDeletionSettings(payload = {}) {
     if (payload.enabled !== undefined) {
       setSettingValue("yearly_data_deletion_enabled", payload.enabled ? "1" : "0");
     }
-    if (payload.month_day !== undefined) {
+    if (payload.date !== undefined) {
+      const fallbackDate = getDataDeletionSettings().date;
+      const date = normalizeDeletionDate(payload.date, fallbackDate);
+      setSettingValue("yearly_data_deletion_date", date);
+      setSettingValue("yearly_data_deletion_month_day", date.slice(5));
+    } else if (payload.month_day !== undefined) {
+      const monthDay = normalizeMonthDay(payload.month_day, "01-01");
+      setSettingValue("yearly_data_deletion_month_day", monthDay);
       setSettingValue(
-        "yearly_data_deletion_month_day",
-        normalizeMonthDay(payload.month_day, "01-01")
+        "yearly_data_deletion_date",
+        deletionDateFromMonthDay(new Date().getFullYear(), monthDay)
       );
     }
     if (payload.time !== undefined) {
@@ -2134,20 +2156,23 @@ export function updateDataDeletionSettings(payload = {}) {
 
 export function getDataDeletionWarning(settings = getDataDeletionSettings(), now = new Date()) {
   if (!settings.enabled) return null;
-  const scheduledAt = scheduledDeletionDateForYear(now.getFullYear(), settings);
+  const scheduledAt = scheduledDeletionDate(settings);
   const warningStartsAt = new Date(scheduledAt);
   warningStartsAt.setDate(warningStartsAt.getDate() - 14);
-  const alreadyRan = String(settings.last_run_year || "") === String(scheduledAt.getFullYear());
+  const alreadyRan = String(settings.last_run_date || "") === settings.date;
   if (alreadyRan || now < warningStartsAt) return null;
   const daysRemaining = Math.max(0, Math.ceil((scheduledAt - now) / 86_400_000));
+  const scheduledText = `${formatLocalDateOnly(scheduledAt)} at ${formatLocalTime(scheduledAt)}`;
   return {
     scheduled_at: scheduledAt.toISOString(),
     warning_starts_at: warningStartsAt.toISOString(),
     days_remaining: daysRemaining,
     message:
       daysRemaining === 0
-        ? "Yearly data deletion is scheduled for today. Guest history and spreadsheet archives will be deleted."
-        : `Yearly data deletion is scheduled in ${daysRemaining} day${
+        ? `Yearly data deletion is scheduled for today at ${formatLocalTime(
+            scheduledAt
+          )}. Guest history and spreadsheet archives will be deleted.`
+        : `Yearly data deletion is scheduled for ${scheduledText}, in ${daysRemaining} day${
             daysRemaining === 1 ? "" : "s"
           }. Guest history and spreadsheet archives will be deleted.`
   };
@@ -2156,13 +2181,17 @@ export function getDataDeletionWarning(settings = getDataDeletionSettings(), now
 export function runDueYearlyDataDeletion({ now = new Date() } = {}) {
   const settings = getDataDeletionSettings(now);
   if (!settings.enabled) return null;
-  const scheduledAt = scheduledDeletionDateForYear(now.getFullYear(), settings);
-  if (String(settings.last_run_year || "") === String(scheduledAt.getFullYear())) return null;
+  const scheduledAt = scheduledDeletionDate(settings);
+  if (String(settings.last_run_date || "") === settings.date) return null;
   if (now < scheduledAt) return null;
-  return runYearlyDataDeletion({ now, reason: "scheduled" });
+  return runYearlyDataDeletion({ now, reason: "scheduled", scheduledDate: settings.date });
 }
 
-export function runYearlyDataDeletion({ now = new Date(), reason = "manual" } = {}) {
+export function runYearlyDataDeletion({
+  now = new Date(),
+  reason = "manual",
+  scheduledDate = formatDateKey(now)
+} = {}) {
   const deletedFiles = clearExportFiles();
   const deleted = db.transaction(() => {
     const before = {
@@ -2179,6 +2208,7 @@ export function runYearlyDataDeletion({ now = new Date(), reason = "manual" } = 
     db.prepare("DELETE FROM daily_export_archives").run();
     setCurrentDashboardDayStart(now, { useCheckInFloor: false });
     setSettingValue("yearly_data_deletion_last_run_year", String(now.getFullYear()));
+    setSettingValue("yearly_data_deletion_last_run_date", scheduledDate);
     return before;
   })();
   return {
@@ -2200,6 +2230,35 @@ function scheduledDeletionDateForYear(year, settings) {
   const maxDay = new Date(year, month, 0).getDate();
   const day = Math.min(maxDay, Math.max(1, dayValue || 1));
   return new Date(year, month - 1, day, hour, minute, 0, 0);
+}
+
+function scheduledDeletionDate(settings) {
+  const date = normalizeDeletionDate(
+    settings.date,
+    deletionDateFromMonthDay(new Date().getFullYear(), settings.month_day)
+  );
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = normalizeClockTime(settings.time, "03:00").split(":").map(Number);
+  return new Date(year, month - 1, day, hour, minute, 0, 0);
+}
+
+function deletionDateFromMonthDay(year, monthDay) {
+  return formatDateKey(scheduledDeletionDateForYear(year, { month_day: monthDay, time: "00:00" }));
+}
+
+function normalizeDeletionDate(value, fallback) {
+  const candidate = String(value || "").trim();
+  const fallbackDate = String(fallback || formatDateKey(new Date()));
+  const match = candidate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return fallbackDate;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return fallbackDate;
+  }
+  return `${String(year).padStart(4, "0")}-${match[2]}-${match[3]}`;
 }
 
 function clearExportFiles() {
@@ -2307,6 +2366,10 @@ function formatLocalDateOnly(date) {
 
 function formatLocalDateTime(date) {
   return LOCAL_DATE_TIME_FORMATTER.format(date);
+}
+
+function formatLocalTime(date) {
+  return LOCAL_TIME_FORMATTER.format(date);
 }
 
 function saveAdminPin(pin) {

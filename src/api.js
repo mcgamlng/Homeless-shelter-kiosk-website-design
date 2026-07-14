@@ -235,6 +235,12 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
+  installAutoUpdate(token) {
+    return request("/api/admin/system/install-auto-update", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
   rebootPi(token) {
     return request("/api/admin/system/reboot", {
       method: "POST",

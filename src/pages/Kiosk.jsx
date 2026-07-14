@@ -42,6 +42,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
   const speechRunRef = useRef(0);
   const speechVoicesRef = useRef([]);
   const speechAudioRef = useRef(null);
+  const firstNameInputRef = useRef(null);
   const lastNameInputRef = useRef(null);
 
   const baseTranslations = { ...translations.en, ...(translations[language] || {}) };
@@ -90,6 +91,14 @@ export default function Kiosk({ settings: shellSettings = null }) {
     stopReadout();
     window.scrollTo({ top: 0, left: 0 });
   }, [step, language]);
+
+  useEffect(() => {
+    if (step !== STEPS.IDENTITY) return undefined;
+    const focusTimer = window.setTimeout(() => {
+      firstNameInputRef.current?.focus({ preventScroll: true });
+    }, 50);
+    return () => window.clearTimeout(focusTimer);
+  }, [step]);
 
   useEffect(() => {
     if (step !== STEPS.CONFIRMATION || !confirmation) {
@@ -717,6 +726,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
                     <label>
                       <span>{t.firstName} *</span>
                       <input
+                        ref={firstNameInputRef}
                         autoComplete="given-name"
                         autoCapitalize="words"
                         enterKeyHint="next"

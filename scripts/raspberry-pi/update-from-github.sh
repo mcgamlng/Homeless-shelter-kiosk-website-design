@@ -5,6 +5,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SERVICE_NAME="${SERVICE_NAME:-listening-house.service}"
 DATABASE_PATH="${DATABASE_PATH:-$PROJECT_DIR/data/listening-house.sqlite}"
 BACKUP_DIR="${BACKUP_DIR:-$PROJECT_DIR/data/backups}"
+SKIP_APT="${SKIP_APT:-0}"
 
 cd "$PROJECT_DIR"
 
@@ -18,10 +19,12 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-if command -v apt-get >/dev/null 2>&1; then
+if [[ "$SKIP_APT" != "1" ]] && command -v apt-get >/dev/null 2>&1; then
   echo "Checking Raspberry Pi speech package..."
   sudo apt-get update
   sudo apt-get install -y espeak-ng
+elif [[ "$SKIP_APT" == "1" ]]; then
+  echo "Skipping apt package checks for automatic update."
 fi
 
 echo "Stopping Listening House service if it is running..."

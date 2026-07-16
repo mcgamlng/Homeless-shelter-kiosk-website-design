@@ -447,6 +447,42 @@ function rebootRaspberryPi() {
   });
 }
 
+function isLocalRequest(req) {
+  const remoteAddress = req.socket.remoteAddress || "";
+  const forwardedAddress = String(req.headers["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim();
+  const address = forwardedAddress || remoteAddress;
+  return (
+    address === "127.0.0.1" ||
+    address === "::1" ||
+    address === "::ffff:127.0.0.1" ||
+    req.hostname === "localhost" ||
+    req.hostname === "127.0.0.1"
+  );
+}
+
+function adjustLocalSystemVolume(action) {
+  requireLinuxSystemAction("Volume control");
+  const safeAction = new Set(["up", "down", "mute", "loud"]).has(action) ? action : "loud";
+  const scriptPath = path.join(PROJECT_ROOT, "scripts", "raspberry-pi", "volume-control.sh");
+  const result = spawnSync("bash", [scriptPath, safeAction], {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+    timeout: 5000
+  });
+  if (!result.error && result.status === 0) {
+    return { ok: true, action: safeAction };
+  }
+  const error = new Error(
+    result.stderr?.trim() ||
+      result.stdout?.trim() ||
+      "Volume control is not ready on this Raspberry Pi yet."
+  );
+  error.status = 503;
+  throw error;
+}
+
 function shellQuote(value) {
   return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
 }
@@ -933,23 +969,26 @@ app.post(
 app.post(
   "/api/system/open-kiosk",
   handleRoute((req, res) => {
-    const remoteAddress = req.socket.remoteAddress || "";
-    const forwardedAddress = String(req.headers["x-forwarded-for"] || "")
-      .split(",")[0]
-      .trim();
-    const address = forwardedAddress || remoteAddress;
-    const isLocalRequest =
-      address === "127.0.0.1" ||
-      address === "::1" ||
-      address === "::ffff:127.0.0.1" ||
-      req.hostname === "localhost" ||
-      req.hostname === "127.0.0.1";
-    if (!isLocalRequest) {
+    if (!isLocalRequest(req)) {
       const error = new Error("Open this button on the Raspberry Pi screen itself.");
       error.status = 403;
       throw error;
     }
     res.json(openKioskBrowser());
+  })
+);
+
+app.post(
+  "/api/system/volume",
+  handleRoute((req, res) => {
+    if (!isLocalRequest(req)) {
+      const error = new Error(
+        "Volume keys can only control the Raspberry Pi from the kiosk screen."
+      );
+      error.status = 403;
+      throw error;
+    }
+    res.json(adjustLocalSystemVolume(req.body?.action));
   })
 );
 

@@ -252,6 +252,12 @@ export const api = {
       method: "POST"
     });
   },
+  setSystemVolume(action) {
+    return request("/api/system/volume", {
+      method: "POST",
+      body: JSON.stringify({ action })
+    });
+  },
   getAnalyticsExportUrl(token, period, date) {
     const params = new URLSearchParams({ period, date, token });
     return `/api/admin/analytics/export?${params.toString()}`;

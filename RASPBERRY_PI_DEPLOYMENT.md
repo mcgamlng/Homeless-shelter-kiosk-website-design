@@ -201,6 +201,7 @@ The update helper:
 - Rebuilds the website.
 - Installs new Node dependencies when they are added.
 - Installs the lightweight `espeak-ng` speech fallback.
+- Installs keyboard volume controls for the Raspberry Pi kiosk.
 - Refreshes the desktop shortcut named **Open Listening House Kiosk**.
 - Installs the Hmong fallback voice pack if missing.
 - Preloads common read-aloud phrases into `data/speech-cache` when a speech source is available.
@@ -242,6 +243,20 @@ sudo ./scripts/raspberry-pi/install-auto-update.sh
 Rebooting does not delete saved check-ins because they are stored in SQLite. Do wait for any active
 check-in or Excel export to finish first. Unsaved Admin form edits are lost, and phones/tablets
 disconnect while the Pi restarts.
+
+## Raspberry Pi Volume Keys
+
+The Raspberry Pi installer sets up keyboard volume keys for the kiosk. The volume up, volume down,
+and mute keys are bound to a small local script that tries PipeWire, PulseAudio, and ALSA in that
+order. The kiosk also asks the Pi to use a loud preset when Read Aloud starts. If a keyboard does
+not send standard media keys, run this once from the project folder and reboot:
+
+```bash
+cd ~/listening-house-project
+chmod +x scripts/raspberry-pi/*.sh
+./scripts/raspberry-pi/install-volume-keys.sh
+sudo reboot
+```
 
 If you still want Codex on the Pi for development, install Codex CLI separately and sign in with
 ChatGPT device-code login or an API key. Do not make Codex part of the production startup service.

@@ -52,6 +52,10 @@ rm -rf "$KIOSK_PROFILE_DIR/Default/Cache" \
   "$KIOSK_PROFILE_DIR/Default/Code Cache" \
   "$KIOSK_PROFILE_DIR/Default/Service Worker" 2>/dev/null || true
 
+if [[ "${KIOSK_SET_VOLUME:-1}" != "0" && -x "$PROJECT_DIR/scripts/raspberry-pi/volume-control.sh" ]]; then
+  "$PROJECT_DIR/scripts/raspberry-pi/volume-control.sh" loud >/dev/null 2>&1 || true
+fi
+
 find_browser() {
   if [[ -n "${KIOSK_BROWSER:-}" && -x "$KIOSK_BROWSER" ]]; then
     echo "$KIOSK_BROWSER"

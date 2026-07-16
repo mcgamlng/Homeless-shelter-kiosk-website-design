@@ -18,7 +18,8 @@ fi
 
 if command -v apt-get >/dev/null 2>&1; then
   sudo apt-get update
-  sudo apt-get install -y curl espeak-ng
+  sudo apt-get install -y curl espeak-ng alsa-utils xbindkeys pulseaudio-utils || \
+    sudo apt-get install -y curl espeak-ng alsa-utils xbindkeys
   if ! command -v chromium-browser >/dev/null 2>&1 && ! command -v chromium >/dev/null 2>&1; then
     sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
   fi
@@ -76,7 +77,9 @@ fi
 
 chmod +x "$PROJECT_DIR/scripts/raspberry-pi/start-kiosk.sh"
 chmod +x "$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh"
+chmod +x "$PROJECT_DIR/scripts/raspberry-pi/install-volume-keys.sh"
 "$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh"
+"$PROJECT_DIR/scripts/raspberry-pi/install-volume-keys.sh" || echo "Volume key setup failed. The kiosk can still run."
 
 echo "Installed Listening House server service and desktop kiosk autostart."
 echo "Server service: sudo systemctl status listening-house"

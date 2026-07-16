@@ -22,7 +22,8 @@ fi
 if [[ "$SKIP_APT" != "1" ]] && command -v apt-get >/dev/null 2>&1; then
   echo "Checking Raspberry Pi speech package..."
   sudo apt-get update
-  sudo apt-get install -y espeak-ng
+  sudo apt-get install -y espeak-ng alsa-utils xbindkeys pulseaudio-utils || \
+    sudo apt-get install -y espeak-ng alsa-utils xbindkeys
 elif [[ "$SKIP_APT" == "1" ]]; then
   echo "Skipping apt package checks for automatic update."
 fi
@@ -51,9 +52,9 @@ echo "Building production website..."
 npm run build
 
 echo "Refreshing kiosk desktop launcher..."
-chmod +x "$PROJECT_DIR/scripts/raspberry-pi/start-kiosk.sh"
-chmod +x "$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh"
+chmod +x "$PROJECT_DIR/scripts/raspberry-pi/"*.sh
 "$PROJECT_DIR/scripts/raspberry-pi/install-kiosk-launcher.sh" || echo "Desktop launcher refresh failed. The server can still run."
+"$PROJECT_DIR/scripts/raspberry-pi/install-volume-keys.sh" || echo "Volume key setup failed. The kiosk can still run."
 
 if [[ ! -d "$PROJECT_DIR/data/hmong-voice/Kong" ]]; then
   echo "Installing Hmong fallback voice pack..."

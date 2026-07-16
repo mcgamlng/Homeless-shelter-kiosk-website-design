@@ -141,6 +141,13 @@ export default function Kiosk({ settings: shellSettings = null }) {
     }
 
     function handlePageShortcut(event) {
+      const volumeAction = volumeActionFromKey(event);
+      if (volumeAction) {
+        event.preventDefault();
+        void api.setSystemVolume(volumeAction).catch(() => {});
+        return;
+      }
+
       if (event.repeat || isEditableTarget(event.target)) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       const key = event.key.toLowerCase();
@@ -260,6 +267,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
     speechRunRef.current = runId;
     setSpeaking(true);
     setReadoutMessage(t.readingNow);
+    void api.setSystemVolume("loud").catch(() => {});
 
     if (["en", "es", "hmn", "so"].includes(language)) {
       if (!("Audio" in window)) startBrowserSpeechFallback(segments, runId, pauseMs);
@@ -343,6 +351,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
     const audio = new window.Audio(queue[index].url);
     speechAudioRef.current = audio;
     audio.preload = "auto";
+    audio.volume = 1;
     audio.playbackRate = playbackRate;
     audio.onabort = () => {
       if (runId === speechRunRef.current) handleAudioFailure();
@@ -389,6 +398,7 @@ export default function Kiosk({ settings: shellSettings = null }) {
     utterance.lang = preferredSpeechLanguage(language);
     utterance.rate = profile.rate;
     utterance.pitch = profile.pitch;
+    utterance.volume = 1;
     utterance.onend = () => {
       if (runId !== speechRunRef.current) return;
       if (index >= segments.length - 1) {
@@ -818,6 +828,17 @@ function formatAvailabilityWindow(activity, text, language) {
   return text.availableHours
     .replace("{start}", formatActivityClock(activity.availability_start, language))
     .replace("{end}", formatActivityClock(activity.availability_end, language));
+}
+
+function volumeActionFromKey(event) {
+  const keyValues = [event.key, event.code].filter(Boolean);
+  if (keyValues.includes("AudioVolumeUp")) return "up";
+  if (keyValues.includes("AudioVolumeDown")) return "down";
+  if (keyValues.includes("AudioVolumeMute")) return "mute";
+  if (keyValues.includes("VolumeUp")) return "up";
+  if (keyValues.includes("VolumeDown")) return "down";
+  if (keyValues.includes("VolumeMute")) return "mute";
+  return null;
 }
 
 function readoutSegmentText(segment) {

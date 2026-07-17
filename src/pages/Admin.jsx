@@ -3071,26 +3071,49 @@ function KioskCustomizationPreview({ customizationDraft, kioskPreviewStyle }) {
 function KioskPreviewPage({ pageId, customizationDraft }) {
   if (pageId === "identity") {
     return (
-      <div className="preview-page">
-        <strong>{customizationDraft.kiosk_name_entry_title}</strong>
-        <div className="preview-name-grid">
-          <span>First name</span>
-          <span>Last name</span>
+      <div className="preview-kiosk-page">
+        <div className="kiosk-panel identity-panel">
+          <h1>{customizationDraft.kiosk_name_entry_title}</h1>
+          <p>{customizationDraft.kiosk_name_entry_help}</p>
+          <form className="identity-form">
+            <div className="identity-form-grid">
+              <label>
+                <span>First name *</span>
+                <input readOnly value="" />
+              </label>
+              <label>
+                <span>Last name *</span>
+                <input readOnly value="" />
+              </label>
+            </div>
+            <button className="primary-button kiosk-next" type="button">
+              Continue
+            </button>
+          </form>
         </div>
-        <button type="button">Continue</button>
       </div>
     );
   }
 
   if (pageId === "language") {
     return (
-      <div className="preview-page">
-        <strong>{customizationDraft.kiosk_language_title}</strong>
-        <div className="preview-language-grid">
-          <span>English</span>
-          <span>Spanish</span>
-          <span>Hmong</span>
-          <span>Somali</span>
+      <div className="preview-kiosk-page">
+        <div className="kiosk-panel">
+          <h1>{customizationDraft.kiosk_language_title}</h1>
+          <div className="language-grid">
+            <button className="choice-button" type="button">
+              English
+            </button>
+            <button className="choice-button" type="button">
+              Spanish
+            </button>
+            <button className="choice-button" type="button">
+              Hmong
+            </button>
+            <button className="choice-button" type="button">
+              Somali
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -3098,50 +3121,91 @@ function KioskPreviewPage({ pageId, customizationDraft }) {
 
   if (pageId === "activities") {
     return (
-      <div className="preview-page">
-        <strong>{customizationDraft.kiosk_activity_title}</strong>
-        <span>{customizationDraft.kiosk_activity_subtitle}</span>
-        <div className="preview-activity-grid">
-          <span>
-            Shower<small>30 min</small>
-          </span>
-          <span className="is-selected">
-            Meal / Snacks<small>20 min</small>
-          </span>
-          <span>
-            Phone Charging<small>20 min</small>
-          </span>
-          <span>
-            Laundry<small>45 min</small>
-          </span>
+      <div className="preview-plain-activities plain-activities-shell">
+        <div className="plain-activity-toolbar">
+          <button className="plain-activity-back" type="button">
+            <ChevronLeft size={18} />
+            Back
+          </button>
+          <button className="plain-activity-readout" type="button" aria-label="Read page">
+            <Volume2 size={18} />
+          </button>
         </div>
+        <div className="plain-activity-heading">
+          <h1>{customizationDraft.kiosk_activity_title}</h1>
+          <p>{customizationDraft.kiosk_activity_subtitle}</p>
+        </div>
+        <div className="plain-activity-grid activity-count-4" data-activity-count="4">
+          <button className="plain-activity-card" type="button">
+            <ActivityIcon name="shower" className="plain-activity-icon" />
+            <span>Shower</span>
+            <small>30 min</small>
+          </button>
+          <button className="plain-activity-card is-selected" type="button">
+            <ActivityIcon name="utensils" className="plain-activity-icon" />
+            <span>Meal / Snacks</span>
+            <small>20 min</small>
+          </button>
+          <button className="plain-activity-card" type="button">
+            <ActivityIcon name="shirt" className="plain-activity-icon" />
+            <span>Clothing</span>
+            <small>No set time</small>
+          </button>
+          <button className="plain-activity-card" type="button">
+            <ActivityIcon name="bed" className="plain-activity-icon" />
+            <span>Beds</span>
+            <small>No set time</small>
+          </button>
+        </div>
+        <button className="plain-activity-continue" type="button">
+          Continue
+        </button>
       </div>
     );
   }
 
   if (pageId === "confirmation") {
     return (
-      <div className="preview-page">
-        <div className="preview-guest-name">Jordan Lee</div>
-        <strong>{customizationDraft.kiosk_confirmation_message}</strong>
-        <div className="preview-confirmation-list">
-          <span>Shower</span>
-          <span>Meal / Snacks</span>
+      <div className="preview-kiosk-page">
+        <div className="kiosk-panel confirmation-panel">
+          <p className="done-note">You are checked in</p>
+          <div className="guest-name-hero">Jordan Lee</div>
+          <h1>{customizationDraft.kiosk_confirmation_message}</h1>
+          <div className="confirmation-list">
+            <div>
+              <strong>Shower</strong>
+              <span>Spot #1</span>
+            </div>
+            <div>
+              <strong>Meal / Snacks</strong>
+              <span>Spot #2</span>
+            </div>
+          </div>
+          <button className="primary-button kiosk-start" type="button">
+            {customizationDraft.kiosk_finish_button}
+          </button>
         </div>
-        <button type="button">{customizationDraft.kiosk_finish_button}</button>
       </div>
     );
   }
 
   return (
-    <div className="preview-page">
-      <div className="preview-symbol">
-        <Palette size={28} />
-      </div>
-      <strong>{customizationDraft.kiosk_welcome_title}</strong>
-      <span>{customizationDraft.kiosk_welcome_subtitle}</span>
-      <div className="preview-welcome-actions">
-        <button type="button">{customizationDraft.kiosk_check_in_button}</button>
+    <div className="preview-kiosk-page">
+      <div className="kiosk-center">
+        <div className="kiosk-symbol">
+          <img
+            src="/icons/lh-house-mark.svg"
+            alt=""
+            className="kiosk-house-logo"
+            aria-hidden="true"
+          />
+        </div>
+        <h1>{customizationDraft.kiosk_welcome_title}</h1>
+        <p className="kiosk-lede">{customizationDraft.kiosk_welcome_subtitle}</p>
+        <button className="primary-button kiosk-start" type="button">
+          <span>{customizationDraft.kiosk_check_in_button}</span>
+          <small>{customizationDraft.kiosk_language_title}</small>
+        </button>
       </div>
     </div>
   );

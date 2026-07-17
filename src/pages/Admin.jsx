@@ -215,7 +215,6 @@ function createStaffUserDraft() {
     pin: "",
     permissions: {
       dashboard: true,
-      admin: false,
       about: false,
       admin_excel: false,
       admin_customization: false,
@@ -242,7 +241,7 @@ const adminSectionConfig = {
   excel: {
     title: "Excel spreadsheets",
     heading: "Excel spreadsheets",
-    description: "Review analytics, download spreadsheets, and manage yearly data deletion.",
+    description: "Review analytics and download spreadsheets for a day, week, month, or year.",
     permissionName: "Excel spreadsheets",
     permissionKey: "admin_excel"
   },
@@ -266,16 +265,18 @@ const adminSectionConfig = {
     description: "Set phone access, read-aloud voices, Raspberry Pi controls, and staff access.",
     permissionName: "IT tools",
     permissionKey: "admin_it"
+  },
+  admin: {
+    title: "Admin",
+    heading: "Admin",
+    description: "Owner-only controls for the Admin PIN and deleting collected spreadsheet data.",
+    permissionName: "Owner Admin",
+    permissionKey: "owner_admin"
   }
 };
 
 function normalizePermissionToggle(permissions, permission, checked) {
   const next = { ...permissions, [permission]: checked };
-  if (permission === "admin" && !checked) {
-    adminSectionPermissionOptions.forEach(([key]) => {
-      next[key] = false;
-    });
-  }
   if (permission.startsWith("admin_") && checked) {
     next.admin = true;
   }
@@ -400,6 +401,7 @@ export default function Admin({ section = "activities" }) {
   const canUseCustomization = isOwnerAdmin || Boolean(sessionPermissions.admin_customization);
   const canUseActivities = isOwnerAdmin || Boolean(sessionPermissions.admin_activities);
   const canUseIt = isOwnerAdmin || Boolean(sessionPermissions.admin_it);
+  const canUseOwnerAdmin = isOwnerAdmin;
   const canManageUsers = isOwnerAdmin;
   const canUseActiveSection =
     !signedIn || isOwnerAdmin || Boolean(sessionPermissions[sectionInfo.permissionKey]);
@@ -422,15 +424,18 @@ export default function Admin({ section = "activities" }) {
       return;
     }
     loadSecurity(token);
-  }, [token]);
+  }, [token, sectionInfo.permissionKey]);
 
   useEffect(() => {
     if (!signedIn) return;
     if (canUseExcel) {
       loadAnalytics(token);
-      loadDataDeletionTools(token);
     } else {
       setAnalytics(null);
+    }
+    if (canUseOwnerAdmin) {
+      loadDataDeletionTools(token);
+    } else {
       setDataDeletionSettings(null);
     }
     if (canManageUsers) {
@@ -438,7 +443,15 @@ export default function Admin({ section = "activities" }) {
     } else {
       setStaffUsers([]);
     }
-  }, [signedIn, token, analyticsPeriod, analyticsDate, canUseExcel, canManageUsers]);
+  }, [
+    signedIn,
+    token,
+    analyticsPeriod,
+    analyticsDate,
+    canUseExcel,
+    canUseOwnerAdmin,
+    canManageUsers
+  ]);
 
   useEffect(() => {
     if (data?.settings) {
@@ -458,7 +471,10 @@ export default function Admin({ section = "activities" }) {
     event.preventDefault();
     setMessage("");
     try {
-      const response = await api.adminLogin(pin, { permission: "admin", path: "/admin" });
+      const response = await api.adminLogin(pin, {
+        permission: sectionInfo.permissionKey,
+        path: `/${activeSection}`
+      });
       sessionStorage.setItem("lh-admin-token", response.token);
       sessionStorage.setItem("lh-staff-user", JSON.stringify(response.user));
       window.dispatchEvent(new CustomEvent("lh:staff-session-updated", { detail: response.user }));
@@ -478,7 +494,7 @@ export default function Admin({ section = "activities" }) {
 
   async function loadSecurity(authToken = token) {
     try {
-      const session = await api.getStaffSession(authToken, "admin");
+      const session = await api.getStaffSession(authToken, sectionInfo.permissionKey);
       setStaffSession(session.user);
       sessionStorage.setItem("lh-staff-user", JSON.stringify(session.user));
       setAdminVerified(true);
@@ -555,7 +571,7 @@ export default function Admin({ section = "activities" }) {
     const authToken = currentAdminToken();
     try {
       const freshSession = await api.adminLogin(currentPinValue, {
-        permission: "admin",
+        permission: "owner_admin",
         path: "/admin"
       });
       await api.changeAdminPin(freshSession.token, {
@@ -1805,92 +1821,178 @@ export default function Admin({ section = "activities" }) {
         <RestrictedAdminSection title="Page customization" />
       ) : null}
 
-      {activeSection === "it" && isOwnerAdmin ? (
-        <div className="card-panel admin-security-panel">
-          <div className="analytics-heading">
-            <div>
-              <h2>
-                <KeyRound size={24} />
-                Admin PIN
-              </h2>
-              <p>Update the local admin PIN after signing in.</p>
+      {activeSection === "admin" ? (
+        <AdminSectionIntro
+          id="admin-section-owner"
+          title="Admin"
+          description="Owner-only controls for changing the Admin PIN and deleting collected spreadsheet data."
+          allowed={canUseOwnerAdmin}
+        />
+      ) : null}
+
+      {activeSection === "admin" && (canUseOwnerAdmin || !signedIn) ? (
+        <>
+          <div className="card-panel admin-security-panel">
+            <div className="analytics-heading">
+              <div>
+                <h2>
+                  <KeyRound size={24} />
+                  Admin PIN
+                </h2>
+                <p>
+                  Change the owner Admin PIN. Staff users cannot access this page or change this
+                  PIN.
+                </p>
+              </div>
+            </div>
+            <div className="admin-security-grid">
+              <form className="security-form" onSubmit={saveNewAdminPin}>
+                <h3>Change PIN</h3>
+                <label>
+                  Current PIN
+                  <input
+                    ref={currentPinRef}
+                    type="password"
+                    name="current_pin"
+                    disabled={!signedIn}
+                    maxLength={12}
+                    onInput={(event) => {
+                      const cleanValue = cleanPinInput(event);
+                      setPinDraft((current) => ({
+                        ...current,
+                        currentPin: cleanValue
+                      }));
+                    }}
+                    inputMode="numeric"
+                  />
+                </label>
+                <label>
+                  New PIN
+                  <input
+                    ref={newPinRef}
+                    type="password"
+                    name="new_pin"
+                    disabled={!signedIn}
+                    maxLength={12}
+                    onInput={(event) => {
+                      const cleanValue = cleanPinInput(event);
+                      setPinDraft((current) => ({
+                        ...current,
+                        newPin: cleanValue
+                      }));
+                    }}
+                    inputMode="numeric"
+                  />
+                </label>
+                <label>
+                  Confirm new PIN
+                  <input
+                    ref={confirmPinRef}
+                    type="password"
+                    name="confirm_pin"
+                    disabled={!signedIn}
+                    maxLength={12}
+                    onInput={(event) => {
+                      const cleanValue = cleanPinInput(event);
+                      setPinDraft((current) => ({
+                        ...current,
+                        confirmPin: cleanValue
+                      }));
+                    }}
+                    inputMode="numeric"
+                  />
+                </label>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={!signedIn || savingPin}
+                  onClick={saveNewAdminPin}
+                >
+                  {savingPin ? "Saving..." : "Save new PIN"}
+                </button>
+              </form>
             </div>
           </div>
-          <div className="admin-security-grid">
-            <form className="security-form" onSubmit={saveNewAdminPin}>
-              <h3>Change PIN</h3>
-              <label>
-                Current PIN
-                <input
-                  ref={currentPinRef}
-                  type="password"
-                  name="current_pin"
-                  disabled={!signedIn}
-                  maxLength={12}
-                  onInput={(event) => {
-                    const cleanValue = cleanPinInput(event);
-                    setPinDraft((current) => ({
-                      ...current,
-                      currentPin: cleanValue
-                    }));
-                  }}
-                  inputMode="numeric"
-                />
-              </label>
-              <label>
-                New PIN
-                <input
-                  ref={newPinRef}
-                  type="password"
-                  name="new_pin"
-                  disabled={!signedIn}
-                  maxLength={12}
-                  onInput={(event) => {
-                    const cleanValue = cleanPinInput(event);
-                    setPinDraft((current) => ({
-                      ...current,
-                      newPin: cleanValue
-                    }));
-                  }}
-                  inputMode="numeric"
-                />
-              </label>
-              <label>
-                Confirm new PIN
-                <input
-                  ref={confirmPinRef}
-                  type="password"
-                  name="confirm_pin"
-                  disabled={!signedIn}
-                  maxLength={12}
-                  onInput={(event) => {
-                    const cleanValue = cleanPinInput(event);
-                    setPinDraft((current) => ({
-                      ...current,
-                      confirmPin: cleanValue
-                    }));
-                  }}
-                  inputMode="numeric"
-                />
-              </label>
+
+          <form className="card-panel data-deletion-panel" onSubmit={saveDataDeletionSettings}>
+            <div className="analytics-heading">
+              <div>
+                <h2>
+                  <Trash2 size={24} />
+                  Spreadsheet & Guest Data Deletion
+                </h2>
+                <p>
+                  Delete guest history, check-ins, activity history, and saved spreadsheet archives.
+                  Staff users, permissions, activities, and kiosk settings are kept.
+                </p>
+              </div>
               <button
-                className="primary-button"
-                type="button"
-                disabled={!signedIn || savingPin}
-                onClick={saveNewAdminPin}
+                className="primary-button compact-button"
+                type="submit"
+                disabled={!signedIn || savingDataDeletion}
               >
-                {savingPin ? "Saving..." : "Save new PIN"}
+                <Save size={18} />
+                {savingDataDeletion ? "Saving..." : "Save deletion settings"}
               </button>
-            </form>
-          </div>
-        </div>
+            </div>
+            {dataDeletionSettings?.warning ? (
+              <div className="data-deletion-warning">
+                <strong>Deletion warning</strong>
+                <span>{dataDeletionSettings.warning.message}</span>
+              </div>
+            ) : null}
+            <div className="data-deletion-grid">
+              <label className="toggle-field">
+                <input
+                  type="checkbox"
+                  checked={Boolean(dataDeletionDraft.enabled)}
+                  disabled={!signedIn}
+                  onChange={(event) => updateDataDeletionDraft("enabled", event.target.checked)}
+                />
+                Enable yearly deletion
+              </label>
+              <label>
+                Deletion date
+                <input
+                  type="date"
+                  value={dataDeletionDraft.date}
+                  disabled={!signedIn}
+                  onChange={(event) => updateDataDeletionDraft("date", event.target.value)}
+                />
+                <small>Choose the exact year, month, and day for this deletion.</small>
+              </label>
+              <label>
+                Deletion time
+                <input
+                  type="time"
+                  value={dataDeletionDraft.time}
+                  disabled={!signedIn}
+                  onInput={(event) => updateDataDeletionDraft("time", event.currentTarget.value)}
+                />
+              </label>
+            </div>
+            <div className="data-deletion-actions">
+              <button
+                className="danger-button compact-button"
+                type="button"
+                disabled={!signedIn || runningDataDeletion}
+                onClick={runDataDeletionNow}
+              >
+                {runningDataDeletion ? "Deleting..." : "Delete spreadsheet data now"}
+              </button>
+            </div>
+            {dataDeletionMessage ? <p className="network-status">{dataDeletionMessage}</p> : null}
+          </form>
+        </>
+      ) : activeSection === "admin" ? (
+        <RestrictedAdminSection title="Admin" ownerOnly />
       ) : null}
 
       {activeSection === "excel" ? (
         <AdminSectionIntro
           id="admin-section-excel"
           title="Excel spreadsheets"
-          description="Review analytics, download spreadsheets, and manage yearly data deletion."
+          description="Review analytics and download spreadsheets for a day, week, month, or year."
           allowed={canUseActiveSection}
         />
       ) : null}
@@ -2051,76 +2153,6 @@ export default function Admin({ section = "activities" }) {
               </>
             ) : null}
           </div>
-
-          <form className="card-panel data-deletion-panel" onSubmit={saveDataDeletionSettings}>
-            <div className="analytics-heading">
-              <div>
-                <h2>
-                  <Trash2 size={24} />
-                  Yearly Data Deletion
-                </h2>
-                <p>
-                  Choose one yearly date and time to delete guest history and spreadsheet archives.
-                  Staff users, permissions, activities, and kiosk settings are kept.
-                </p>
-              </div>
-              <button
-                className="primary-button compact-button"
-                type="submit"
-                disabled={!signedIn || savingDataDeletion}
-              >
-                <Save size={18} />
-                {savingDataDeletion ? "Saving..." : "Save deletion settings"}
-              </button>
-            </div>
-            {dataDeletionSettings?.warning ? (
-              <div className="data-deletion-warning">
-                <strong>Deletion warning</strong>
-                <span>{dataDeletionSettings.warning.message}</span>
-              </div>
-            ) : null}
-            <div className="data-deletion-grid">
-              <label className="toggle-field">
-                <input
-                  type="checkbox"
-                  checked={Boolean(dataDeletionDraft.enabled)}
-                  disabled={!signedIn}
-                  onChange={(event) => updateDataDeletionDraft("enabled", event.target.checked)}
-                />
-                Enable yearly deletion
-              </label>
-              <label>
-                Deletion date
-                <input
-                  type="date"
-                  value={dataDeletionDraft.date}
-                  disabled={!signedIn}
-                  onChange={(event) => updateDataDeletionDraft("date", event.target.value)}
-                />
-                <small>Choose the exact year, month, and day for this deletion.</small>
-              </label>
-              <label>
-                Deletion time
-                <input
-                  type="time"
-                  value={dataDeletionDraft.time}
-                  disabled={!signedIn}
-                  onInput={(event) => updateDataDeletionDraft("time", event.currentTarget.value)}
-                />
-              </label>
-            </div>
-            <div className="data-deletion-actions">
-              <button
-                className="danger-button compact-button"
-                type="button"
-                disabled={!signedIn || runningDataDeletion}
-                onClick={runDataDeletionNow}
-              >
-                {runningDataDeletion ? "Deleting..." : "Run deletion now"}
-              </button>
-            </div>
-            {dataDeletionMessage ? <p className="network-status">{dataDeletionMessage}</p> : null}
-          </form>
         </>
       ) : activeSection === "excel" ? (
         <RestrictedAdminSection title="Excel spreadsheets" />
@@ -2136,7 +2168,7 @@ export default function Admin({ section = "activities" }) {
               </h2>
               <p>
                 Add staff users and choose which top navigation sections they can open. Everyone can
-                use the kiosk.
+                use the kiosk. The Admin page is owner-only and cannot be assigned to staff users.
               </p>
             </div>
           </div>
@@ -2961,13 +2993,17 @@ function AdminSectionIntro({ id, title, description, allowed }) {
   );
 }
 
-function RestrictedAdminSection({ title }) {
+function RestrictedAdminSection({ title, ownerOnly = false }) {
   return (
     <div className="card-panel restricted-admin-section">
       <Lock size={24} />
       <div>
         <h3>{title} is not available for this staff PIN.</h3>
-        <p>Ask the owner admin to turn on this section in User Control.</p>
+        <p>
+          {ownerOnly
+            ? "This page can only be opened with the owner Admin PIN."
+            : "Ask the owner admin to turn on this section in User Control."}
+        </p>
       </div>
     </div>
   );

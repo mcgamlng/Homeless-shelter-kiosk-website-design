@@ -6546,3 +6546,70 @@ main {
     text-align: center;
   }
 }
+
+/* Confirmation-screen fit guard for Raspberry Pi kiosk displays.
+   The Finish button must remain reachable even with long names and several selected services. */
+.kiosk-stage.step-confirmation {
+  width: min(1180px, calc(100vw - 56px)) !important;
+}
+
+.kiosk-stage.step-confirmation .kiosk-shell.is-confirmation {
+  height: min(640px, calc(100svh - 86px)) !important;
+  min-height: 0 !important;
+  padding: clamp(14px, 2.2vh, 26px) clamp(18px, 3vw, 36px) !important;
+  overflow: hidden !important;
+}
+
+.kiosk-stage.step-confirmation .confirmation-panel {
+  width: min(900px, 100%) !important;
+  max-height: 100% !important;
+  display: grid !important;
+  align-content: center !important;
+  gap: clamp(8px, 1.2vh, 14px) !important;
+  padding: 0 !important;
+  overflow-y: auto !important;
+  scrollbar-gutter: stable;
+}
+
+.kiosk-stage.step-confirmation .done-note {
+  font-size: clamp(0.86rem, 1.6vw, 1.05rem) !important;
+}
+
+.kiosk-stage.step-confirmation .guest-name-hero {
+  width: min(840px, 100%) !important;
+  margin: 0 auto !important;
+  padding: clamp(9px, 1.4vh, 16px) clamp(12px, 2vw, 22px) !important;
+  font-size: clamp(1.25rem, min(3.5vw, 4.6vh), 3.05rem) !important;
+  line-height: 1.02 !important;
+}
+
+.kiosk-stage.step-confirmation .confirmation-panel h1 {
+  max-width: 900px !important;
+  margin: 0 auto !important;
+  font-size: clamp(1.9rem, min(4vw, 6vh), 3.45rem) !important;
+  line-height: 1.08 !important;
+}
+
+.kiosk-stage.step-confirmation .confirmation-list {
+  width: min(850px, 100%) !important;
+  max-width: 850px !important;
+  max-height: min(190px, 27vh) !important;
+  margin: 0 auto !important;
+  gap: 7px !important;
+  overflow-y: auto !important;
+}
+
+.kiosk-stage.step-confirmation .confirmation-list div {
+  min-height: 40px !important;
+  padding: 8px 12px !important;
+}
+
+.kiosk-stage.step-confirmation .confirmation-panel .kiosk-start {
+  min-height: 58px !important;
+  margin-top: 0 !important;
+}
+
+.kiosk-stage.step-confirmation .auto-reset-note {
+  margin: 0 !important;
+  font-size: clamp(0.82rem, 1.5vw, 0.98rem) !important;
+}

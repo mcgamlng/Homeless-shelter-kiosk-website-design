@@ -215,6 +215,7 @@ function createStaffSession({ owner = false, user = null, permissions = null } =
     ? {
         dashboard: true,
         admin: true,
+        owner_admin: true,
         about: true,
         admin_excel: true,
         admin_customization: true,
@@ -242,6 +243,14 @@ function createStaffSession({ owner = false, user = null, permissions = null } =
 
 function requestedPermissionForPath(value) {
   const cleanValue = String(value || "").toLowerCase();
+  if (
+    cleanValue === "/admin" ||
+    cleanValue === "admin" ||
+    cleanValue.includes("owner_admin") ||
+    cleanValue.includes("owner admin")
+  ) {
+    return "owner_admin";
+  }
   if (cleanValue.includes("admin_excel") || cleanValue.includes("excel")) return "admin_excel";
   if (cleanValue.includes("admin_activities") || cleanValue.includes("activity")) {
     return "admin_activities";
@@ -250,7 +259,6 @@ function requestedPermissionForPath(value) {
     return "admin_customization";
   }
   if (cleanValue.includes("admin_it") || cleanValue.includes("it")) return "admin_it";
-  if (cleanValue.includes("admin")) return "admin";
   if (cleanValue.includes("about")) return "about";
   return "dashboard";
 }
@@ -902,7 +910,7 @@ app.get(
 
 app.get(
   "/api/admin/data-deletion",
-  requireAdminExcel,
+  requireOwnerAdmin,
   handleRoute((_req, res) => {
     res.json(getDataDeletionSettings());
   })
@@ -910,7 +918,7 @@ app.get(
 
 app.put(
   "/api/admin/data-deletion",
-  requireAdminExcel,
+  requireOwnerAdmin,
   handleRoute((req, res) => {
     res.json(updateDataDeletionSettings(req.body || {}));
   })
@@ -918,7 +926,7 @@ app.put(
 
 app.post(
   "/api/admin/data-deletion/run",
-  requireAdminExcel,
+  requireOwnerAdmin,
   handleRoute((_req, res) => {
     const result = runYearlyDataDeletion({ reason: "manual" });
     emitDashboard();

@@ -24,6 +24,7 @@ const navItems = [
   { label: "Page customization", to: "/page-customization" },
   { label: "Activity customization", to: "/activity-customization" },
   { label: "IT tools", to: "/it-tools" },
+  { label: "Admin", to: "/admin" },
   { label: "About", to: "/about" }
 ];
 
@@ -33,10 +34,12 @@ const protectedPaths = new Set([
   "/page-customization",
   "/activity-customization",
   "/it-tools",
+  "/admin",
   "/about"
 ]);
 
 function permissionForPath(path) {
+  if (path === "/admin") return "owner_admin";
   if (path === "/excel-spreadsheets") return "admin_excel";
   if (path === "/page-customization") return "admin_customization";
   if (path === "/activity-customization") return "admin_activities";
@@ -240,7 +243,14 @@ function AppShell() {
               </ProtectedEntry>
             }
           />
-          <Route path="/admin" element={<Navigate to="/activity-customization" replace />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedEntry onSignedIn={setSignedInUser}>
+                <Admin section="admin" />
+              </ProtectedEntry>
+            }
+          />
           <Route
             path="/about"
             element={
@@ -328,6 +338,7 @@ function KioskLauncher() {
 function ProtectedEntry({ children, onSignedIn }) {
   const location = useLocation();
   const permission = permissionForPath(location.pathname);
+  const ownerOnly = permission === "owner_admin";
   const [pin, setPin] = useState("");
   const [state, setState] = useState("checking");
   const [message, setMessage] = useState("");
@@ -355,7 +366,11 @@ function ProtectedEntry({ children, onSignedIn }) {
         onSignedIn?.(null);
         if (active) {
           setState("locked");
-          setMessage("Enter your staff PIN to continue.");
+          setMessage(
+            ownerOnly
+              ? "Enter the owner Admin PIN to continue."
+              : "Enter your staff PIN to continue."
+          );
         }
       });
 
@@ -395,8 +410,12 @@ function ProtectedEntry({ children, onSignedIn }) {
           <div className="entry-modal-icon">
             <LockKeyhole size={30} />
           </div>
-          <h1>Staff PIN required</h1>
-          <p>Enter your staff PIN. The owner Admin PIN also works by itself.</p>
+          <h1>{ownerOnly ? "Owner Admin PIN required" : "Staff PIN required"}</h1>
+          <p>
+            {ownerOnly
+              ? "Enter the owner Admin PIN. Staff PINs cannot open this page."
+              : "Enter your staff PIN. The owner Admin PIN also works by itself."}
+          </p>
           <label>
             Entry PIN
             <input

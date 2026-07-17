@@ -94,11 +94,16 @@ export default function Kiosk({ settings: shellSettings = null }) {
 
   useEffect(() => {
     if (step !== STEPS.IDENTITY) return undefined;
-    const focusTimer = window.setTimeout(() => {
-      firstNameInputRef.current?.focus({ preventScroll: true });
-    }, 50);
-    return () => window.clearTimeout(focusTimer);
-  }, [step]);
+    const focusDelays = [0, 75, 180, 350];
+    const focusTimers = focusDelays.map((delay) =>
+      window.setTimeout(() => focusFirstNameInput(), delay)
+    );
+    const animationFrame = window.requestAnimationFrame?.(() => focusFirstNameInput());
+    return () => {
+      focusTimers.forEach((timer) => window.clearTimeout(timer));
+      if (animationFrame) window.cancelAnimationFrame?.(animationFrame);
+    };
+  }, [step, language]);
 
   useEffect(() => {
     if (step !== STEPS.CONFIRMATION || !confirmation) {
@@ -737,6 +742,8 @@ export default function Kiosk({ settings: shellSettings = null }) {
                       <span>{t.firstName} *</span>
                       <input
                         ref={firstNameInputRef}
+                        autoFocus
+                        data-first-name-input
                         autoComplete="given-name"
                         autoCapitalize="words"
                         enterKeyHint="next"
@@ -839,6 +846,12 @@ function volumeActionFromKey(event) {
   if (keyValues.includes("VolumeDown")) return "down";
   if (keyValues.includes("VolumeMute")) return "mute";
   return null;
+}
+
+function focusFirstNameInput() {
+  const target = document.querySelector("[data-first-name-input]");
+  if (!(target instanceof HTMLInputElement)) return;
+  target.focus({ preventScroll: true });
 }
 
 function readoutSegmentText(segment) {

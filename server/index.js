@@ -26,8 +26,10 @@ import {
   getSettings,
   inspectNameCheckIn,
   listStaffUsers,
+  listStaffAuditLogs,
   moveScheduledItem,
   rebalanceActiveWaitingSchedule,
+  recordStaffAuditLog,
   reorderCheckInItems,
   runDueYearlyDataDeletion,
   runYearlyDataDeletion,
@@ -141,6 +143,71 @@ function sessionFromRequest(req) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   return token ? adminSessions.get(token) : null;
+}
+
+function auditActorFromSession(session) {
+  if (!session) {
+    return { actorType: "staff", actorId: null, actorName: "Unknown staff" };
+  }
+  return {
+    actorType: session.owner ? "owner" : "staff",
+    actorId: session.owner ? "owner" : session.userId,
+    actorName: session.owner ? "Owner Admin" : session.displayName || "Staff user"
+  };
+}
+
+function auditRequest(req, payload = {}) {
+  try {
+    const actor = payload.actor || auditActorFromSession(sessionFromRequest(req));
+    recordStaffAuditLog({
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      actorName: actor.actorName,
+      action: payload.action,
+      area: payload.area,
+      subjectType: payload.subjectType,
+      subjectId: payload.subjectId,
+      summary: payload.summary,
+      details: payload.details,
+      ipAddress: req.ip || req.socket.remoteAddress || "",
+      userAgent: req.get("user-agent") || ""
+    });
+  } catch (error) {
+    console.warn("Staff audit log could not be saved:", error.message);
+  }
+}
+
+function safeSettingKeys(settings = {}) {
+  return Object.keys(settings || {})
+    .filter((key) => !/pin|password|secret|token/i.test(key))
+    .sort();
+}
+
+function safeActivityDetails(activity = {}) {
+  return {
+    id: activity.id,
+    name: activity.name,
+    active: Boolean(activity.active),
+    time_limit_enabled: Boolean(activity.time_limit_enabled),
+    availability_window_enabled: Boolean(activity.availability_window_enabled),
+    daily_limit_enabled: Boolean(activity.daily_limit_enabled),
+    waitlist_enabled: Boolean(activity.waitlist_enabled)
+  };
+}
+
+function safeScheduledItemDetails(item = {}) {
+  return {
+    id: item.id,
+    check_in_id: item.check_in_id,
+    daily_number: item.daily_number,
+    guest_name: item.guest_name,
+    activity_name: item.activity_name,
+    status: item.status,
+    scheduled_start: item.scheduled_start,
+    scheduled_end: item.scheduled_end,
+    service_spot_status: item.service_spot_status,
+    service_spot_number: item.service_spot_number
+  };
 }
 
 function sessionHasPermission(session, permission) {
@@ -572,6 +639,17 @@ app.post(
       text: String(segment.text || "").slice(0, 350)
     }));
     const results = await preloadBestSpeechAudio(segments);
+    auditRequest(req, {
+      action: "speech_preloaded",
+      area: "it",
+      subjectType: "speech_cache",
+      summary: "Read-aloud speech cache preload was run.",
+      details: {
+        total: results.length,
+        ready: results.filter((result) => result.ok).length,
+        failed: results.filter((result) => !result.ok).length
+      }
+    });
     res.json({
       ok: true,
       total: results.length,
@@ -697,6 +775,16 @@ app.patch(
   requireDashboardAccess,
   handleRoute((req, res) => {
     const item = updateScheduledItemStatus(req.params.id, req.body.status);
+    auditRequest(req, {
+      action: "status_changed",
+      area: "dashboard",
+      subjectType: "scheduled_activity_item",
+      subjectId: item.id,
+      summary: `${item.guest_name || "A guest"} was marked ${item.status} for ${
+        item.activity_name || "an activity"
+      }.`,
+      details: safeScheduledItemDetails(item)
+    });
     emitDashboard();
     res.json(item);
   })
@@ -707,6 +795,19 @@ app.patch(
   requireDashboardAccess,
   handleRoute((req, res) => {
     const item = moveScheduledItem(req.params.id, req.body.direction);
+    auditRequest(req, {
+      action: "schedule_moved",
+      area: "dashboard",
+      subjectType: "scheduled_activity_item",
+      subjectId: item.id,
+      summary: `${item.guest_name || "A guest"} was moved ${
+        req.body.direction === "earlier" ? "earlier" : "later"
+      } for ${item.activity_name || "an activity"}.`,
+      details: {
+        direction: req.body.direction,
+        ...safeScheduledItemDetails(item)
+      }
+    });
     emitDashboard();
     res.json(item);
   })
@@ -717,6 +818,19 @@ app.patch(
   requireDashboardAccess,
   handleRoute((req, res) => {
     const item = rescheduleScheduledItem(req.params.id, req.body.targetStart);
+    auditRequest(req, {
+      action: "schedule_rescheduled",
+      area: "dashboard",
+      subjectType: "scheduled_activity_item",
+      subjectId: item.id,
+      summary: `${item.guest_name || "A guest"} was rescheduled for ${
+        item.activity_name || "an activity"
+      }.`,
+      details: {
+        requested_start: req.body.targetStart,
+        ...safeScheduledItemDetails(item)
+      }
+    });
     emitDashboard();
     res.json(item);
   })
@@ -727,6 +841,18 @@ app.patch(
   requireDashboardAccess,
   handleRoute((req, res) => {
     const checkIn = reorderCheckInItems(req.params.id, req.body.orderedIds);
+    auditRequest(req, {
+      action: "schedule_reordered",
+      area: "dashboard",
+      subjectType: "check_in",
+      subjectId: req.params.id,
+      summary: `Activities were reordered for ${checkIn.guest_name || "a guest"}.`,
+      details: {
+        check_in_id: checkIn.id,
+        guest_name: checkIn.guest_name,
+        ordered_ids: Array.isArray(req.body.orderedIds) ? req.body.orderedIds : []
+      }
+    });
     emitDashboard();
     res.json(checkIn);
   })
@@ -737,6 +863,14 @@ app.delete(
   requireDashboardAccess,
   handleRoute((req, res) => {
     clearCheckIn(req.params.id);
+    auditRequest(req, {
+      action: "guest_cleared",
+      area: "dashboard",
+      subjectType: "check_in",
+      subjectId: req.params.id,
+      summary: `Cleared active guest check-in #${req.params.id}.`,
+      details: { check_in_id: req.params.id }
+    });
     emitDashboard();
     res.json({ ok: true });
   })
@@ -745,7 +879,15 @@ app.delete(
 app.post("/api/admin/session", (req, res) => {
   const requestedPermission = requestedPermissionForPath(req.body.permission || req.body.path);
   if (verifyAdminPin(req.body.pin, ADMIN_PIN)) {
-    return res.json(createStaffSession({ owner: true }));
+    const response = createStaffSession({ owner: true });
+    auditRequest(req, {
+      actor: { actorType: "owner", actorId: "owner", actorName: "Owner Admin" },
+      action: "signed_in",
+      area: "access",
+      summary: `Owner Admin signed in to ${requestedPermission}.`,
+      details: { requested_permission: requestedPermission }
+    });
+    return res.json(response);
   }
   const user = verifyStaffUserPin(req.body.pin);
   if (!user) {
@@ -754,7 +896,17 @@ app.post("/api/admin/session", (req, res) => {
   if (!user.permissions?.[requestedPermission]) {
     return res.status(403).json({ error: "This user does not have access to that page." });
   }
-  return res.json(createStaffSession({ user }));
+  const response = createStaffSession({ user });
+  auditRequest(req, {
+    actor: { actorType: "staff", actorId: user.id, actorName: user.display_name },
+    action: "signed_in",
+    area: "access",
+    subjectType: "staff_user",
+    subjectId: user.id,
+    summary: `${user.display_name} signed in to ${requestedPermission}.`,
+    details: { requested_permission: requestedPermission }
+  });
+  return res.json(response);
 });
 
 app.get(
@@ -802,6 +954,14 @@ app.put(
     }
 
     changeAdminPin(req.body, ADMIN_PIN);
+    auditRequest(req, {
+      action: "admin_pin_changed",
+      area: "admin",
+      subjectType: "admin_security",
+      subjectId: "owner_pin",
+      summary: "Owner Admin PIN was changed.",
+      details: { pin_changed: true }
+    });
     adminSessions.clear();
     res.json({ ok: true });
   })
@@ -815,11 +975,35 @@ app.get(
   })
 );
 
+app.get(
+  "/api/admin/audit-logs",
+  requireOwnerAdmin,
+  handleRoute((req, res) => {
+    res.json(
+      listStaffAuditLogs({
+        limit: req.query.limit,
+        area: req.query.area,
+        actor: req.query.actor,
+        action: req.query.action
+      })
+    );
+  })
+);
+
 app.post(
   "/api/admin/users",
   requireOwnerAdmin,
   handleRoute((req, res) => {
-    res.status(201).json(createStaffUser(req.body));
+    const user = createStaffUser(req.body);
+    auditRequest(req, {
+      action: "staff_user_added",
+      area: "admin",
+      subjectType: "staff_user",
+      subjectId: user.id,
+      summary: `${user.display_name} was added as a staff user.`,
+      details: { user_id: user.id, display_name: user.display_name, permissions: user.permissions }
+    });
+    res.status(201).json(user);
   })
 );
 
@@ -827,7 +1011,22 @@ app.patch(
   "/api/admin/users/:id",
   requireOwnerAdmin,
   handleRoute((req, res) => {
-    res.json(updateStaffUser(req.params.id, req.body));
+    const user = updateStaffUser(req.params.id, req.body);
+    auditRequest(req, {
+      action: "staff_user_updated",
+      area: "admin",
+      subjectType: "staff_user",
+      subjectId: user.id,
+      summary: `${user.display_name} staff access was updated.`,
+      details: {
+        user_id: user.id,
+        display_name: user.display_name,
+        permissions: user.permissions,
+        active: user.active,
+        pin_changed: Boolean(req.body.pin)
+      }
+    });
+    res.json(user);
   })
 );
 
@@ -835,7 +1034,16 @@ app.delete(
   "/api/admin/users/:id",
   requireOwnerAdmin,
   handleRoute((req, res) => {
-    res.json({ ok: true, user: deleteStaffUser(req.params.id) });
+    const user = deleteStaffUser(req.params.id);
+    auditRequest(req, {
+      action: "staff_user_deleted",
+      area: "admin",
+      subjectType: "staff_user",
+      subjectId: user.id,
+      summary: `${user.display_name} was deleted from staff users.`,
+      details: { user_id: user.id, display_name: user.display_name }
+    });
+    res.json({ ok: true, user });
   })
 );
 
@@ -844,6 +1052,15 @@ app.post(
   requireAdminActivities,
   handleRoute((req, res) => {
     const data = resetDailyData({ seedDemo: Boolean(req.body.seedDemo) });
+    auditRequest(req, {
+      action: req.body.seedDemo ? "demo_data_reset" : "daily_schedule_reset",
+      area: "activities",
+      subjectType: "daily_schedule",
+      summary: req.body.seedDemo
+        ? "Demo data was reset for the activity schedule."
+        : "The daily activity schedule was reset.",
+      details: { seed_demo: Boolean(req.body.seedDemo) }
+    });
     emitDashboard();
     res.json(data);
   })
@@ -852,8 +1069,15 @@ app.post(
 app.post(
   "/api/admin/clear-active",
   requireAdminActivities,
-  handleRoute((_req, res) => {
+  handleRoute((req, res) => {
     const data = clearActiveCheckIns();
+    auditRequest(req, {
+      action: "active_guests_cleared",
+      area: "activities",
+      subjectType: "daily_schedule",
+      summary: "All active guests were cleared from the current schedule.",
+      details: {}
+    });
     emitDashboard();
     res.json(data);
   })
@@ -891,6 +1115,16 @@ app.post(
       filename: workbook.filename,
       url: `/api/admin/analytics/download/${id}`
     });
+    auditRequest(req, {
+      action: "excel_export_created",
+      area: "excel",
+      subjectType: "analytics_export",
+      subjectId: id,
+      summary: `Excel export was created for ${req.body.period || "day"} ${
+        req.body.date || ""
+      }.`.trim(),
+      details: { period: req.body.period, date: req.body.date, filename: workbook.filename }
+    });
   })
 );
 
@@ -920,15 +1154,34 @@ app.put(
   "/api/admin/data-deletion",
   requireOwnerAdmin,
   handleRoute((req, res) => {
-    res.json(updateDataDeletionSettings(req.body || {}));
+    const settings = updateDataDeletionSettings(req.body || {});
+    auditRequest(req, {
+      action: "data_deletion_settings_changed",
+      area: "admin",
+      subjectType: "data_deletion",
+      summary: "Yearly spreadsheet and guest data deletion settings were changed.",
+      details: {
+        enabled: settings.enabled,
+        date: settings.date,
+        time: settings.time
+      }
+    });
+    res.json(settings);
   })
 );
 
 app.post(
   "/api/admin/data-deletion/run",
   requireOwnerAdmin,
-  handleRoute((_req, res) => {
+  handleRoute((req, res) => {
     const result = runYearlyDataDeletion({ reason: "manual" });
+    auditRequest(req, {
+      action: "data_deletion_run",
+      area: "admin",
+      subjectType: "data_deletion",
+      summary: "Spreadsheet and guest data deletion was run manually.",
+      details: result.deleted
+    });
     emitDashboard();
     res.json(result);
   })
@@ -937,40 +1190,80 @@ app.post(
 app.post(
   "/api/admin/system/exit-kiosk",
   requireAdminIt,
-  handleRoute((_req, res) => {
-    res.json(exitKioskBrowser());
+  handleRoute((req, res) => {
+    const result = exitKioskBrowser();
+    auditRequest(req, {
+      action: "kiosk_exit_requested",
+      area: "it",
+      subjectType: "system_action",
+      summary: "Exit full-screen kiosk was requested.",
+      details: { ok: result.ok }
+    });
+    res.json(result);
   })
 );
 
 app.post(
   "/api/admin/system/open-kiosk",
   requireAdminIt,
-  handleRoute((_req, res) => {
-    res.json(openKioskBrowser());
+  handleRoute((req, res) => {
+    const result = openKioskBrowser();
+    auditRequest(req, {
+      action: "kiosk_open_requested",
+      area: "it",
+      subjectType: "system_action",
+      summary: "Open full-screen kiosk was requested.",
+      details: { ok: result.ok }
+    });
+    res.json(result);
   })
 );
 
 app.post(
   "/api/admin/system/update",
   requireAdminIt,
-  handleRoute((_req, res) => {
-    res.json(updateFromGithub());
+  handleRoute((req, res) => {
+    const result = updateFromGithub();
+    auditRequest(req, {
+      action: "github_update_requested",
+      area: "it",
+      subjectType: "system_action",
+      summary: "Update from GitHub was started.",
+      details: { ok: result.ok }
+    });
+    res.json(result);
   })
 );
 
 app.post(
   "/api/admin/system/install-auto-update",
   requireAdminIt,
-  handleRoute((_req, res) => {
-    res.json(installAutoUpdateTimer());
+  handleRoute((req, res) => {
+    const result = installAutoUpdateTimer();
+    auditRequest(req, {
+      action: "auto_update_installed",
+      area: "it",
+      subjectType: "system_action",
+      summary: "Raspberry Pi auto-update setup was started.",
+      details: { ok: result.ok }
+    });
+    res.json(result);
   })
 );
 
 app.post(
   "/api/admin/system/reboot",
   requireAdminIt,
-  handleRoute((_req, res) => {
-    res.json(rebootRaspberryPi());
+  handleRoute((req, res) => {
+    const result = rebootRaspberryPi();
+    auditRequest(req, {
+      action: "raspberry_pi_reboot_requested",
+      area: "it",
+      subjectType: "system_action",
+      summary: "Raspberry Pi reboot was requested.",
+      details: { ok: result.ok }
+    });
+    res.json(result);
   })
 );
 
@@ -1005,6 +1298,14 @@ app.post(
   requireAdminActivities,
   handleRoute(async (req, res) => {
     const activity = createActivity(await enrichActivityTranslations(req.body));
+    auditRequest(req, {
+      action: "activity_added",
+      area: "activities",
+      subjectType: "activity",
+      subjectId: activity.id,
+      summary: `${activity.name} was added as an activity.`,
+      details: safeActivityDetails(activity)
+    });
     emitDashboard();
     res.status(201).json(activity);
   })
@@ -1013,8 +1314,15 @@ app.post(
 app.post(
   "/api/admin/activities/apply-listening-house-defaults",
   requireAdminActivities,
-  handleRoute((_req, res) => {
+  handleRoute((req, res) => {
     const data = applyDefaultActivities();
+    auditRequest(req, {
+      action: "activity_defaults_applied",
+      area: "activities",
+      subjectType: "activity_defaults",
+      summary: "Listening House default activities were applied.",
+      details: { activities: Array.isArray(data.activities) ? data.activities.length : undefined }
+    });
     emitDashboard();
     res.json(data);
   })
@@ -1025,6 +1333,14 @@ app.patch(
   requireAdminActivities,
   handleRoute(async (req, res) => {
     const activity = updateActivity(req.params.id, await enrichActivityTranslations(req.body));
+    auditRequest(req, {
+      action: "activity_updated",
+      area: "activities",
+      subjectType: "activity",
+      subjectId: activity.id,
+      summary: `${activity.name} activity settings were updated.`,
+      details: safeActivityDetails(activity)
+    });
     emitDashboard();
     res.json(activity);
   })
@@ -1043,6 +1359,14 @@ app.delete(
   requireAdminActivities,
   handleRoute((req, res) => {
     const activity = deleteActivity(req.params.id);
+    auditRequest(req, {
+      action: "activity_deleted",
+      area: "activities",
+      subjectType: "activity",
+      subjectId: activity.id,
+      summary: `${activity.name} was deleted from activities.`,
+      details: safeActivityDetails(activity)
+    });
     emitDashboard();
     res.json({ ok: true, activity });
   })
@@ -1052,7 +1376,22 @@ app.put(
   "/api/admin/settings",
   requireSettingsPermission,
   handleRoute((req, res) => {
-    const settings = updateSettings(req.body.settings || req.body || {});
+    const incomingSettings = req.body.settings || req.body || {};
+    const settings = updateSettings(incomingSettings);
+    const keys = safeSettingKeys(incomingSettings);
+    auditRequest(req, {
+      action: "settings_updated",
+      area: keys.some((key) => permissionForSettingKey(key) === "admin_it")
+        ? "it"
+        : keys.some((key) => permissionForSettingKey(key) === "admin_customization")
+          ? "customization"
+          : keys.some((key) => permissionForSettingKey(key) === "admin_activities")
+            ? "activities"
+            : "admin",
+      subjectType: "settings",
+      summary: `Settings updated: ${keys.join(", ") || "settings"}.`,
+      details: { keys }
+    });
     emitDashboard();
     res.json(settings);
   })
@@ -1063,6 +1402,15 @@ app.put(
   requireSettingsPermission,
   handleRoute((req, res) => {
     const settings = updateSetting(req.params.key, req.body.value);
+    const key = req.params.key;
+    auditRequest(req, {
+      action: "setting_updated",
+      area: permissionForSettingKey(key).replace("admin_", "") || "admin",
+      subjectType: "setting",
+      subjectId: key,
+      summary: `Setting updated: ${key}.`,
+      details: { key }
+    });
     emitDashboard();
     res.json(settings);
   })
@@ -1099,6 +1447,13 @@ app.post(
     if (!health.ok) {
       return res.status(502).json({ error: "That address is not the check-in server." });
     }
+    auditRequest(req, {
+      action: "network_address_tested",
+      area: "it",
+      subjectType: "network",
+      summary: "A network address was tested successfully.",
+      details: { url: baseUrl }
+    });
     return res.json({ ok: true, url: baseUrl });
   })
 );

@@ -35,6 +35,18 @@ test("yearly deletion removes guest data and preserves staff users", async () =>
     assert.equal(repository.verifyStaffUserPin("1717").permissions.admin, true);
     assert.equal(repository.verifyStaffUserPin("1717").permissions.admin_excel, true);
     assert.equal(repository.verifyStaffUserPin("1717").permissions.admin_it, false);
+    repository.recordStaffAuditLog({
+      actorType: "staff",
+      actorId: staffUser.id,
+      actorName: staffUser.display_name,
+      action: "schedule_moved",
+      area: "dashboard",
+      subjectType: "scheduled_activity_item",
+      subjectId: "42",
+      summary: "Dashboard Staff moved a test schedule item.",
+      details: { activity_name: "Shower", status: "Waiting" }
+    });
+    assert.equal(repository.listStaffAuditLogs().length, 1);
 
     repository.updateSettings({
       inventor_contacts: [
@@ -92,6 +104,8 @@ test("yearly deletion removes guest data and preserves staff users", async () =>
     assert.equal(repository.listStaffUsers().length, 1);
     assert.equal(repository.listStaffUsers()[0].id, staffUser.id);
     assert.equal(repository.listStaffUsers()[0].permissions.admin_excel, true);
+    assert.equal(repository.listStaffAuditLogs().length, 1);
+    assert.equal(repository.listStaffAuditLogs()[0].actor_name, "Dashboard Staff");
     assert.equal(repository.runDueYearlyDataDeletion({ now: new Date(2026, 6, 7, 4, 0) }), null);
   } finally {
     if (database?.open) database.close();

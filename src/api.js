@@ -190,6 +190,17 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
+  getAuditLogs(token, filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.area && filters.area !== "all") params.set("area", filters.area);
+    if (filters.actor) params.set("actor", filters.actor);
+    if (filters.action) params.set("action", filters.action);
+    if (filters.limit) params.set("limit", filters.limit);
+    const query = params.toString();
+    return request(`/api/admin/audit-logs${query ? `?${query}` : ""}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
   createStaffUser(token, user) {
     return request("/api/admin/users", {
       method: "POST",

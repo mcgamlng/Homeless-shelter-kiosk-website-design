@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Download,
   Globe2,
+  History,
   KeyRound,
   Link2,
   Lock,
@@ -237,6 +238,17 @@ const adminSectionPermissionOptions = [
   ["admin_it", "IT tools"]
 ];
 
+const auditAreaOptions = [
+  ["all", "All sections"],
+  ["access", "Sign-ins"],
+  ["dashboard", "Dashboard"],
+  ["activities", "Activity customization"],
+  ["excel", "Excel spreadsheets"],
+  ["customization", "Page customization"],
+  ["it", "IT tools"],
+  ["admin", "Admin"]
+];
+
 const adminSectionConfig = {
   excel: {
     title: "Excel spreadsheets",
@@ -383,6 +395,10 @@ export default function Admin({ section = "activities" }) {
   const [staffUserDraft, setStaffUserDraft] = useState(createStaffUserDraft);
   const [staffUserMessage, setStaffUserMessage] = useState("");
   const [savingStaffUser, setSavingStaffUser] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditFilters, setAuditFilters] = useState({ area: "all", actor: "", limit: "100" });
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditMessage, setAuditMessage] = useState("");
   const [speechPreloadMessage, setSpeechPreloadMessage] = useState("");
   const [preloadingSpeech, setPreloadingSpeech] = useState(false);
   const [systemControlMessage, setSystemControlMessage] = useState("");
@@ -435,8 +451,10 @@ export default function Admin({ section = "activities" }) {
     }
     if (canUseOwnerAdmin) {
       loadDataDeletionTools(token);
+      loadAuditLogs(token);
     } else {
       setDataDeletionSettings(null);
+      setAuditLogs([]);
     }
     if (canManageUsers) {
       loadStaffUsers(token);
@@ -664,6 +682,7 @@ export default function Admin({ section = "activities" }) {
       const settings = await api.updateDataDeletionSettings(authToken, dataDeletionDraft);
       setDataDeletionSettings(settings);
       setDataDeletionDraft(createDataDeletionDraft(settings));
+      loadAuditLogs(authToken);
       setDataDeletionMessage("Yearly deletion settings saved.");
     } catch (err) {
       handleAdminError(err, authToken);
@@ -691,6 +710,7 @@ export default function Admin({ section = "activities" }) {
       setDataDeletionMessage(
         `Deleted ${result.deleted.guests} guest profiles, ${result.deleted.checkIns} check-ins, and ${result.deleted_export_files} spreadsheet files.`
       );
+      loadAuditLogs(authToken);
       await refresh();
     } catch (err) {
       handleAdminError(err, authToken);
@@ -706,6 +726,23 @@ export default function Admin({ section = "activities" }) {
     } catch (err) {
       handleAdminError(err, authToken);
     }
+  }
+
+  async function loadAuditLogs(authToken = token, filters = auditFilters) {
+    setAuditLoading(true);
+    setAuditMessage("");
+    try {
+      setAuditLogs(await api.getAuditLogs(authToken, filters));
+    } catch (err) {
+      handleAdminError(err, authToken);
+      setAuditMessage(err.message);
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
+  function updateAuditFilter(key, value) {
+    setAuditFilters((current) => ({ ...current, [key]: value }));
   }
 
   function updateStaffUserDraft(key, value) {
@@ -728,6 +765,7 @@ export default function Admin({ section = "activities" }) {
       await api.createStaffUser(authToken, staffUserDraft);
       setStaffUserDraft(createStaffUserDraft());
       setStaffUsers(await api.getStaffUsers(authToken));
+      loadAuditLogs(authToken);
       setStaffUserMessage("Staff user added.");
     } catch (err) {
       handleAdminError(err, authToken);
@@ -743,6 +781,7 @@ export default function Admin({ section = "activities" }) {
     try {
       await api.updateStaffUser(authToken, user.id, changes);
       setStaffUsers(await api.getStaffUsers(authToken));
+      loadAuditLogs(authToken);
       setStaffUserMessage("Staff user updated.");
     } catch (err) {
       handleAdminError(err, authToken);
@@ -757,6 +796,7 @@ export default function Admin({ section = "activities" }) {
     try {
       await api.deleteStaffUser(authToken, user.id);
       setStaffUsers(await api.getStaffUsers(authToken));
+      loadAuditLogs(authToken);
       setStaffUserMessage("Staff user deleted.");
     } catch (err) {
       handleAdminError(err, authToken);
@@ -1983,6 +2023,105 @@ export default function Admin({ section = "activities" }) {
             </div>
             {dataDeletionMessage ? <p className="network-status">{dataDeletionMessage}</p> : null}
           </form>
+
+          <section className="card-panel audit-log-panel">
+            <div className="analytics-heading">
+              <div>
+                <h2>
+                  <History size={24} />
+                  Staff Activity Log
+                </h2>
+                <p>
+                  Owner-only history of staff sign-ins, dashboard changes, activity edits, kiosk
+                  customization, IT tools, and Admin actions. PIN values are never shown here.
+                </p>
+              </div>
+              <button
+                className="secondary-button compact-button"
+                type="button"
+                disabled={!signedIn || auditLoading}
+                onClick={() => loadAuditLogs(currentAdminToken())}
+              >
+                <RefreshCw size={18} />
+                {auditLoading ? "Refreshing..." : "Refresh log"}
+              </button>
+            </div>
+            <div className="audit-log-controls">
+              <label>
+                Section
+                <select
+                  value={auditFilters.area}
+                  disabled={!signedIn}
+                  onChange={(event) => updateAuditFilter("area", event.target.value)}
+                >
+                  {auditAreaOptions.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Staff name
+                <input
+                  value={auditFilters.actor}
+                  disabled={!signedIn}
+                  placeholder="Search by staff"
+                  onChange={(event) => updateAuditFilter("actor", event.target.value)}
+                />
+              </label>
+              <label>
+                Show
+                <select
+                  value={auditFilters.limit}
+                  disabled={!signedIn}
+                  onChange={(event) => updateAuditFilter("limit", event.target.value)}
+                >
+                  <option value="50">Last 50</option>
+                  <option value="100">Last 100</option>
+                  <option value="250">Last 250</option>
+                  <option value="500">Last 500</option>
+                </select>
+              </label>
+              <button
+                className="primary-button compact-button"
+                type="button"
+                disabled={!signedIn || auditLoading}
+                onClick={() => loadAuditLogs(currentAdminToken())}
+              >
+                Apply filters
+              </button>
+            </div>
+            {auditMessage ? <p className="network-status">{auditMessage}</p> : null}
+            <div className="audit-log-list">
+              {auditLoading ? <p className="analytics-empty">Loading staff activity...</p> : null}
+              {!auditLoading && auditLogs.length === 0 ? (
+                <p className="analytics-empty">No staff activity has been recorded yet.</p>
+              ) : null}
+              {!auditLoading
+                ? auditLogs.map((entry) => (
+                    <article className="audit-log-row" key={entry.id}>
+                      <div className="audit-log-row-header">
+                        <div>
+                          <strong>{entry.summary}</strong>
+                          <span>
+                            {entry.actor_name} • {formatAuditTimestamp(entry.created_at)}
+                          </span>
+                        </div>
+                        <span className="audit-log-badge">{auditAreaLabel(entry.area)}</span>
+                      </div>
+                      <p className="audit-log-meta">
+                        Action: {formatAuditAction(entry.action)}
+                        {entry.subject_id ? ` • ID: ${entry.subject_id}` : ""}
+                      </p>
+                      {formatAuditDetails(entry.details) ? (
+                        <p className="audit-log-details">{formatAuditDetails(entry.details)}</p>
+                      ) : null}
+                    </article>
+                  ))
+                : null}
+            </div>
+          </section>
         </>
       ) : activeSection === "admin" ? (
         <RestrictedAdminSection title="Admin" ownerOnly />
@@ -2939,6 +3078,51 @@ function ActivityOptionFields({ draft, disabled, onChange }) {
       </section>
     </div>
   );
+}
+
+function auditAreaLabel(area) {
+  return auditAreaOptions.find(([value]) => value === area)?.[1] || area || "General";
+}
+
+function formatAuditAction(action) {
+  return String(action || "action")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatAuditTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || "";
+  return new Intl.DateTimeFormat([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function formatAuditDetails(details = {}) {
+  if (!details || typeof details !== "object") return "";
+  const parts = [];
+  if (details.guest_name) parts.push(`Guest: ${details.guest_name}`);
+  if (details.activity_name) parts.push(`Activity: ${details.activity_name}`);
+  if (details.status) parts.push(`Status: ${details.status}`);
+  if (details.scheduled_start && details.scheduled_end) {
+    parts.push(
+      `Scheduled: ${formatAuditTimestamp(details.scheduled_start)} to ${formatAuditTimestamp(details.scheduled_end)}`
+    );
+  }
+  if (details.display_name) parts.push(`Staff: ${details.display_name}`);
+  if (details.keys?.length) parts.push(`Settings: ${details.keys.join(", ")}`);
+  if (details.period || details.date) {
+    parts.push(`Report: ${[details.period, details.date].filter(Boolean).join(" ")}`);
+  }
+  if (details.pin_changed) parts.push("PIN changed");
+  if (details.ready !== undefined && details.total !== undefined) {
+    parts.push(`Speech cache: ${details.ready}/${details.total} ready`);
+  }
+  return parts.join(" • ");
 }
 
 function AnalyticsStat({ label, value, wide = false }) {

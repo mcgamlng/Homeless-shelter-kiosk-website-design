@@ -224,6 +224,21 @@ function migrateDatabase(database) {
   backfillActivityTranslations(database);
   database.exec(`
     DROP INDEX IF EXISTS idx_check_ins_bracelet;
+    CREATE TABLE IF NOT EXISTS staff_audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      actor_type TEXT NOT NULL DEFAULT 'staff',
+      actor_id TEXT,
+      actor_name TEXT NOT NULL,
+      action TEXT NOT NULL,
+      area TEXT NOT NULL,
+      subject_type TEXT,
+      subject_id TEXT,
+      summary TEXT NOT NULL,
+      details_json TEXT NOT NULL DEFAULT '{}',
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE INDEX IF NOT EXISTS idx_check_ins_status ON check_ins(status);
     CREATE INDEX IF NOT EXISTS idx_check_ins_guest ON check_ins(guest_id);
     CREATE INDEX IF NOT EXISTS idx_check_ins_checked_in_at ON check_ins(checked_in_at);
@@ -234,6 +249,9 @@ function migrateDatabase(database) {
     CREATE INDEX IF NOT EXISTS idx_scheduled_start ON scheduled_activity_items(scheduled_start);
     CREATE INDEX IF NOT EXISTS idx_status_history_changed_at ON status_history(changed_at);
     CREATE INDEX IF NOT EXISTS idx_daily_exports_report_date ON daily_export_archives(report_date);
+    CREATE INDEX IF NOT EXISTS idx_staff_audit_logs_created_at ON staff_audit_logs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_staff_audit_logs_actor ON staff_audit_logs(actor_name, created_at);
+    CREATE INDEX IF NOT EXISTS idx_staff_audit_logs_area ON staff_audit_logs(area, created_at);
   `);
   database
     .prepare(

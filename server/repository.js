@@ -653,6 +653,72 @@ export function verifyStaffUserPin(pin) {
   return user ? publicStaffUser(user) : null;
 }
 
+export function recordStaffAuditLog(payload = {}) {
+  const actorType = ["owner", "staff", "system"].includes(payload.actorType)
+    ? payload.actorType
+    : "staff";
+  const actorName = cleanAuditText(payload.actorName || "Unknown staff", 120);
+  const action = cleanAuditText(payload.action || "action", 80);
+  const area = cleanAuditText(payload.area || "general", 80);
+  const summary = cleanAuditText(payload.summary || "Software action recorded.", 500);
+  const info = db
+    .prepare(
+      `INSERT INTO staff_audit_logs
+       (actor_type, actor_id, actor_name, action, area, subject_type, subject_id,
+        summary, details_json, ip_address, user_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      actorType,
+      cleanAuditText(payload.actorId, 80) || null,
+      actorName,
+      action,
+      area,
+      cleanAuditText(payload.subjectType, 80) || null,
+      cleanAuditText(payload.subjectId, 120) || null,
+      summary,
+      stringifyAuditDetails(payload.details),
+      cleanAuditText(payload.ipAddress, 120) || null,
+      cleanAuditText(payload.userAgent, 300) || null
+    );
+  return listStaffAuditLogs({ id: info.lastInsertRowid, limit: 1 })[0];
+}
+
+export function listStaffAuditLogs(filters = {}) {
+  const clauses = [];
+  const params = [];
+  if (filters.id) {
+    clauses.push("id = ?");
+    params.push(Number(filters.id));
+  }
+  const area = cleanAuditText(filters.area, 80);
+  if (area && area !== "all") {
+    clauses.push("area = ?");
+    params.push(area);
+  }
+  const actor = cleanAuditText(filters.actor, 120);
+  if (actor) {
+    clauses.push("lower(actor_name) LIKE ?");
+    params.push(`%${actor.toLowerCase()}%`);
+  }
+  const action = cleanAuditText(filters.action, 80);
+  if (action) {
+    clauses.push("action = ?");
+    params.push(action);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const limit = Math.min(500, Math.max(10, Number(filters.limit) || 100));
+  return rows(
+    `SELECT id, actor_type, actor_id, actor_name, action, area, subject_type, subject_id,
+            summary, details_json, ip_address, user_agent, created_at
+     FROM staff_audit_logs
+     ${where}
+     ORDER BY datetime(created_at) DESC, id DESC
+     LIMIT ?`,
+    [...params, limit]
+  ).map(publicStaffAuditLog);
+}
+
 function ensureUniqueStaffPin(pin, ignoredUserId = null) {
   const users = rows("SELECT id, pin_hash FROM staff_users");
   const duplicate = users.find(
@@ -662,6 +728,54 @@ function ensureUniqueStaffPin(pin, ignoredUserId = null) {
     const error = new Error("That staff PIN is already used by another staff user.");
     error.status = 409;
     throw error;
+  }
+}
+
+function publicStaffAuditLog(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    actor_type: row.actor_type,
+    actor_id: row.actor_id,
+    actor_name: row.actor_name,
+    action: row.action,
+    area: row.area,
+    subject_type: row.subject_type,
+    subject_id: row.subject_id,
+    summary: row.summary,
+    details: parseAuditDetails(row.details_json),
+    ip_address: row.ip_address,
+    user_agent: row.user_agent,
+    created_at: row.created_at
+  };
+}
+
+function cleanAuditText(value, maxLength = 255) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function stringifyAuditDetails(details) {
+  try {
+    const json = JSON.stringify(details || {});
+    if (json.length <= 4000) return json;
+    return JSON.stringify({
+      note: "Details were shortened.",
+      preview: json.slice(0, 3800)
+    });
+  } catch {
+    return "{}";
+  }
+}
+
+function parseAuditDetails(value) {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
   }
 }
 

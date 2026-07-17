@@ -2930,6 +2930,84 @@ main {
   font-weight: 900;
 }
 
+.audit-log-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.audit-log-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(130px, 0.7fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.audit-log-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--lh-navy);
+  font-weight: 900;
+}
+
+.audit-log-list {
+  display: grid;
+  gap: 12px;
+}
+
+.audit-log-row {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-left: 6px solid var(--lh-purple);
+  background: var(--lh-aqua-light);
+  box-shadow: 6px 6px 0 rgba(35, 48, 95, 0.12);
+}
+
+.audit-log-row-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.audit-log-row-header div {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.audit-log-row-header strong {
+  color: var(--lh-navy);
+  font-size: 1rem;
+}
+
+.audit-log-row-header span,
+.audit-log-meta,
+.audit-log-details {
+  margin: 0;
+  color: var(--lh-charcoal);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.audit-log-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--lh-navy);
+  color: var(--lh-warm-white) !important;
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+
+.audit-log-details {
+  color: var(--lh-muted-brown);
+  font-size: 0.92rem;
+}
+
 .staff-user-form,
 .staff-user-row {
   display: grid;
@@ -6095,6 +6173,7 @@ main {
   .activity-option-grid,
   .activity-translation-grid,
   .access-qr-grid,
+  .audit-log-controls,
   .data-deletion-grid,
   .inventor-contact-grid,
   .ios-install-hero,
@@ -6129,6 +6208,10 @@ main {
   .dashboard-alarm-actions {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .audit-log-row-header div {
+    min-width: 0;
   }
 
   .staff-action-center {

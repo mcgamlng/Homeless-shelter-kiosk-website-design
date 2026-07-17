@@ -51,6 +51,10 @@ mkdir -p "$KIOSK_PROFILE_DIR"
 rm -rf "$KIOSK_PROFILE_DIR/Default/Cache" \
   "$KIOSK_PROFILE_DIR/Default/Code Cache" \
   "$KIOSK_PROFILE_DIR/Default/Service Worker" 2>/dev/null || true
+rm -f "$KIOSK_PROFILE_DIR/Default/Login Data" \
+  "$KIOSK_PROFILE_DIR/Default/Login Data-journal" \
+  "$KIOSK_PROFILE_DIR/Default/Web Data" \
+  "$KIOSK_PROFILE_DIR/Default/Web Data-journal" 2>/dev/null || true
 
 if [[ "${KIOSK_SET_VOLUME:-1}" != "0" && -x "$PROJECT_DIR/scripts/raspberry-pi/volume-control.sh" ]]; then
   "$PROJECT_DIR/scripts/raspberry-pi/volume-control.sh" loud >/dev/null 2>&1 || true
@@ -100,6 +104,9 @@ exec "$BROWSER" \
   --noerrdialogs \
   --disable-infobars \
   --disable-extensions \
+  --disable-save-password-bubble \
+  --disable-sync \
+  --password-store=basic \
   --disable-session-crashed-bubble \
   --autoplay-policy=no-user-gesture-required \
   --overscroll-history-navigation=0 \

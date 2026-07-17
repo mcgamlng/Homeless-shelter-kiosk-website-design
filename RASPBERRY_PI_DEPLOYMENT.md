@@ -153,6 +153,21 @@ If the installed command is `chromium`:
 chromium --kiosk http://localhost:3000/kiosk
 ```
 
+The included `scripts/raspberry-pi/start-kiosk.sh` launcher uses its own Chromium profile and tells
+Chromium to use basic local password storage. That prevents the full-screen kiosk from needing the
+Raspberry Pi desktop keyring.
+
+If the Pi still shows an **Unlock Keyring** box, it is usually the desktop browser profile, not the
+Listening House database. On a dedicated kiosk device, you can clear the desktop keyring with:
+
+```bash
+mv ~/.local/share/keyrings ~/.local/share/keyrings.backup.$(date +%Y%m%d-%H%M%S)
+reboot
+```
+
+After reboot, if Raspberry Pi OS asks to create a new keyring, leave the new keyring password blank.
+This removes saved desktop keyring secrets, but it does not delete the Listening House SQLite data.
+
 ## Automatic Startup
 
 The included helper installs the server and Chromium startup configuration:

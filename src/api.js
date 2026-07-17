@@ -252,6 +252,13 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
+  setAutoUpdate(token, enabled) {
+    return request("/api/admin/system/auto-update", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ enabled })
+    });
+  },
   getAutoUpdateStatus(token) {
     return request("/api/admin/system/auto-update-status", {
       headers: { Authorization: `Bearer ${token}` }

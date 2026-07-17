@@ -239,6 +239,26 @@ a {
   transform: translateY(0);
 }
 
+@media (min-width: 981px) and (max-width: 1380px) {
+  .topbar:not(.is-kiosk-topbar) {
+    gap: 14px;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .brand {
+    min-width: 210px;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav {
+    row-gap: 6px;
+  }
+
+  .topbar:not(.is-kiosk-topbar) .topnav button {
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 0.92rem;
+  }
+}
+
 main {
   width: min(1480px, 100%);
   margin: 0 auto;
@@ -5710,7 +5730,7 @@ main {
 
 .system-control-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 0.9rem;
   align-items: center;
   padding: 1rem;
@@ -5722,16 +5742,22 @@ main {
   color: var(--lh-navy);
 }
 
+.system-control-card > div {
+  min-width: 0;
+}
+
 .system-control-card strong {
   display: block;
   color: var(--lh-navy);
   font-size: 1.02rem;
+  overflow-wrap: anywhere;
 }
 
 .system-control-card p {
   margin: 0.2rem 0 0;
   color: var(--lh-charcoal);
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .system-control-card small {
@@ -5740,6 +5766,43 @@ main {
   color: var(--lh-muted-brown);
   font-weight: 850;
   line-height: 1.35;
+}
+
+.system-control-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.6rem;
+  justify-items: start;
+  min-width: 0;
+  width: 100%;
+}
+
+.system-control-card > button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.system-toggle-field {
+  min-height: 44px;
+  min-width: 0;
+  width: min(100%, 320px);
+  justify-content: flex-start;
+  border: 2px solid var(--lh-navy);
+  background: var(--lh-warm-white);
+}
+
+.system-toggle-field span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.system-toggle-field input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--lh-navy);
 }
 
 .system-status-pill {
@@ -6314,6 +6377,10 @@ main {
   .system-control-card,
   .install-connection-banner {
     grid-template-columns: 1fr;
+  }
+
+  .system-control-actions {
+    justify-items: stretch;
   }
 
   .network-current > svg {

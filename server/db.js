@@ -162,11 +162,13 @@ function migrateDatabase(database) {
     staffColumnsBeforeSectionPermissions.has("can_admin_excel") &&
     staffColumnsBeforeSectionPermissions.has("can_admin_customization") &&
     staffColumnsBeforeSectionPermissions.has("can_admin_activities") &&
-    staffColumnsBeforeSectionPermissions.has("can_admin_it");
+    staffColumnsBeforeSectionPermissions.has("can_admin_it") &&
+    staffColumnsBeforeSectionPermissions.has("can_admin_users");
   ensureColumn(database, "staff_users", "can_admin_excel", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(database, "staff_users", "can_admin_customization", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(database, "staff_users", "can_admin_activities", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(database, "staff_users", "can_admin_it", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(database, "staff_users", "can_admin_users", "INTEGER NOT NULL DEFAULT 0");
   if (!hadAdminSectionPermissions) {
     database
       .prepare(
@@ -174,7 +176,8 @@ function migrateDatabase(database) {
          SET can_admin_excel = can_admin,
              can_admin_customization = can_admin,
              can_admin_activities = can_admin,
-             can_admin_it = can_admin
+             can_admin_it = can_admin,
+             can_admin_users = can_admin
          WHERE can_admin = 1`
       )
       .run();

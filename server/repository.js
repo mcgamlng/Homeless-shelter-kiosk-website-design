@@ -45,7 +45,8 @@ const ADMIN_SECTION_PERMISSION_KEYS = [
   "admin_excel",
   "admin_customization",
   "admin_activities",
-  "admin_it"
+  "admin_it",
+  "admin_users"
 ];
 const LOCAL_DATE_FORMATTER = new Intl.DateTimeFormat([], {
   year: "numeric",
@@ -503,6 +504,10 @@ function normalizeStaffPermissions(payload = {}, current = {}) {
     admin_it:
       admin || hasAnyAdminSection
         ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_it
+        : false,
+    admin_users:
+      admin || hasAnyAdminSection
+        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_users
         : false
   };
 }
@@ -519,7 +524,8 @@ function publicStaffUser(row) {
       admin_excel: Boolean(row.can_admin_excel),
       admin_customization: Boolean(row.can_admin_customization),
       admin_activities: Boolean(row.can_admin_activities),
-      admin_it: Boolean(row.can_admin_it)
+      admin_it: Boolean(row.can_admin_it),
+      admin_users: Boolean(row.can_admin_users)
     },
     active: Boolean(row.active),
     created_at: row.created_at,
@@ -541,6 +547,7 @@ export function listStaffUsers() {
   return rows(
     `SELECT id, display_name, can_dashboard, can_admin, can_about,
             can_admin_excel, can_admin_customization, can_admin_activities, can_admin_it,
+            can_admin_users,
             active, created_at, updated_at
      FROM staff_users
      ORDER BY active DESC, lower(display_name), id`
@@ -561,8 +568,9 @@ export function createStaffUser(payload = {}) {
     .prepare(
       `INSERT INTO staff_users
        (display_name, pin_hash, can_dashboard, can_admin, can_about,
-        can_admin_excel, can_admin_customization, can_admin_activities, can_admin_it, active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        can_admin_excel, can_admin_customization, can_admin_activities, can_admin_it,
+        can_admin_users, active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       displayName,
@@ -574,6 +582,7 @@ export function createStaffUser(payload = {}) {
       permissions.admin_customization ? 1 : 0,
       permissions.admin_activities ? 1 : 0,
       permissions.admin_it ? 1 : 0,
+      permissions.admin_users ? 1 : 0,
       payload.active === false ? 0 : 1
     );
   return listStaffUsers().find((user) => Number(user.id) === Number(info.lastInsertRowid));
@@ -601,7 +610,8 @@ export function updateStaffUser(id, payload = {}) {
     admin_excel: current.can_admin_excel,
     admin_customization: current.can_admin_customization,
     admin_activities: current.can_admin_activities,
-    admin_it: current.can_admin_it
+    admin_it: current.can_admin_it,
+    admin_users: current.can_admin_users
   });
   const pin = payload.pin ? requireStaffPin(payload.pin) : "";
   if (pin) ensureUniqueStaffPin(pin, Number(id));
@@ -611,6 +621,7 @@ export function updateStaffUser(id, payload = {}) {
      SET display_name = ?, pin_hash = ?, can_dashboard = ?, can_admin = ?, can_about = ?,
          can_admin_excel = ?, can_admin_customization = ?, can_admin_activities = ?,
          can_admin_it = ?,
+         can_admin_users = ?,
          active = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ).run(
@@ -623,6 +634,7 @@ export function updateStaffUser(id, payload = {}) {
     permissions.admin_customization ? 1 : 0,
     permissions.admin_activities ? 1 : 0,
     permissions.admin_it ? 1 : 0,
+    permissions.admin_users ? 1 : 0,
     payload.active === undefined ? current.active : payload.active ? 1 : 0,
     id
   );

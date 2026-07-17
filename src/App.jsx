@@ -24,6 +24,7 @@ const navItems = [
   { label: "Page customization", to: "/page-customization" },
   { label: "Activity customization", to: "/activity-customization" },
   { label: "IT tools", to: "/it-tools" },
+  { label: "User control", to: "/user-control" },
   { label: "Admin", to: "/admin" },
   { label: "About", to: "/about" }
 ];
@@ -34,6 +35,7 @@ const protectedPaths = new Set([
   "/page-customization",
   "/activity-customization",
   "/it-tools",
+  "/user-control",
   "/admin",
   "/about"
 ]);
@@ -44,6 +46,7 @@ function permissionForPath(path) {
   if (path === "/page-customization") return "admin_customization";
   if (path === "/activity-customization") return "admin_activities";
   if (path === "/it-tools") return "admin_it";
+  if (path === "/user-control") return "admin_users";
   if (path === "/about") return "about";
   return "dashboard";
 }
@@ -240,6 +243,14 @@ function AppShell() {
             element={
               <ProtectedEntry onSignedIn={setSignedInUser}>
                 <Admin section="it" />
+              </ProtectedEntry>
+            }
+          />
+          <Route
+            path="/user-control"
+            element={
+              <ProtectedEntry onSignedIn={setSignedInUser}>
+                <Admin section="users" />
               </ProtectedEntry>
             }
           />

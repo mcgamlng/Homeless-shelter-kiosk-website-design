@@ -248,6 +248,7 @@ const requireAdminExcel = requirePermission("admin_excel", "Excel Sheets");
 const requireAdminCustomization = requirePermission("admin_customization", "Page Customization");
 const requireAdminActivities = requirePermission("admin_activities", "Activity Customization");
 const requireAdminIt = requirePermission("admin_it", "IT");
+const requireAdminUsers = requirePermission("admin_users", "User Control");
 const requireDashboardAccess = requireAnyPermission(
   ["dashboard", "admin"],
   "Dashboard or staff section access"
@@ -287,7 +288,8 @@ function createStaffSession({ owner = false, user = null, permissions = null } =
         admin_excel: true,
         admin_customization: true,
         admin_activities: true,
-        admin_it: true
+        admin_it: true,
+        admin_users: true
       }
     : permissions || user?.permissions || {};
   adminSessions.set(token, {
@@ -326,6 +328,10 @@ function requestedPermissionForPath(value) {
     return "admin_customization";
   }
   if (cleanValue.includes("admin_it") || cleanValue.includes("it")) return "admin_it";
+  if (cleanValue.includes("admin_users") || cleanValue.includes("user-control")) {
+    return "admin_users";
+  }
+  if (cleanValue.includes("users") || cleanValue.includes("user control")) return "admin_users";
   if (cleanValue.includes("about")) return "about";
   return "dashboard";
 }
@@ -507,11 +513,32 @@ function installAutoUpdateTimer() {
     shellQuote(installCommand)
   ].join(" ");
   return runDetachedSystemAction({
-    actionName: "Install auto-update",
+    actionName: "Turn on auto-update",
     command,
     message:
-      "Weekly auto-update setup started. The Raspberry Pi will check GitHub and rebuild the app every week."
+      "Two-week auto-update is turning on. The Raspberry Pi will check GitHub, rebuild, and restart on that schedule."
   });
+}
+
+function disableAutoUpdateTimer() {
+  const disableCommand = "systemctl disable --now listening-house-auto-update.timer";
+  const command = [
+    "sudo -n systemd-run",
+    "--unit=listening-house-disable-auto-update",
+    "--collect",
+    "/bin/bash",
+    "-lc",
+    shellQuote(disableCommand)
+  ].join(" ");
+  return runDetachedSystemAction({
+    actionName: "Turn off auto-update",
+    command,
+    message: "Two-week auto-update is turning off. Manual updates will still work."
+  });
+}
+
+function setAutoUpdateTimer(enabled) {
+  return enabled ? installAutoUpdateTimer() : disableAutoUpdateTimer();
 }
 
 function getAutoUpdateTimerStatus() {
@@ -538,7 +565,7 @@ function getAutoUpdateTimerStatus() {
     enabled: enabled.status === 0 && enabledText === "enabled",
     activeText: activeText || "inactive",
     enabledText: enabledText || "disabled",
-    schedule: "Weekly, Sunday near 3:30 AM",
+    schedule: "Every two weeks after the last update, with a startup catch-up",
     timerOutput: String(timers.stdout || "").trim()
   };
 }
@@ -998,7 +1025,7 @@ app.put(
 
 app.get(
   "/api/admin/users",
-  requireOwnerAdmin,
+  requireAdminUsers,
   handleRoute((_req, res) => {
     res.json(listStaffUsers());
   })
@@ -1021,12 +1048,12 @@ app.get(
 
 app.post(
   "/api/admin/users",
-  requireOwnerAdmin,
+  requireAdminUsers,
   handleRoute((req, res) => {
     const user = createStaffUser(req.body);
     auditRequest(req, {
       action: "staff_user_added",
-      area: "admin",
+      area: "users",
       subjectType: "staff_user",
       subjectId: user.id,
       summary: `${user.display_name} was added as a staff user.`,
@@ -1038,12 +1065,12 @@ app.post(
 
 app.patch(
   "/api/admin/users/:id",
-  requireOwnerAdmin,
+  requireAdminUsers,
   handleRoute((req, res) => {
     const user = updateStaffUser(req.params.id, req.body);
     auditRequest(req, {
       action: "staff_user_updated",
-      area: "admin",
+      area: "users",
       subjectType: "staff_user",
       subjectId: user.id,
       summary: `${user.display_name} staff access was updated.`,
@@ -1061,12 +1088,12 @@ app.patch(
 
 app.delete(
   "/api/admin/users/:id",
-  requireOwnerAdmin,
+  requireAdminUsers,
   handleRoute((req, res) => {
     const user = deleteStaffUser(req.params.id);
     auditRequest(req, {
       action: "staff_user_deleted",
-      area: "admin",
+      area: "users",
       subjectType: "staff_user",
       subjectId: user.id,
       summary: `${user.display_name} was deleted from staff users.`,
@@ -1273,8 +1300,27 @@ app.post(
       action: "auto_update_installed",
       area: "it",
       subjectType: "system_action",
-      summary: "Raspberry Pi auto-update setup was started.",
+      summary: "Raspberry Pi two-week auto-update setup was started.",
       details: { ok: result.ok }
+    });
+    res.json(result);
+  })
+);
+
+app.put(
+  "/api/admin/system/auto-update",
+  requireAdminIt,
+  handleRoute((req, res) => {
+    const enabled = Boolean(req.body?.enabled);
+    const result = setAutoUpdateTimer(enabled);
+    auditRequest(req, {
+      action: enabled ? "auto_update_enabled" : "auto_update_disabled",
+      area: "it",
+      subjectType: "system_action",
+      summary: enabled
+        ? "Raspberry Pi two-week auto-update was turned on."
+        : "Raspberry Pi two-week auto-update was turned off.",
+      details: { ok: result.ok, enabled }
     });
     res.json(result);
   })

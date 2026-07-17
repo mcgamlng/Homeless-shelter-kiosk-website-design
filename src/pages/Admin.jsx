@@ -220,7 +220,8 @@ function createStaffUserDraft() {
       admin_excel: false,
       admin_customization: false,
       admin_activities: false,
-      admin_it: false
+      admin_it: false,
+      admin_users: false
     },
     active: true
   };
@@ -235,7 +236,8 @@ const adminSectionPermissionOptions = [
   ["admin_excel", "Excel spreadsheets"],
   ["admin_customization", "Page customization"],
   ["admin_activities", "Activity customization"],
-  ["admin_it", "IT tools"]
+  ["admin_it", "IT tools"],
+  ["admin_users", "User control"]
 ];
 
 const auditAreaOptions = [
@@ -246,6 +248,7 @@ const auditAreaOptions = [
   ["excel", "Excel spreadsheets"],
   ["customization", "Page customization"],
   ["it", "IT tools"],
+  ["users", "User control"],
   ["admin", "Admin"]
 ];
 
@@ -274,9 +277,16 @@ const adminSectionConfig = {
   it: {
     title: "IT tools",
     heading: "IT tools",
-    description: "Set phone access, read-aloud voices, Raspberry Pi controls, and staff access.",
+    description: "Set phone access, read-aloud voices, Raspberry Pi controls, and auto-updates.",
     permissionName: "IT tools",
     permissionKey: "admin_it"
+  },
+  users: {
+    title: "User control",
+    heading: "User control",
+    description: "Add staff PINs and choose which staff sections each person can open.",
+    permissionName: "User Control",
+    permissionKey: "admin_users"
   },
   admin: {
     title: "Admin",
@@ -303,6 +313,7 @@ const piMaintenanceCommands = {
   update: "cd ~/listening-house-project && ./scripts/raspberry-pi/update-from-github.sh",
   exitKiosk: "pkill -f '(^|/)(chromium|chromium-browser).*--kiosk.*(:3000/kiosk|/kiosk)'",
   autoUpdate: "cd ~/listening-house-project && sudo ./scripts/raspberry-pi/install-auto-update.sh",
+  disableAutoUpdate: "sudo systemctl disable --now listening-house-auto-update.timer",
   reboot: "sudo reboot"
 };
 
@@ -403,6 +414,7 @@ export default function Admin({ section = "activities" }) {
   const [preloadingSpeech, setPreloadingSpeech] = useState(false);
   const [autoUpdateStatus, setAutoUpdateStatus] = useState(null);
   const [autoUpdateStatusMessage, setAutoUpdateStatusMessage] = useState("");
+  const [autoUpdateSaving, setAutoUpdateSaving] = useState(false);
   const [systemControlMessage, setSystemControlMessage] = useState("");
   const [runningSystemAction, setRunningSystemAction] = useState("");
   const kioskPreviewStyle = useMemo(
@@ -419,8 +431,9 @@ export default function Admin({ section = "activities" }) {
   const canUseCustomization = isOwnerAdmin || Boolean(sessionPermissions.admin_customization);
   const canUseActivities = isOwnerAdmin || Boolean(sessionPermissions.admin_activities);
   const canUseIt = isOwnerAdmin || Boolean(sessionPermissions.admin_it);
+  const canUseUsers = isOwnerAdmin || Boolean(sessionPermissions.admin_users);
   const canUseOwnerAdmin = isOwnerAdmin;
-  const canManageUsers = isOwnerAdmin;
+  const canManageUsers = canUseUsers;
   const canUseActiveSection =
     !signedIn || isOwnerAdmin || Boolean(sessionPermissions[sectionInfo.permissionKey]);
 
@@ -898,6 +911,25 @@ export default function Admin({ section = "activities" }) {
       setSystemControlMessage(`${err.message} Manual command: ${piMaintenanceCommands[action]}`);
     } finally {
       setRunningSystemAction("");
+    }
+  }
+
+  async function toggleAutoUpdate(enabled) {
+    setSystemControlMessage("");
+    setAutoUpdateSaving(true);
+    try {
+      const result = await api.setAutoUpdate(currentAdminToken(), enabled);
+      setSystemControlMessage(
+        result.message || (enabled ? "Two-week auto-update is turning on." : "Auto-update is off.")
+      );
+      window.setTimeout(() => refreshAutoUpdateStatus(currentAdminToken()), 1500);
+    } catch (err) {
+      const command = enabled
+        ? piMaintenanceCommands.autoUpdate
+        : piMaintenanceCommands.disableAutoUpdate;
+      setSystemControlMessage(`${err.message} Manual command: ${command}`);
+    } finally {
+      setAutoUpdateSaving(false);
     }
   }
 
@@ -1722,13 +1754,13 @@ export default function Admin({ section = "activities" }) {
               <div className="system-control-card">
                 <RefreshCw size={26} />
                 <div>
-                  <strong>Weekly auto-update</strong>
+                  <strong>Automatic Raspberry Pi updates</strong>
                   <p>
-                    Installs a Raspberry Pi timer that checks GitHub, rebuilds the app, and restarts
-                    the server every week.
+                    Optional background update. When turned on, the Raspberry Pi checks GitHub,
+                    rebuilds the app, and restarts the server every two weeks.
                   </p>
                   <span className={`system-status-pill ${autoUpdateStatus?.active ? "is-on" : ""}`}>
-                    {autoUpdateStatus?.active ? "Online" : "Not online yet"}
+                    {autoUpdateStatus?.active ? "On" : "Off"}
                     {autoUpdateStatus?.enabled ? " and enabled" : ""}
                   </span>
                   <small>
@@ -1737,24 +1769,25 @@ export default function Admin({ section = "activities" }) {
                       "Press Refresh status to check the Raspberry Pi timer."}
                   </small>
                 </div>
-                <button
-                  className="secondary-button compact-button"
-                  type="button"
-                  disabled={!signedIn || Boolean(runningSystemAction)}
-                  onClick={() =>
-                    runPiSystemAction("autoUpdate", "Auto-update setup", api.installAutoUpdate)
-                  }
-                >
-                  {runningSystemAction === "autoUpdate" ? "Installing..." : "Turn on weekly update"}
-                </button>
-                <button
-                  className="secondary-button compact-button"
-                  type="button"
-                  disabled={!signedIn || Boolean(runningSystemAction)}
-                  onClick={() => refreshAutoUpdateStatus(currentAdminToken())}
-                >
-                  Refresh status
-                </button>
+                <div className="system-control-actions">
+                  <label className="toggle-field system-toggle-field">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(autoUpdateStatus?.active && autoUpdateStatus?.enabled)}
+                      disabled={!signedIn || autoUpdateSaving || Boolean(runningSystemAction)}
+                      onChange={(event) => toggleAutoUpdate(event.target.checked)}
+                    />
+                    <span>{autoUpdateSaving ? "Saving..." : "Update every two weeks"}</span>
+                  </label>
+                  <button
+                    className="secondary-button compact-button"
+                    type="button"
+                    disabled={!signedIn || autoUpdateSaving || Boolean(runningSystemAction)}
+                    onClick={() => refreshAutoUpdateStatus(currentAdminToken())}
+                  >
+                    Refresh status
+                  </button>
+                </div>
               </div>
             </div>
             {systemControlMessage ? <p className="network-status">{systemControlMessage}</p> : null}
@@ -2367,7 +2400,7 @@ export default function Admin({ section = "activities" }) {
         <RestrictedAdminSection title="Excel spreadsheets" />
       ) : null}
 
-      {activeSection === "it" && canManageUsers ? (
+      {activeSection === "users" && canManageUsers ? (
         <section className="card-panel user-control-panel">
           <div className="analytics-heading">
             <div>
@@ -2487,6 +2520,8 @@ export default function Admin({ section = "activities" }) {
           </div>
           {staffUserMessage ? <p className="network-status">{staffUserMessage}</p> : null}
         </section>
+      ) : activeSection === "users" ? (
+        <RestrictedAdminSection title="User control" />
       ) : null}
 
       {activeSection === "activities" && (canUseActivities || !signedIn) ? (

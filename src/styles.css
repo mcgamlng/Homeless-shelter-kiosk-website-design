@@ -2935,6 +2935,11 @@ main {
   gap: 16px;
 }
 
+.audit-log-shortcut {
+  border-left: 8px solid var(--lh-purple);
+  background: var(--lh-aqua-light);
+}
+
 .audit-log-controls {
   display: grid;
   grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(130px, 0.7fr) auto;
@@ -5727,6 +5732,35 @@ main {
   margin: 0.2rem 0 0;
   color: var(--lh-charcoal);
   font-weight: 700;
+}
+
+.system-control-card small {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--lh-muted-brown);
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.system-status-pill {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 28px;
+  align-items: center;
+  margin-top: 0.45rem;
+  padding: 4px 10px;
+  border: 2px solid var(--lh-coral);
+  border-radius: 999px;
+  background: #fff1f0;
+  color: #7f1d1d;
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+
+.system-status-pill.is-on {
+  border-color: var(--lh-forest-green);
+  background: var(--lh-soft-green);
+  color: var(--lh-deep-green);
 }
 
 .access-qr-heading {

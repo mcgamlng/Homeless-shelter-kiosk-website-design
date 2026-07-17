@@ -395,7 +395,7 @@ the project files, and the local database. If you choose to install Codex CLI on
 a developer tool, not part of the production kiosk startup.
 
 Admin also includes **Kiosk & Raspberry Pi Controls**. Staff can run the GitHub update, install a
-two-month automatic GitHub updater, reboot the Pi, or try to exit only the Chromium kiosk window.
+weekly automatic GitHub updater, reboot the Pi, or try to exit only the Chromium kiosk window.
 Rebooting does not delete saved SQLite data, but unsaved form edits are lost and staff phones
 disconnect while the Pi restarts. The Raspberry Pi update also installs a desktop shortcut called
 **Open Listening House Kiosk** so staff can reopen the kiosk without rebooting if Chromium is closed.

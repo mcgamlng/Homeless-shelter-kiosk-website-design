@@ -41,10 +41,10 @@ SERVICE
 
 sudo tee /etc/systemd/system/listening-house-auto-update.timer >/dev/null <<TIMER
 [Unit]
-Description=Run Listening House GitHub update every two months
+Description=Run Listening House GitHub update every week
 
 [Timer]
-OnCalendar=*-01/2-01 03:30:00
+OnCalendar=Sun *-*-* 03:30:00
 Persistent=true
 RandomizedDelaySec=30min
 Unit=listening-house-auto-update.service
@@ -57,5 +57,5 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now listening-house-auto-update.timer
 
 echo "Installed Listening House automatic updater."
-echo "It will run every two months near 3:30 AM, with a small random delay."
+echo "It will run every week near Sunday at 3:30 AM, with a small random delay."
 echo "Check it with: systemctl list-timers listening-house-auto-update.timer"

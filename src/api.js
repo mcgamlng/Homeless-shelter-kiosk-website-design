@@ -252,6 +252,11 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
+  getAutoUpdateStatus(token) {
+    return request("/api/admin/system/auto-update-status", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+  },
   rebootPi(token) {
     return request("/api/admin/system/reboot", {
       method: "POST",

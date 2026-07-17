@@ -510,8 +510,37 @@ function installAutoUpdateTimer() {
     actionName: "Install auto-update",
     command,
     message:
-      "Auto-update setup started. The Raspberry Pi will check GitHub and rebuild the app every two months."
+      "Weekly auto-update setup started. The Raspberry Pi will check GitHub and rebuild the app every week."
   });
+}
+
+function getAutoUpdateTimerStatus() {
+  requireLinuxSystemAction("Auto-update status");
+  const timerName = "listening-house-auto-update.timer";
+  const active = spawnSync("systemctl", ["is-active", timerName], {
+    encoding: "utf8",
+    timeout: 3000
+  });
+  const enabled = spawnSync("systemctl", ["is-enabled", timerName], {
+    encoding: "utf8",
+    timeout: 3000
+  });
+  const timers = spawnSync("systemctl", ["list-timers", "--all", "--no-pager", timerName], {
+    encoding: "utf8",
+    timeout: 3000
+  });
+  const activeText = String(active.stdout || "").trim();
+  const enabledText = String(enabled.stdout || "").trim();
+  return {
+    ok: true,
+    timer: timerName,
+    active: active.status === 0 && activeText === "active",
+    enabled: enabled.status === 0 && enabledText === "enabled",
+    activeText: activeText || "inactive",
+    enabledText: enabledText || "disabled",
+    schedule: "Weekly, Sunday near 3:30 AM",
+    timerOutput: String(timers.stdout || "").trim()
+  };
 }
 
 function rebootRaspberryPi() {
@@ -1248,6 +1277,14 @@ app.post(
       details: { ok: result.ok }
     });
     res.json(result);
+  })
+);
+
+app.get(
+  "/api/admin/system/auto-update-status",
+  requireAdminIt,
+  handleRoute((_req, res) => {
+    res.json(getAutoUpdateTimerStatus());
   })
 );
 

@@ -240,7 +240,7 @@ Admin includes **Kiosk & Raspberry Pi Controls**:
 
 - **Exit kiosk screen** tries to close only the Chromium kiosk window on Raspberry Pi/Linux.
 - **Run update now** pulls the newest GitHub code, rebuilds the app, and restarts the server.
-- **Install auto-update** creates a Raspberry Pi timer that runs the GitHub update every two months.
+- **Install auto-update** creates a Raspberry Pi timer that runs the GitHub update every week.
 - **Reboot Pi now** sends a Raspberry Pi reboot command.
 
 The update script also installs a desktop shortcut named **Open Listening House Kiosk**. If Chromium

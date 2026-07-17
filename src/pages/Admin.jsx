@@ -401,6 +401,8 @@ export default function Admin({ section = "activities" }) {
   const [auditMessage, setAuditMessage] = useState("");
   const [speechPreloadMessage, setSpeechPreloadMessage] = useState("");
   const [preloadingSpeech, setPreloadingSpeech] = useState(false);
+  const [autoUpdateStatus, setAutoUpdateStatus] = useState(null);
+  const [autoUpdateStatusMessage, setAutoUpdateStatusMessage] = useState("");
   const [systemControlMessage, setSystemControlMessage] = useState("");
   const [runningSystemAction, setRunningSystemAction] = useState("");
   const kioskPreviewStyle = useMemo(
@@ -482,6 +484,12 @@ export default function Admin({ section = "activities" }) {
     refreshNetworkInfo(false);
     refreshSpeechStatus(false);
   }, []);
+
+  useEffect(() => {
+    if (signedIn && canUseIt && activeSection === "it") {
+      refreshAutoUpdateStatus(token);
+    }
+  }, [activeSection, canUseIt, signedIn, token]);
 
   const mostRequested = useMemo(() => data?.totals.mostRequestedActivities || [], [data]);
 
@@ -883,10 +891,27 @@ export default function Admin({ section = "activities" }) {
     try {
       const result = await apiCall(currentAdminToken());
       setSystemControlMessage(result.message || `${label} started.`);
+      if (action === "autoUpdate") {
+        window.setTimeout(() => refreshAutoUpdateStatus(currentAdminToken()), 1500);
+      }
     } catch (err) {
       setSystemControlMessage(`${err.message} Manual command: ${piMaintenanceCommands[action]}`);
     } finally {
       setRunningSystemAction("");
+    }
+  }
+
+  async function refreshAutoUpdateStatus(authToken = token) {
+    setAutoUpdateStatusMessage("");
+    try {
+      setAutoUpdateStatus(await api.getAutoUpdateStatus(authToken));
+    } catch (err) {
+      setAutoUpdateStatus(null);
+      setAutoUpdateStatusMessage(
+        err.status === 422
+          ? "Auto-update status is only available on the Raspberry Pi."
+          : err.message
+      );
     }
   }
 
@@ -1697,11 +1722,20 @@ export default function Admin({ section = "activities" }) {
               <div className="system-control-card">
                 <RefreshCw size={26} />
                 <div>
-                  <strong>Auto-update every two months</strong>
+                  <strong>Weekly auto-update</strong>
                   <p>
                     Installs a Raspberry Pi timer that checks GitHub, rebuilds the app, and restarts
-                    the server every two months.
+                    the server every week.
                   </p>
+                  <span className={`system-status-pill ${autoUpdateStatus?.active ? "is-on" : ""}`}>
+                    {autoUpdateStatus?.active ? "Online" : "Not online yet"}
+                    {autoUpdateStatus?.enabled ? " and enabled" : ""}
+                  </span>
+                  <small>
+                    {autoUpdateStatus?.schedule ||
+                      autoUpdateStatusMessage ||
+                      "Press Refresh status to check the Raspberry Pi timer."}
+                  </small>
                 </div>
                 <button
                   className="secondary-button compact-button"
@@ -1711,7 +1745,15 @@ export default function Admin({ section = "activities" }) {
                     runPiSystemAction("autoUpdate", "Auto-update setup", api.installAutoUpdate)
                   }
                 >
-                  {runningSystemAction === "autoUpdate" ? "Installing..." : "Install auto-update"}
+                  {runningSystemAction === "autoUpdate" ? "Installing..." : "Turn on weekly update"}
+                </button>
+                <button
+                  className="secondary-button compact-button"
+                  type="button"
+                  disabled={!signedIn || Boolean(runningSystemAction)}
+                  onClick={() => refreshAutoUpdateStatus(currentAdminToken())}
+                >
+                  Refresh status
                 </button>
               </div>
             </div>
@@ -1954,6 +1996,34 @@ export default function Admin({ section = "activities" }) {
             </div>
           </div>
 
+          <section className="card-panel audit-log-shortcut">
+            <div className="analytics-heading">
+              <div>
+                <h2>
+                  <History size={24} />
+                  Staff Tracking / Activity Log
+                </h2>
+                <p>
+                  This owner-only log records staff sign-ins, dashboard moves, status changes,
+                  activity edits, kiosk customization, IT actions, and Admin changes.
+                </p>
+              </div>
+              <button
+                className="primary-button compact-button"
+                type="button"
+                disabled={!signedIn}
+                onClick={() =>
+                  document.getElementById("staff-activity-log")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start"
+                  })
+                }
+              >
+                View tracking log
+              </button>
+            </div>
+          </section>
+
           <form className="card-panel data-deletion-panel" onSubmit={saveDataDeletionSettings}>
             <div className="analytics-heading">
               <div>
@@ -2024,12 +2094,12 @@ export default function Admin({ section = "activities" }) {
             {dataDeletionMessage ? <p className="network-status">{dataDeletionMessage}</p> : null}
           </form>
 
-          <section className="card-panel audit-log-panel">
+          <section className="card-panel audit-log-panel" id="staff-activity-log">
             <div className="analytics-heading">
               <div>
                 <h2>
                   <History size={24} />
-                  Staff Activity Log
+                  Staff Tracking / Activity Log
                 </h2>
                 <p>
                   Owner-only history of staff sign-ins, dashboard changes, activity edits, kiosk

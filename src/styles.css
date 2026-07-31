@@ -265,6 +265,15 @@ main {
   padding: 28px 24px 52px;
 }
 
+main.tv-main {
+  width: 100% !important;
+  max-width: none !important;
+  height: 100svh !important;
+  max-height: 100svh !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
 .primary-button,
 .secondary-button,
 .danger-button,
@@ -3346,21 +3355,30 @@ main {
 
 .tv-page {
   display: grid;
-  gap: clamp(18px, 2vw, 28px);
-  padding: clamp(18px, 2vw, 30px);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: clamp(8px, 1vw, 14px);
+  box-sizing: border-box;
+  height: 100svh;
+  max-height: 100svh;
+  padding: clamp(10px, 1.35vw, 18px);
+  overflow: hidden;
   color: var(--lh-charcoal);
 }
 
 .tv-hero {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
   align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: clamp(20px, 3vw, 36px);
+  gap: clamp(12px, 1.6vw, 22px);
+  min-height: 0;
+  padding: clamp(12px, 1.9vw, 24px);
   color: white;
   background: var(--lh-texture), linear-gradient(120deg, #202020 0%, #202020 55%, #9b6baa 100%);
-  box-shadow: 10px 10px 0 rgba(34, 53, 109, 0.18);
+  box-shadow: 6px 6px 0 rgba(34, 53, 109, 0.16);
+}
+
+.tv-hero > div {
+  min-width: 0;
 }
 
 .tv-eyebrow {
@@ -3368,39 +3386,42 @@ main {
   align-items: center;
   gap: 10px;
   color: var(--lh-aqua-light);
+  font-size: clamp(0.78rem, 1vw, 1rem);
   font-weight: 950;
   text-transform: uppercase;
   letter-spacing: 0;
 }
 
 .tv-hero h1 {
-  max-width: 920px;
-  margin: 10px 0 8px;
-  font-size: clamp(2.2rem, 5.6vw, 5.4rem);
-  line-height: 0.98;
+  max-width: 1050px;
+  margin: 4px 0 6px;
+  font-size: clamp(1.9rem, 4.2vw, 4.2rem);
+  line-height: 0.94;
 }
 
 .tv-hero p {
   max-width: 820px;
   margin: 0;
   color: rgba(255, 255, 255, 0.82);
-  font-size: clamp(1.05rem, 1.8vw, 1.55rem);
+  font-size: clamp(0.9rem, 1.35vw, 1.25rem);
   font-weight: 750;
 }
 
 .tv-clock {
-  min-width: min(280px, 100%);
+  width: 100%;
+  min-width: 0;
   display: grid;
   justify-items: center;
-  gap: 8px;
-  padding: 18px 22px;
+  gap: 4px;
+  padding: clamp(10px, 1.4vw, 16px) clamp(12px, 1.8vw, 20px);
   border: 3px solid rgba(255, 255, 255, 0.5);
   background: rgba(139, 201, 194, 0.16);
 }
 
 .tv-clock strong {
-  font-size: clamp(2.2rem, 5vw, 4.6rem);
+  font-size: clamp(1.9rem, 3vw, 3rem);
   line-height: 1;
+  white-space: nowrap;
 }
 
 .tv-clock span {
@@ -3412,12 +3433,13 @@ main {
 .tv-empty {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 18px 20px;
-  border: 3px solid var(--lh-navy);
+  gap: 10px;
+  min-height: 0;
+  padding: clamp(10px, 1.2vw, 14px) clamp(12px, 1.6vw, 18px);
+  border: 2px solid var(--lh-navy);
   background: var(--lh-warm-white);
   color: var(--lh-navy);
-  font-size: clamp(1.1rem, 2vw, 1.6rem);
+  font-size: clamp(0.95rem, 1.5vw, 1.35rem);
   font-weight: 950;
 }
 
@@ -3437,65 +3459,85 @@ main {
 .tv-empty p {
   margin: 0;
   color: var(--lh-muted-brown);
-  font-size: clamp(1rem, 1.8vw, 1.35rem);
+  font-size: clamp(0.88rem, 1.25vw, 1.12rem);
 }
 
 .tv-ready-strip {
   display: grid;
-  gap: 14px;
-  padding: 18px;
-  border: 4px solid var(--lh-lime);
+  gap: 8px;
+  min-height: 0;
+  padding: clamp(10px, 1.2vw, 14px);
+  overflow: hidden;
+  border: 3px solid var(--lh-lime);
   background: #edf8e8;
 }
 
 .tv-ready-strip h2 {
-  font-size: clamp(1.8rem, 3vw, 3rem);
+  font-size: clamp(1.25rem, 2vw, 2.2rem);
 }
 
 .tv-ready-list,
 .tv-activity-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tv-ready-list {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  max-height: 24svh;
 }
 
 .tv-section-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: clamp(14px, 2vw, 24px);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: clamp(8px, 1vw, 12px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .tv-activity-section {
   display: grid;
-  gap: 14px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
   align-content: start;
-  min-height: 220px;
-  padding: clamp(16px, 2vw, 22px);
-  border: 3px solid var(--lh-navy);
+  min-height: 0;
+  padding: clamp(10px, 1.2vw, 14px);
+  overflow: hidden;
+  border: 2px solid var(--lh-navy);
   background: var(--lh-warm-white);
-  box-shadow: 8px 8px 0 rgba(34, 53, 109, 0.15);
+  box-shadow: 4px 4px 0 rgba(34, 53, 109, 0.13);
 }
 
 .tv-activity-section h2 {
-  font-size: clamp(1.5rem, 2.5vw, 2.3rem);
+  overflow: hidden;
+  font-size: clamp(1rem, 1.7vw, 1.8rem);
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tv-section-empty {
   margin: 0;
-  padding: 16px;
+  padding: 10px;
   background: var(--lh-soft-green);
   color: var(--lh-muted-brown);
+  font-size: clamp(0.78rem, 1vw, 0.95rem);
   font-weight: 900;
 }
 
 .tv-guest-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: 8px;
   align-items: center;
-  padding: 14px;
-  border-left: 8px solid var(--lh-purple);
+  min-height: 0;
+  padding: 8px 10px;
+  border-left: 6px solid var(--lh-purple);
   background: var(--lh-aqua-light);
-  box-shadow: 5px 5px 0 rgba(34, 53, 109, 0.12);
+  box-shadow: 3px 3px 0 rgba(34, 53, 109, 0.12);
 }
 
 .tv-guest-card.is-ready {
@@ -3507,14 +3549,14 @@ main {
 }
 
 .tv-guest-number {
-  width: clamp(48px, 5vw, 70px);
-  height: clamp(48px, 5vw, 70px);
+  width: clamp(34px, 3.6vw, 54px);
+  height: clamp(34px, 3.6vw, 54px);
   display: grid;
   place-items: center;
   border-radius: 999px;
   background: var(--lh-purple);
   color: white;
-  font-size: clamp(1.35rem, 2.5vw, 2.1rem);
+  font-size: clamp(1rem, 1.8vw, 1.6rem);
   font-weight: 1000;
 }
 
@@ -3533,7 +3575,7 @@ main {
 .tv-guest-main strong {
   overflow-wrap: anywhere;
   color: var(--lh-navy);
-  font-size: clamp(1.35rem, 2.5vw, 2.2rem);
+  font-size: clamp(1rem, 1.7vw, 1.65rem);
   line-height: 1;
 }
 
@@ -3550,8 +3592,31 @@ main {
 
 .tv-guest-time strong {
   color: var(--lh-navy);
-  font-size: clamp(1.2rem, 2.3vw, 2rem);
+  font-size: clamp(0.95rem, 1.5vw, 1.45rem);
   white-space: nowrap;
+}
+
+@media (max-height: 720px) and (min-width: 780px) {
+  .tv-page {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .tv-hero {
+    padding: 12px;
+  }
+
+  .tv-hero p {
+    display: none;
+  }
+
+  .tv-clock {
+    min-width: 190px;
+  }
+
+  .tv-section-empty {
+    padding: 8px;
+  }
 }
 
 .toggle-field {
@@ -6793,6 +6858,13 @@ main {
 .topbar.is-kiosk-topbar + main {
   width: 100% !important;
   padding-top: 10px !important;
+}
+
+.topbar.is-kiosk-topbar + main.tv-main {
+  height: 100svh !important;
+  max-height: 100svh !important;
+  padding: 0 !important;
+  overflow: hidden !important;
 }
 
 /* Activities are the highest-use kiosk screen. Keep this page simple and reliable on Pi. */

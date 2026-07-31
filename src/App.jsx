@@ -65,6 +65,8 @@ function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const isKiosk = location.pathname === "/kiosk";
+  const isTv = location.pathname === "/tv";
+  const isDisplayMode = isKiosk || isTv;
   const [staffMenuOpen, setStaffMenuOpen] = useState(false);
   const [pendingPath, setPendingPath] = useState("");
   const [entryPin, setEntryPin] = useState("");
@@ -73,7 +75,7 @@ function AppShell() {
   const [settings, setSettings] = useState(null);
   const [signedInUser, setSignedInUser] = useState(readStoredStaffUser);
   const customization = getKioskCustomization(settings || {});
-  const kioskThemeStyle = isKiosk ? getKioskCssVariables(settings || {}) : undefined;
+  const kioskThemeStyle = isDisplayMode ? getKioskCssVariables(settings || {}) : undefined;
 
   useEffect(() => {
     setStaffMenuOpen(false);
@@ -125,7 +127,7 @@ function AppShell() {
       return;
     }
 
-    if (isKiosk && protectedPaths.has(path)) {
+    if (isDisplayMode && protectedPaths.has(path)) {
       setPendingPath(path);
       setEntryPin("");
       setEntryMessage("");
@@ -161,7 +163,7 @@ function AppShell() {
 
   return (
     <div className="app" style={kioskThemeStyle}>
-      <header className={`topbar ${isKiosk ? "is-kiosk-topbar" : ""}`}>
+      <header className={`topbar ${isDisplayMode ? "is-kiosk-topbar" : ""}`}>
         <Link className="brand" to="/kiosk" aria-label="Listening House Guest Check-In System">
           <span className="brand-mark">
             <img src="/icons/lh-icon.svg" alt="" aria-hidden="true" />
@@ -172,22 +174,22 @@ function AppShell() {
           </span>
         </Link>
         <button
-          className={`staff-menu-toggle ${isKiosk ? "" : "main-menu-toggle"}`}
+          className={`staff-menu-toggle ${isDisplayMode ? "" : "main-menu-toggle"}`}
           type="button"
           onClick={() => setStaffMenuOpen((open) => !open)}
           aria-expanded={staffMenuOpen}
-          aria-controls={isKiosk ? "staff-navigation" : "main-navigation"}
+          aria-controls={isDisplayMode ? "staff-navigation" : "main-navigation"}
         >
           {staffMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          <span className="staff-menu-label">{isKiosk ? "Staff menu" : "Main menu"}</span>
+          <span className="staff-menu-label">{isDisplayMode ? "Staff menu" : "Main menu"}</span>
         </button>
         <nav
-          className={`topnav ${isKiosk ? "is-staff-panel" : "is-main-panel"} ${
+          className={`topnav ${isDisplayMode ? "is-staff-panel" : "is-main-panel"} ${
             staffMenuOpen ? "is-open" : ""
           }`}
-          id={isKiosk ? "staff-navigation" : "main-navigation"}
-          aria-label={isKiosk ? "Staff navigation" : "Main navigation"}
-          aria-hidden={isKiosk && !staffMenuOpen}
+          id={isDisplayMode ? "staff-navigation" : "main-navigation"}
+          aria-label={isDisplayMode ? "Staff navigation" : "Main navigation"}
+          aria-hidden={isDisplayMode && !staffMenuOpen}
         >
           {navItems.map((item) => (
             <button
@@ -195,7 +197,7 @@ function AppShell() {
               className={location.pathname === item.to ? "active" : ""}
               key={item.to}
               onClick={() => requestNavigation(item.to)}
-              tabIndex={isKiosk && !staffMenuOpen ? -1 : 0}
+              tabIndex={isDisplayMode && !staffMenuOpen ? -1 : 0}
               type="button"
             >
               {item.label}
@@ -203,7 +205,7 @@ function AppShell() {
           ))}
         </nav>
       </header>
-      <main>
+      <main className={isTv ? "tv-main" : undefined}>
         <Routes>
           <Route path="/" element={<KioskLauncher />} />
           <Route path="/kiosk" element={<Kiosk settings={settings} />} />
@@ -300,7 +302,7 @@ function AppShell() {
             {entryMessage ? <p className="error-message">{entryMessage}</p> : null}
             <div className="entry-modal-actions">
               <button className="secondary-button" onClick={() => setPendingPath("")} type="button">
-                Stay on kiosk
+                {isTv ? "Stay on TV" : "Stay on kiosk"}
               </button>
               <button className="primary-button" disabled={entryLoading || !entryPin}>
                 {entryLoading ? "Checking..." : "Unlock"}
@@ -309,7 +311,7 @@ function AppShell() {
           </form>
         </div>
       ) : null}
-      {signedInUser && !isKiosk ? <StaffSignedInBadge user={signedInUser} /> : null}
+      {signedInUser && !isDisplayMode ? <StaffSignedInBadge user={signedInUser} /> : null}
     </div>
   );
 }

@@ -1115,6 +1115,64 @@ export function createActivity(payload) {
   );
 }
 
+function syncActiveWaitingItemsWithActivity(activity) {
+  ensureCurrentDashboardDay();
+  const { dashboardDayStart, checkInIdFloor } = getCurrentDashboardDayContext();
+  const candidates = rows(
+    `SELECT sai.id, sai.check_in_id, ci.checked_in_at
+     FROM scheduled_activity_items sai
+     JOIN check_ins ci ON ci.id = sai.check_in_id
+     WHERE sai.activity_id = ?
+       AND sai.status = 'Waiting'
+       AND ci.status = 'active'`,
+    [activity.id]
+  ).filter((row) => isInCurrentDashboardDay(row, dashboardDayStart, checkInIdFloor));
+  if (candidates.length === 0) return 0;
+
+  const translations = buildScheduledActivityTranslations(activity);
+  const shouldSchedule = Boolean(activity.active) && Boolean(activity.time_limit_enabled);
+  const update = db.prepare(
+    `UPDATE scheduled_activity_items
+     SET activity_name = ?,
+         activity_name_es = ?,
+         activity_name_hmn = ?,
+         activity_name_so = ?,
+         duration_minutes = ?,
+         is_timed = ?,
+         activity_window_enabled = ?,
+         activity_start_time = ?,
+         activity_end_time = ?,
+         scheduled_start = CASE WHEN ? = 1 THEN scheduled_start ELSE NULL END,
+         scheduled_end = CASE WHEN ? = 1 THEN scheduled_end ELSE NULL END,
+         alarm_enabled = ?,
+         alarm_minutes_before = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  );
+  const transaction = db.transaction(() => {
+    candidates.forEach((row) => {
+      update.run(
+        activity.name,
+        translations.activity_name_es,
+        translations.activity_name_hmn,
+        translations.activity_name_so,
+        activity.duration_minutes,
+        shouldSchedule ? 1 : 0,
+        activity.availability_window_enabled ? 1 : 0,
+        activity.availability_start,
+        activity.availability_end,
+        shouldSchedule ? 1 : 0,
+        shouldSchedule ? 1 : 0,
+        shouldSchedule && activity.alarm_enabled ? 1 : 0,
+        activity.alarm_minutes_before || 5,
+        row.id
+      );
+    });
+  });
+  transaction();
+  return candidates.length;
+}
+
 export function updateActivity(id, payload) {
   const current = one("SELECT * FROM activities WHERE id = ?", [id]);
   if (!current) {
@@ -1169,9 +1227,23 @@ export function updateActivity(id, payload) {
     activity.active ? 1 : 0,
     id
   );
-  return getActivities({ includeInactive: true }).find(
+  const updated = getActivities({ includeInactive: true }).find(
     (candidate) => Number(candidate.id) === Number(id)
   );
+  const syncedItems = syncActiveWaitingItemsWithActivity(updated);
+  if (syncedItems > 0) {
+    try {
+      rebalanceActiveWaitingSchedule();
+    } catch (error) {
+      return {
+        ...updated,
+        active_schedule_warning:
+          error.message ||
+          "Activity was saved, but today's waiting schedule could not be fully rebuilt."
+      };
+    }
+  }
+  return updated;
 }
 
 export function deleteActivity(id) {
@@ -1903,23 +1975,35 @@ function roundToOneDecimal(value) {
 }
 
 function buildActivityDurationAnalytics(details = []) {
-  const completedTimedItems = details.filter(
-    (item) => item.status === "Completed" && item.is_timed
-  );
-  const itemIds = completedTimedItems.map((item) => Number(item.id)).filter(Boolean);
-  if (itemIds.length === 0) {
-    return { activityDurations: [], activityDurationTotals: [] };
-  }
+  const requestTotals = details.reduce((acc, item) => {
+    const activityName = item.activity_name || "Activity";
+    if (!acc.has(activityName)) {
+      acc.set(activityName, {
+        activity: activityName,
+        requests: 0,
+        uniqueGuests: new Set()
+      });
+    }
+    const total = acc.get(activityName);
+    total.requests += 1;
+    total.uniqueGuests.add(item.guest_id);
+    return acc;
+  }, new Map());
 
-  const placeholders = itemIds.map(() => "?").join(",");
-  const historyRows = rows(
-    `SELECT scheduled_item_id, new_status, changed_at
-     FROM status_history
-     WHERE scheduled_item_id IN (${placeholders})
-       AND new_status IN ('In Progress', 'Completed')
-     ORDER BY scheduled_item_id, datetime(changed_at), id`,
-    itemIds
-  );
+  const completedItems = details.filter((item) => item.status === "Completed");
+  const itemIds = completedItems.map((item) => Number(item.id)).filter(Boolean);
+
+  const historyRows =
+    itemIds.length === 0
+      ? []
+      : rows(
+          `SELECT scheduled_item_id, new_status, changed_at
+           FROM status_history
+           WHERE scheduled_item_id IN (${itemIds.map(() => "?").join(",")})
+             AND new_status IN ('In Progress', 'Completed')
+           ORDER BY scheduled_item_id, datetime(changed_at), id`,
+          itemIds
+        );
   const historyByItem = historyRows.reduce((acc, row) => {
     const itemId = Number(row.scheduled_item_id);
     if (!acc.has(itemId)) acc.set(itemId, []);
@@ -1927,7 +2011,7 @@ function buildActivityDurationAnalytics(details = []) {
     return acc;
   }, new Map());
 
-  const activityDurations = completedTimedItems
+  const activityDurations = completedItems
     .map((item) => {
       const history = historyByItem.get(Number(item.id)) || [];
       let currentStart = null;
@@ -1954,16 +2038,18 @@ function buildActivityDurationAnalytics(details = []) {
       }
       const scheduledStart = parseStoredDate(item.scheduled_start);
       const scheduledEnd = parseStoredDate(item.scheduled_end);
-      const scheduledMinutes =
-        Number(item.duration_minutes) ||
-        (Number.isNaN(scheduledStart.getTime()) || Number.isNaN(scheduledEnd.getTime())
-          ? 0
-          : Math.round((scheduledEnd.getTime() - scheduledStart.getTime()) / 60_000));
+      const scheduledMinutes = item.is_timed
+        ? Number(item.duration_minutes) ||
+          (Number.isNaN(scheduledStart.getTime()) || Number.isNaN(scheduledEnd.getTime())
+            ? 0
+            : Math.round((scheduledEnd.getTime() - scheduledStart.getTime()) / 60_000))
+        : null;
       const actualMinutes = Math.max(
         0,
         roundToOneDecimal((measuredEnd.getTime() - measuredStart.getTime()) / 60_000)
       );
-      const differenceMinutes = roundToOneDecimal(actualMinutes - scheduledMinutes);
+      const differenceMinutes =
+        scheduledMinutes === null ? null : roundToOneDecimal(actualMinutes - scheduledMinutes);
       return {
         itemId: item.id,
         date: formatDateKey(parseStoredDate(item.checked_in_at)),
@@ -1988,43 +2074,81 @@ function buildActivityDurationAnalytics(details = []) {
         a.guestName.localeCompare(b.guestName)
     );
 
-  const totalsByActivity = activityDurations.reduce((acc, row) => {
-    if (!acc.has(row.activity)) {
-      acc.set(row.activity, {
-        activity: row.activity,
-        sessions: 0,
-        totalActualMinutes: 0,
-        totalScheduledMinutes: 0,
-        shortestMinutes: row.actualMinutes,
-        longestMinutes: row.actualMinutes
-      });
-    }
-    const total = acc.get(row.activity);
-    total.sessions += 1;
-    total.totalActualMinutes += row.actualMinutes;
-    total.totalScheduledMinutes += row.scheduledMinutes;
-    total.shortestMinutes = Math.min(total.shortestMinutes, row.actualMinutes);
-    total.longestMinutes = Math.max(total.longestMinutes, row.actualMinutes);
+  const totalsByActivity = [...requestTotals.values()].reduce((acc, row) => {
+    acc.set(row.activity, {
+      activity: row.activity,
+      requests: row.requests,
+      uniqueGuests: row.uniqueGuests.size,
+      sessions: 0,
+      totalActualMinutes: 0,
+      totalScheduledMinutes: 0,
+      scheduledSessionCount: 0,
+      shortestMinutes: null,
+      longestMinutes: null
+    });
     return acc;
   }, new Map());
 
+  activityDurations.forEach((row) => {
+    if (!totalsByActivity.has(row.activity)) {
+      totalsByActivity.set(row.activity, {
+        activity: row.activity,
+        requests: 0,
+        uniqueGuests: 0,
+        sessions: 0,
+        totalActualMinutes: 0,
+        totalScheduledMinutes: 0,
+        scheduledSessionCount: 0,
+        shortestMinutes: null,
+        longestMinutes: null
+      });
+    }
+    const total = totalsByActivity.get(row.activity);
+    total.sessions += 1;
+    total.totalActualMinutes += row.actualMinutes;
+    if (row.scheduledMinutes !== null) {
+      total.totalScheduledMinutes += row.scheduledMinutes;
+      total.scheduledSessionCount += 1;
+    }
+    total.shortestMinutes =
+      total.shortestMinutes === null
+        ? row.actualMinutes
+        : Math.min(total.shortestMinutes, row.actualMinutes);
+    total.longestMinutes =
+      total.longestMinutes === null
+        ? row.actualMinutes
+        : Math.max(total.longestMinutes, row.actualMinutes);
+  });
+
   const activityDurationTotals = [...totalsByActivity.values()]
     .map((item) => {
-      const averageActualMinutes = roundToOneDecimal(item.totalActualMinutes / item.sessions);
-      const averageScheduledMinutes = roundToOneDecimal(item.totalScheduledMinutes / item.sessions);
+      const averageActualMinutes =
+        item.sessions === 0 ? 0 : roundToOneDecimal(item.totalActualMinutes / item.sessions);
+      const averageScheduledMinutes =
+        item.scheduledSessionCount === 0
+          ? null
+          : roundToOneDecimal(item.totalScheduledMinutes / item.scheduledSessionCount);
       return {
         activity: item.activity,
+        requests: item.requests,
+        uniqueGuests: item.uniqueGuests,
         sessions: item.sessions,
         averageActualMinutes,
-        shortestMinutes: roundToOneDecimal(item.shortestMinutes),
-        longestMinutes: roundToOneDecimal(item.longestMinutes),
+        shortestMinutes:
+          item.shortestMinutes === null ? 0 : roundToOneDecimal(item.shortestMinutes),
+        longestMinutes: item.longestMinutes === null ? 0 : roundToOneDecimal(item.longestMinutes),
         averageScheduledMinutes,
-        averageDifferenceMinutes: roundToOneDecimal(averageActualMinutes - averageScheduledMinutes)
+        averageDifferenceMinutes:
+          averageScheduledMinutes === null
+            ? null
+            : roundToOneDecimal(averageActualMinutes - averageScheduledMinutes)
       };
     })
     .toSorted(
       (a, b) =>
-        b.averageActualMinutes - a.averageActualMinutes || a.activity.localeCompare(b.activity)
+        b.requests - a.requests ||
+        b.averageActualMinutes - a.averageActualMinutes ||
+        a.activity.localeCompare(b.activity)
     );
 
   return { activityDurations, activityDurationTotals };
@@ -2354,7 +2478,11 @@ export function createAnalyticsWorkbook({ period = "day", date } = {}) {
             "Waiting",
             "In Progress",
             "Completed",
-            "Skipped"
+            "Skipped",
+            "Measured Sessions",
+            "Average Actual Minutes",
+            "Shortest Actual Minutes",
+            "Longest Actual Minutes"
           ],
           ...report.activityTotals.map((item) => [
             item.activity,
@@ -2363,7 +2491,15 @@ export function createAnalyticsWorkbook({ period = "day", date } = {}) {
             item.waiting,
             item.inProgress,
             item.completed,
-            item.skipped
+            item.skipped,
+            report.activityDurationTotals.find((duration) => duration.activity === item.activity)
+              ?.sessions || 0,
+            report.activityDurationTotals.find((duration) => duration.activity === item.activity)
+              ?.averageActualMinutes || "",
+            report.activityDurationTotals.find((duration) => duration.activity === item.activity)
+              ?.shortestMinutes || "",
+            report.activityDurationTotals.find((duration) => duration.activity === item.activity)
+              ?.longestMinutes || ""
           ])
         ]
       },
@@ -2386,9 +2522,9 @@ export function createAnalyticsWorkbook({ period = "day", date } = {}) {
             item.guestName,
             item.startedAtDisplay,
             item.completedAtDisplay,
-            item.scheduledMinutes,
+            item.scheduledMinutes ?? "",
             item.actualMinutes,
-            item.differenceMinutes
+            item.differenceMinutes ?? ""
           ])
         ]
       },

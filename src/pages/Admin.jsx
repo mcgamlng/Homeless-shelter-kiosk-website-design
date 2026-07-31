@@ -969,11 +969,13 @@ export default function Admin({ section = "activities" }) {
 
   function downloadDurationChartData() {
     if (!analytics?.activityDurationTotals?.length) {
-      setMessage("There is no measured activity duration data for this report yet.");
+      setMessage("There is no activity usage data for this report yet.");
       return;
     }
     const header = [
       "Activity",
+      "Requests",
+      "Unique Guests",
       "Measured Sessions",
       "Average Actual Minutes",
       "Shortest Minutes",
@@ -983,12 +985,14 @@ export default function Admin({ section = "activities" }) {
     ];
     const rows = analytics.activityDurationTotals.map((item) => [
       item.activity,
+      item.requests,
+      item.uniqueGuests,
       item.sessions,
       item.averageActualMinutes,
-      item.shortestMinutes,
-      item.longestMinutes,
-      item.averageScheduledMinutes,
-      item.averageDifferenceMinutes
+      item.sessions ? item.shortestMinutes : "",
+      item.sessions ? item.longestMinutes : "",
+      item.averageScheduledMinutes ?? "",
+      item.averageDifferenceMinutes ?? ""
     ]);
     const csv = [header, ...rows]
       .map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(","))
@@ -2368,8 +2372,11 @@ export default function Admin({ section = "activities" }) {
                 <section className="analytics-duration-panel">
                   <div className="analytics-section-title">
                     <div>
-                      <h3>Actual activity time</h3>
-                      <p>Measured from when staff press In Progress until they press Completed.</p>
+                      <h3>Activity usage and time</h3>
+                      <p>
+                        Every requested activity appears here. Time is measured when staff press In
+                        Progress and then Completed.
+                      </p>
                     </div>
                     <button
                       className="secondary-button compact-button"
@@ -2383,8 +2390,7 @@ export default function Admin({ section = "activities" }) {
                   </div>
                   {analytics.activityDurationTotals.length === 0 ? (
                     <p className="analytics-empty">
-                      No measured durations yet. Mark an activity In Progress and then Completed to
-                      start collecting this data.
+                      No activity requests for this report period yet.
                     </p>
                   ) : (
                     <div className="duration-chart-list">
@@ -2395,6 +2401,11 @@ export default function Admin({ section = "activities" }) {
                           maxMinutes={Math.max(
                             ...analytics.activityDurationTotals.map(
                               (duration) => duration.averageActualMinutes
+                            )
+                          )}
+                          maxRequests={Math.max(
+                            ...analytics.activityDurationTotals.map(
+                              (duration) => duration.requests || 0
                             )
                           )}
                         />
@@ -3319,27 +3330,49 @@ function formatDurationMinutes(value) {
   return `${minutes} min`;
 }
 
-function DurationChartRow({ item, maxMinutes }) {
-  const width = maxMinutes > 0 ? Math.max(8, (item.averageActualMinutes / maxMinutes) * 100) : 0;
-  const difference = Number(item.averageDifferenceMinutes) || 0;
+function DurationChartRow({ item, maxMinutes, maxRequests }) {
+  const measured = Number(item.sessions || 0) > 0;
+  const timeWidth =
+    measured && maxMinutes > 0 ? Math.max(8, (item.averageActualMinutes / maxMinutes) * 100) : 0;
+  const requestWidth =
+    maxRequests > 0 ? Math.max(8, ((Number(item.requests) || 0) / maxRequests) * 100) : 0;
+  const difference =
+    item.averageDifferenceMinutes === null || item.averageDifferenceMinutes === undefined
+      ? null
+      : Number(item.averageDifferenceMinutes) || 0;
   return (
     <article className="duration-chart-row">
       <div className="duration-chart-meta">
         <strong>{item.activity}</strong>
         <span>
-          {item.sessions} measured {item.sessions === 1 ? "session" : "sessions"}
+          {item.requests} {item.requests === 1 ? "request" : "requests"} from {item.uniqueGuests}{" "}
+          {item.uniqueGuests === 1 ? "person" : "people"}
         </span>
       </div>
-      <div className="duration-bar-track" aria-hidden="true">
-        <span style={{ width: `${width}%` }} />
+      <div className="duration-bar-stack" aria-hidden="true">
+        <div className="duration-bar-track is-requests">
+          <span style={{ width: `${requestWidth}%` }} />
+        </div>
+        <div className="duration-bar-track">
+          <span style={{ width: `${timeWidth}%` }} />
+        </div>
       </div>
       <div className="duration-chart-numbers">
-        <strong>{formatDurationMinutes(item.averageActualMinutes)}</strong>
-        <span>
-          Short {item.shortestMinutes} / long {item.longestMinutes} / scheduled avg{" "}
-          {item.averageScheduledMinutes} / {difference >= 0 ? "+" : ""}
-          {difference} min
-        </span>
+        <strong>
+          {measured ? formatDurationMinutes(item.averageActualMinutes) : "Not timed yet"}
+        </strong>
+        {measured ? (
+          <span>
+            {item.sessions} measured {item.sessions === 1 ? "session" : "sessions"} / short{" "}
+            {item.shortestMinutes} / long {item.longestMinutes}
+            {item.averageScheduledMinutes === null
+              ? ""
+              : ` / scheduled avg ${item.averageScheduledMinutes}`}
+            {difference === null ? "" : ` / ${difference >= 0 ? "+" : ""}${difference} min`}
+          </span>
+        ) : (
+          <span>Press In Progress, then Completed, to measure actual time.</span>
+        )}
       </div>
     </article>
   );

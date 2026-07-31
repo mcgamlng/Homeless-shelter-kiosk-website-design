@@ -3311,6 +3311,11 @@ main.tv-main {
   font-weight: 850;
 }
 
+.duration-bar-stack {
+  display: grid;
+  gap: 6px;
+}
+
 .duration-bar-track {
   height: 22px;
   overflow: hidden;
@@ -3323,6 +3328,15 @@ main.tv-main {
   height: 100%;
   min-width: 8%;
   background: linear-gradient(90deg, var(--lh-purple), var(--lh-lime));
+}
+
+.duration-bar-track.is-requests {
+  height: 14px;
+  border-color: rgba(34, 53, 109, 0.65);
+}
+
+.duration-bar-track.is-requests span {
+  background: linear-gradient(90deg, var(--lh-navy), var(--lh-purple));
 }
 
 .admin-actions {
@@ -3367,7 +3381,7 @@ main.tv-main {
 
 .tv-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
   align-items: center;
   gap: clamp(12px, 1.6vw, 22px);
   min-height: 0;
@@ -3395,7 +3409,7 @@ main.tv-main {
 .tv-hero h1 {
   max-width: 1050px;
   margin: 4px 0 6px;
-  font-size: clamp(1.9rem, 4.2vw, 4.2rem);
+  font-size: clamp(1.7rem, 3.8vw, 3.6rem);
   line-height: 0.94;
 }
 
@@ -3419,7 +3433,7 @@ main.tv-main {
 }
 
 .tv-clock strong {
-  font-size: clamp(1.9rem, 3vw, 3rem);
+  font-size: clamp(1.55rem, 2.4vw, 2.35rem);
   line-height: 1;
   white-space: nowrap;
 }

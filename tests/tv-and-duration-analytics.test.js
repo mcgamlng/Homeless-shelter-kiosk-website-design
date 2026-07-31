@@ -70,6 +70,44 @@ test("TV display data is public-safe and analytics measures actual activity dura
     const afterStart = repository.getTvDisplayData({ now, leadMinutes: 10 });
     assert.equal(afterStart.upcoming.length, 0);
 
+    const listActivity = repository.createActivity({
+      name: "Quiet Room Test",
+      duration_minutes: 15,
+      time_limit_enabled: false,
+      availability_window_enabled: false,
+      active: true
+    });
+    const listCheckIn = repository.createCheckIn({
+      activityIds: [listActivity.id],
+      language: "en",
+      signIn: { mode: "auto", firstName: "Taylor", lastName: "Lane" }
+    });
+    assert.equal(listCheckIn.items[0].is_timed, false);
+
+    repository.updateActivity(listActivity.id, {
+      ...listActivity,
+      time_limit_enabled: true,
+      duration_minutes: 15,
+      availability_window_enabled: false,
+      active: true
+    });
+    const rescheduledListCheckIn = repository.getCheckIn(listCheckIn.id);
+    const rescheduledListItem = rescheduledListCheckIn.items[0];
+    assert.equal(rescheduledListItem.is_timed, true);
+    assert.ok(rescheduledListItem.scheduled_start);
+
+    const listStart = new Date(rescheduledListItem.scheduled_start);
+    const tvAfterActivityTimingChange = repository.getTvDisplayData({
+      now: new Date(listStart.getTime() - 5 * 60_000),
+      leadMinutes: 10
+    });
+    assert.ok(
+      tvAfterActivityTimingChange.upcoming.some(
+        (item) =>
+          item.activity_name === "Quiet Room Test" && item.guest_display_name === "Taylor L."
+      )
+    );
+
     const durationCheckIn = repository.createCheckIn({
       activityIds: [activity.id],
       language: "en",
@@ -96,13 +134,54 @@ test("TV display data is public-safe and analytics measures actual activity dura
       )
       .run(durationItemId, "In Progress", "Completed", "2026-06-24 14:25:00");
 
+    const measuredListActivity = repository.createActivity({
+      name: "Beds",
+      duration_minutes: 20,
+      time_limit_enabled: false,
+      active: true
+    });
+    const measuredListCheckIn = repository.createCheckIn({
+      activityIds: [measuredListActivity.id],
+      language: "en",
+      signIn: { mode: "auto", firstName: "Robin", lastName: "Stone" }
+    });
+    const measuredListItemId = measuredListCheckIn.items[0].id;
+    database
+      .prepare("UPDATE check_ins SET checked_in_at = ? WHERE id = ?")
+      .run(isoAt("2026-06-24", 12, 10), measuredListCheckIn.id);
+    database
+      .prepare("UPDATE scheduled_activity_items SET status = 'Completed' WHERE id = ?")
+      .run(measuredListItemId);
+    database
+      .prepare(
+        `INSERT INTO status_history (scheduled_item_id, old_status, new_status, changed_at)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run(measuredListItemId, "Waiting", "In Progress", "2026-06-24 15:00:00");
+    database
+      .prepare(
+        `INSERT INTO status_history (scheduled_item_id, old_status, new_status, changed_at)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run(measuredListItemId, "In Progress", "Completed", "2026-06-24 15:50:00");
+
     const report = repository.getAnalyticsReport({ period: "day", date: "2026-06-24" });
-    assert.equal(report.summary.measuredCompletedActivities, 1);
-    assert.equal(report.summary.averageActualDurationMinutes, 25);
-    assert.equal(report.activityDurationTotals[0].sessions, 1);
-    assert.equal(report.activityDurationTotals[0].averageActualMinutes, 25);
-    assert.equal(report.activityDurationTotals[0].averageDifferenceMinutes, -5);
-    assert.equal(report.activityDurations[0].guestName, "Jamie Rivera");
+    assert.equal(report.summary.measuredCompletedActivities, 2);
+    assert.equal(report.summary.averageActualDurationMinutes, 37.5);
+    const timedTotal = report.activityDurationTotals.find(
+      (total) => total.activity === activity.name
+    );
+    assert.equal(timedTotal.sessions, 1);
+    assert.equal(timedTotal.averageActualMinutes, 25);
+    assert.equal(timedTotal.averageDifferenceMinutes, -5);
+    const listTotal = report.activityDurationTotals.find((total) => total.activity === "Beds");
+    assert.equal(listTotal.requests, 1);
+    assert.equal(listTotal.sessions, 1);
+    assert.equal(listTotal.averageActualMinutes, 50);
+    assert.equal(listTotal.averageScheduledMinutes, null);
+    assert.equal(listTotal.averageDifferenceMinutes, null);
+    assert.ok(report.activityDurations.some((item) => item.guestName === "Jamie Rivera"));
+    assert.ok(report.activityDurations.some((item) => item.guestName === "Robin Stone"));
 
     const workbook = repository.createAnalyticsWorkbook({
       period: "day",
@@ -110,7 +189,9 @@ test("TV display data is public-safe and analytics measures actual activity dura
     });
     assert.ok(workbook.buffer.includes(Buffer.from('sheet name="Activity Durations"')));
     assert.ok(workbook.buffer.includes(Buffer.from("Jamie Rivera")));
+    assert.ok(workbook.buffer.includes(Buffer.from("Robin Stone")));
     assert.ok(workbook.buffer.includes(Buffer.from("25")));
+    assert.ok(workbook.buffer.includes(Buffer.from("50")));
   } finally {
     if (database?.open) database.close();
     fs.rmSync(tempDir, { recursive: true, force: true });

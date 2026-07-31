@@ -26,6 +26,9 @@ export const api = {
       headers: { Authorization: `Bearer ${token}` }
     });
   },
+  getTv() {
+    return request("/api/tv");
+  },
   getSettings() {
     return request("/api/settings");
   },

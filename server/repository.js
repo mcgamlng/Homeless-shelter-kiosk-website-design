@@ -48,6 +48,7 @@ const ADMIN_SECTION_PERMISSION_KEYS = [
   "admin_it",
   "admin_users"
 ];
+const TV_LEAD_MINUTES = 10;
 const LOCAL_DATE_FORMATTER = new Intl.DateTimeFormat([], {
   year: "numeric",
   month: "long",
@@ -470,45 +471,29 @@ function permissionValue(payload, current, key) {
 }
 
 function normalizeStaffPermissions(payload = {}, current = {}) {
-  const hasExplicitAdminSections = hasExplicitAdminSectionPermissions(payload);
   const adminSectionValues = ADMIN_SECTION_PERMISSION_KEYS.reduce((acc, key) => {
     acc[key] = Boolean(permissionValue(payload, current, key));
     return acc;
   }, {});
-  const hasAnyAdminSection = Object.values(adminSectionValues).some(Boolean);
   const admin = Boolean(payload.admin ?? payload.can_admin ?? current.admin ?? current.can_admin);
   const shouldDefaultSectionsForLegacyAdmin =
-    admin &&
-    !hasExplicitAdminSections &&
-    current.admin === undefined &&
-    current.can_admin === undefined;
+    Boolean(current.can_admin) &&
+    !hasExplicitAdminSectionPermissions(payload) &&
+    !Object.hasOwn(payload, "admin") &&
+    !Object.hasOwn(payload, "can_admin");
 
   return {
     dashboard: Boolean(
       payload.dashboard ?? payload.can_dashboard ?? current.dashboard ?? current.can_dashboard
     ),
-    admin: admin || hasAnyAdminSection,
+    admin,
     about: Boolean(payload.about ?? payload.can_about ?? current.about ?? current.can_about),
-    admin_excel:
-      admin || hasAnyAdminSection
-        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_excel
-        : false,
+    admin_excel: shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_excel,
     admin_customization:
-      admin || hasAnyAdminSection
-        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_customization
-        : false,
-    admin_activities:
-      admin || hasAnyAdminSection
-        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_activities
-        : false,
-    admin_it:
-      admin || hasAnyAdminSection
-        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_it
-        : false,
-    admin_users:
-      admin || hasAnyAdminSection
-        ? shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_users
-        : false
+      shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_customization,
+    admin_activities: shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_activities,
+    admin_it: shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_it,
+    admin_users: shouldDefaultSectionsForLegacyAdmin || adminSectionValues.admin_users
   };
 }
 
@@ -1526,6 +1511,75 @@ export function getDashboardData() {
   };
 }
 
+function tvGuestDisplayName(item) {
+  const firstName = cleanText(item.first_name, 40);
+  const lastInitial = cleanText(item.last_name, 40).charAt(0).toUpperCase();
+  if (!firstName) return "Guest";
+  return lastInitial ? `${firstName} ${lastInitial}.` : firstName;
+}
+
+function minutesUntil(start, now) {
+  return Math.ceil((start.getTime() - now.getTime()) / 60_000);
+}
+
+function tvSectionName(value) {
+  return cleanText(value, 120) || "Activity";
+}
+
+export function getTvDisplayData({ now = new Date(), leadMinutes = TV_LEAD_MINUTES } = {}) {
+  const dashboard = getDashboardData();
+  const leadWindowEnd = addMinutes(now, Number(leadMinutes) || TV_LEAD_MINUTES);
+  const activityNames = new Set(
+    dashboard.activities
+      .filter((activity) => Boolean(activity.active) && Boolean(activity.time_limit_enabled))
+      .map((activity) => tvSectionName(activity.name))
+  );
+  const upcoming = dashboard.scheduledItems
+    .filter((item) => item.is_timed && item.status === "Waiting" && item.scheduled_start)
+    .map((item) => {
+      const scheduledStart = parseStoredDate(item.scheduled_start);
+      const scheduledEnd = parseStoredDate(item.scheduled_end);
+      if (Number.isNaN(scheduledStart.getTime()) || scheduledStart > leadWindowEnd) return null;
+      const state = scheduledStart <= now ? "ready" : "soon";
+      activityNames.add(tvSectionName(item.activity_name));
+      return {
+        daily_number: item.daily_number,
+        guest_display_name: tvGuestDisplayName(item),
+        activity_name: tvSectionName(item.activity_name),
+        scheduled_start: scheduledStart.toISOString(),
+        scheduled_end: Number.isNaN(scheduledEnd.getTime()) ? "" : scheduledEnd.toISOString(),
+        starts_in_minutes: minutesUntil(scheduledStart, now),
+        state,
+        status: item.status
+      };
+    })
+    .filter(Boolean)
+    .toSorted((a, b) => {
+      if (a.state !== b.state) return a.state === "ready" ? -1 : 1;
+      return new Date(a.scheduled_start) - new Date(b.scheduled_start);
+    });
+
+  const itemsByActivity = upcoming.reduce((acc, item) => {
+    if (!acc.has(item.activity_name)) acc.set(item.activity_name, []);
+    acc.get(item.activity_name).push(item);
+    return acc;
+  }, new Map());
+
+  const activitySections = [...activityNames]
+    .toSorted((a, b) => a.localeCompare(b))
+    .map((activityName) => ({
+      activity_name: activityName,
+      items: itemsByActivity.get(activityName) || []
+    }));
+
+  return {
+    generated_at: now.toISOString(),
+    lead_minutes: Number(leadMinutes) || TV_LEAD_MINUTES,
+    activity_sections: activitySections,
+    upcoming
+  };
+}
+
 export function updateScheduledItemStatus(id, status) {
   ensureCurrentDashboardDay();
   if (!VALID_STATUSES.has(status)) {
@@ -1844,6 +1898,138 @@ export function getDailyTotals() {
   };
 }
 
+function roundToOneDecimal(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function buildActivityDurationAnalytics(details = []) {
+  const completedTimedItems = details.filter(
+    (item) => item.status === "Completed" && item.is_timed
+  );
+  const itemIds = completedTimedItems.map((item) => Number(item.id)).filter(Boolean);
+  if (itemIds.length === 0) {
+    return { activityDurations: [], activityDurationTotals: [] };
+  }
+
+  const placeholders = itemIds.map(() => "?").join(",");
+  const historyRows = rows(
+    `SELECT scheduled_item_id, new_status, changed_at
+     FROM status_history
+     WHERE scheduled_item_id IN (${placeholders})
+       AND new_status IN ('In Progress', 'Completed')
+     ORDER BY scheduled_item_id, datetime(changed_at), id`,
+    itemIds
+  );
+  const historyByItem = historyRows.reduce((acc, row) => {
+    const itemId = Number(row.scheduled_item_id);
+    if (!acc.has(itemId)) acc.set(itemId, []);
+    acc.get(itemId).push(row);
+    return acc;
+  }, new Map());
+
+  const activityDurations = completedTimedItems
+    .map((item) => {
+      const history = historyByItem.get(Number(item.id)) || [];
+      let currentStart = null;
+      let measuredStart = null;
+      let measuredEnd = null;
+      for (const entry of history) {
+        if (entry.new_status === "In Progress") {
+          currentStart = parseStoredDate(entry.changed_at);
+        }
+        if (entry.new_status === "Completed" && currentStart) {
+          measuredStart = currentStart;
+          measuredEnd = parseStoredDate(entry.changed_at);
+          currentStart = null;
+        }
+      }
+      if (
+        !measuredStart ||
+        !measuredEnd ||
+        Number.isNaN(measuredStart.getTime()) ||
+        Number.isNaN(measuredEnd.getTime()) ||
+        measuredEnd < measuredStart
+      ) {
+        return null;
+      }
+      const scheduledStart = parseStoredDate(item.scheduled_start);
+      const scheduledEnd = parseStoredDate(item.scheduled_end);
+      const scheduledMinutes =
+        Number(item.duration_minutes) ||
+        (Number.isNaN(scheduledStart.getTime()) || Number.isNaN(scheduledEnd.getTime())
+          ? 0
+          : Math.round((scheduledEnd.getTime() - scheduledStart.getTime()) / 60_000));
+      const actualMinutes = Math.max(
+        0,
+        roundToOneDecimal((measuredEnd.getTime() - measuredStart.getTime()) / 60_000)
+      );
+      const differenceMinutes = roundToOneDecimal(actualMinutes - scheduledMinutes);
+      return {
+        itemId: item.id,
+        date: formatDateKey(parseStoredDate(item.checked_in_at)),
+        activity: item.activity_name,
+        guestName: item.guest_name,
+        firstName: item.first_name,
+        lastName: item.last_name,
+        startedAt: measuredStart.toISOString(),
+        completedAt: measuredEnd.toISOString(),
+        startedAtDisplay: formatLocalDateTime(measuredStart),
+        completedAtDisplay: formatLocalDateTime(measuredEnd),
+        scheduledMinutes,
+        actualMinutes,
+        differenceMinutes
+      };
+    })
+    .filter(Boolean)
+    .toSorted(
+      (a, b) =>
+        a.activity.localeCompare(b.activity) ||
+        new Date(a.startedAt) - new Date(b.startedAt) ||
+        a.guestName.localeCompare(b.guestName)
+    );
+
+  const totalsByActivity = activityDurations.reduce((acc, row) => {
+    if (!acc.has(row.activity)) {
+      acc.set(row.activity, {
+        activity: row.activity,
+        sessions: 0,
+        totalActualMinutes: 0,
+        totalScheduledMinutes: 0,
+        shortestMinutes: row.actualMinutes,
+        longestMinutes: row.actualMinutes
+      });
+    }
+    const total = acc.get(row.activity);
+    total.sessions += 1;
+    total.totalActualMinutes += row.actualMinutes;
+    total.totalScheduledMinutes += row.scheduledMinutes;
+    total.shortestMinutes = Math.min(total.shortestMinutes, row.actualMinutes);
+    total.longestMinutes = Math.max(total.longestMinutes, row.actualMinutes);
+    return acc;
+  }, new Map());
+
+  const activityDurationTotals = [...totalsByActivity.values()]
+    .map((item) => {
+      const averageActualMinutes = roundToOneDecimal(item.totalActualMinutes / item.sessions);
+      const averageScheduledMinutes = roundToOneDecimal(item.totalScheduledMinutes / item.sessions);
+      return {
+        activity: item.activity,
+        sessions: item.sessions,
+        averageActualMinutes,
+        shortestMinutes: roundToOneDecimal(item.shortestMinutes),
+        longestMinutes: roundToOneDecimal(item.longestMinutes),
+        averageScheduledMinutes,
+        averageDifferenceMinutes: roundToOneDecimal(averageActualMinutes - averageScheduledMinutes)
+      };
+    })
+    .toSorted(
+      (a, b) =>
+        b.averageActualMinutes - a.averageActualMinutes || a.activity.localeCompare(b.activity)
+    );
+
+  return { activityDurations, activityDurationTotals };
+}
+
 export function getAnalyticsReport({ period = "day", date } = {}) {
   const bounds = getReportBounds(period, date);
   const rangeParameters = [
@@ -1862,6 +2048,10 @@ export function getAnalyticsReport({ period = "day", date } = {}) {
      ORDER BY datetime(ci.checked_in_at), sai.activity_name`,
     rangeParameters
   ).map((row) => normalizeScheduledItem(attachGuestSummary(row)));
+  const durationAnalytics = buildActivityDurationAnalytics(details);
+  const durationByItemId = new Map(
+    durationAnalytics.activityDurations.map((item) => [Number(item.itemId), item])
+  );
   const checkIns = rows(
     `SELECT ci.*, g.first_name, g.last_name
      FROM check_ins ci
@@ -2015,6 +2205,16 @@ export function getAnalyticsReport({ period = "day", date } = {}) {
     completed: day.completed,
     skipped: day.skipped
   }));
+  const measuredCompletedActivities = durationAnalytics.activityDurations.length;
+  const averageActualDurationMinutes =
+    measuredCompletedActivities === 0
+      ? 0
+      : roundToOneDecimal(
+          durationAnalytics.activityDurations.reduce(
+            (total, item) => total + item.actualMinutes,
+            0
+          ) / measuredCompletedActivities
+        );
 
   return {
     period: bounds.period,
@@ -2030,15 +2230,23 @@ export function getAnalyticsReport({ period = "day", date } = {}) {
       activityRequests: details.length,
       completedActivities: statusTotals.Completed,
       skippedActivities: statusTotals.Skipped,
+      measuredCompletedActivities,
+      averageActualDurationMinutes,
       mostRequestedActivity: activityTotals[0]?.activity || "None"
     },
     statusTotals,
     activityTotals,
+    activityDurations: durationAnalytics.activityDurations,
+    activityDurationTotals: durationAnalytics.activityDurationTotals,
     dailyActivityTotals,
     dailySummaries,
     people,
     details: details.map((row) => ({
       ...row,
+      actual_duration_minutes: durationByItemId.get(Number(row.id))?.actualMinutes ?? "",
+      actual_started_at_display: durationByItemId.get(Number(row.id))?.startedAtDisplay ?? "",
+      actual_completed_at_display: durationByItemId.get(Number(row.id))?.completedAtDisplay ?? "",
+      actual_difference_minutes: durationByItemId.get(Number(row.id))?.differenceMinutes ?? "",
       date: formatDateKey(parseStoredDate(row.checked_in_at)),
       scheduled_start_display: row.scheduled_start
         ? formatLocalDateTime(parseStoredDate(row.scheduled_start))
@@ -2075,6 +2283,8 @@ export function createAnalyticsWorkbook({ period = "day", date } = {}) {
           ["Activity Requests", report.summary.activityRequests],
           ["Completed Activities", report.summary.completedActivities],
           ["Skipped Activities", report.summary.skippedActivities],
+          ["Measured Completed Activities", report.summary.measuredCompletedActivities],
+          ["Average Actual Duration Minutes", report.summary.averageActualDurationMinutes],
           ["Most Requested Activity", report.summary.mostRequestedActivity]
         ]
       },
@@ -2154,6 +2364,31 @@ export function createAnalyticsWorkbook({ period = "day", date } = {}) {
             item.inProgress,
             item.completed,
             item.skipped
+          ])
+        ]
+      },
+      {
+        name: "Activity Durations",
+        rows: [
+          [
+            "Date",
+            "Activity",
+            "Guest Name",
+            "Started",
+            "Completed",
+            "Scheduled Minutes",
+            "Actual Minutes",
+            "Difference Minutes"
+          ],
+          ...report.activityDurations.map((item) => [
+            item.date,
+            item.activity,
+            item.guestName,
+            item.startedAtDisplay,
+            item.completedAtDisplay,
+            item.scheduledMinutes,
+            item.actualMinutes,
+            item.differenceMinutes
           ])
         ]
       },

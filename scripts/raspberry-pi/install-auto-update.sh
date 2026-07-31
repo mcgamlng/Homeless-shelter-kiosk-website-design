@@ -41,11 +41,10 @@ SERVICE
 
 sudo tee /etc/systemd/system/listening-house-auto-update.timer >/dev/null <<TIMER
 [Unit]
-Description=Run Listening House GitHub update every two weeks
+Description=Run Listening House GitHub update weekly
 
 [Timer]
-OnBootSec=20min
-OnUnitActiveSec=14d
+OnCalendar=Sun *-*-* 03:30:00
 Persistent=true
 RandomizedDelaySec=30min
 Unit=listening-house-auto-update.service
@@ -58,5 +57,6 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now listening-house-auto-update.timer
 
 echo "Installed Listening House automatic updater."
-echo "It will run every two weeks after the last update, with a small random delay."
+echo "It will run weekly on Sunday around 3:30 AM, with a small random delay."
+echo "If the Raspberry Pi is off at that time, systemd will catch up on the next boot."
 echo "Check it with: systemctl list-timers listening-house-auto-update.timer"

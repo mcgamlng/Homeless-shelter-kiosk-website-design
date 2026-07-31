@@ -125,6 +125,7 @@ From staff devices:
 
 ```text
 http://raspberrypi.local:3000/dashboard
+http://raspberrypi.local:3000/tv
 ```
 
 Find the IP:
@@ -137,9 +138,10 @@ Then use:
 
 ```text
 http://192.168.x.x:3000/dashboard
+http://192.168.x.x:3000/tv
 ```
 
-The About page shows QR codes for the browser dashboard and Android app download.
+The About page shows QR codes for the browser dashboard, TV Section, and Android app download.
 
 ## Full-Screen Kiosk
 
@@ -241,20 +243,33 @@ Admin includes **Kiosk & Raspberry Pi Controls**:
 - **Exit kiosk screen** tries to close only the Chromium kiosk window on Raspberry Pi/Linux.
 - **Run update now** pulls the newest GitHub code, rebuilds the app, and restarts the server.
 - **Automatic Raspberry Pi updates** is an on/off checkbox that creates or disables a Raspberry Pi
-  timer. When it is on, the Pi runs the GitHub update every two weeks.
+  timer. When it is on, the Pi runs the GitHub update once a week.
 - **Reboot Pi now** sends a Raspberry Pi reboot command.
 
 The update script also installs a desktop shortcut named **Open Listening House Kiosk**. If Chromium
 is completely closed and staff cannot press a web button, double-click that desktop icon to reopen
 the kiosk without rebooting.
 
-To turn on the two-week updater from the terminal instead of Admin:
+To turn on the weekly updater from the terminal instead of Admin:
 
 ```bash
 cd ~/listening-house-project
 chmod +x scripts/raspberry-pi/*.sh
 sudo ./scripts/raspberry-pi/install-auto-update.sh
 ```
+
+## Optional TV Display
+
+The main Raspberry Pi 5 should keep running the server. A cheaper display device, such as a
+Raspberry Pi 3 A+, can open only the public TV Section in Chromium:
+
+```bash
+chromium-browser --kiosk http://raspberrypi.local:3000/tv
+```
+
+The TV Section is read-only and public like the kiosk. It shows privacy-safe names, such as first
+name plus last initial, for guests whose activity starts within about 10 minutes. When staff mark an
+activity In Progress on the dashboard, that guest disappears from the TV screen automatically.
 
 Rebooting does not delete saved check-ins because they are stored in SQLite. Do wait for any active
 check-in or Excel export to finish first. Unsaved Admin form edits are lost, and phones/tablets

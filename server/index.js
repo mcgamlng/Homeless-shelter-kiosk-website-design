@@ -24,6 +24,7 @@ import {
   getActivities,
   getDashboardData,
   getSettings,
+  getTvDisplayData,
   inspectNameCheckIn,
   listStaffUsers,
   listStaffAuditLogs,
@@ -100,6 +101,7 @@ app.set("trust proxy", 1);
 
 function emitDashboard() {
   io.emit("dashboard:update", getDashboardData());
+  io.to("tv-display").emit("tv:update", getTvDisplayData());
 }
 
 async function repairEnglishActivityTranslations() {
@@ -236,7 +238,7 @@ function requireAnyPermission(permissions, label) {
   };
 }
 
-const requireAdmin = requirePermission("admin", "staff section access");
+const requireAdmin = requirePermission("admin", "Admin");
 const requireOwnerAdmin = (req, res, next) => {
   const session = sessionFromRequest(req);
   if (!session?.owner) {
@@ -318,8 +320,9 @@ function requestedPermissionForPath(value) {
     cleanValue.includes("owner_admin") ||
     cleanValue.includes("owner admin")
   ) {
-    return "owner_admin";
+    return "admin";
   }
+  if (cleanValue.includes("tv")) return "tv";
   if (cleanValue.includes("admin_excel") || cleanValue.includes("excel")) return "admin_excel";
   if (cleanValue.includes("admin_activities") || cleanValue.includes("activity")) {
     return "admin_activities";
@@ -516,7 +519,7 @@ function installAutoUpdateTimer() {
     actionName: "Turn on auto-update",
     command,
     message:
-      "Two-week auto-update is turning on. The Raspberry Pi will check GitHub, rebuild, and restart on that schedule."
+      "Weekly auto-update is turning on. The Raspberry Pi will check GitHub, rebuild, and restart once a week."
   });
 }
 
@@ -533,7 +536,7 @@ function disableAutoUpdateTimer() {
   return runDetachedSystemAction({
     actionName: "Turn off auto-update",
     command,
-    message: "Two-week auto-update is turning off. Manual updates will still work."
+    message: "Weekly auto-update is turning off. Manual updates will still work."
   });
 }
 
@@ -565,7 +568,7 @@ function getAutoUpdateTimerStatus() {
     enabled: enabled.status === 0 && enabledText === "enabled",
     activeText: activeText || "inactive",
     enabledText: enabledText || "disabled",
-    schedule: "Every two weeks after the last update, with a startup catch-up",
+    schedule: "Weekly, Sunday near 3:30 AM, with catch-up if the Raspberry Pi was off",
     timerOutput: String(timers.stdout || "").trim()
   };
 }
@@ -637,6 +640,7 @@ app.get("/api/access-info", (req, res) => {
   res.json({
     browserUrl: `${baseUrl}/dashboard`,
     kioskUrl: `${baseUrl}/kiosk`,
+    tvUrl: `${baseUrl}/tv`,
     iphoneInstallUrl: `${baseUrl}/install?platform=ios`,
     androidInstallUrl: `${baseUrl}/install?platform=android`,
     appDownloadUrl: `${baseUrl}/downloads/ListeningHouseKiosk-debug.apk`,
@@ -826,6 +830,13 @@ app.get(
   })
 );
 
+app.get(
+  "/api/tv",
+  handleRoute((_req, res) => {
+    res.json(getTvDisplayData());
+  })
+);
+
 app.patch(
   "/api/scheduled-items/:id/status",
   requireDashboardAccess,
@@ -967,7 +978,7 @@ app.post("/api/admin/session", (req, res) => {
 
 app.get(
   "/api/admin/security",
-  requireOwnerAdmin,
+  requireAdmin,
   handleRoute((_req, res) => {
     res.json(getAdminSecuritySettings());
   })
@@ -1033,7 +1044,7 @@ app.get(
 
 app.get(
   "/api/admin/audit-logs",
-  requireOwnerAdmin,
+  requireAdmin,
   handleRoute((req, res) => {
     res.json(
       listStaffAuditLogs({
@@ -1200,7 +1211,7 @@ app.get(
 
 app.get(
   "/api/admin/data-deletion",
-  requireOwnerAdmin,
+  requireAdmin,
   handleRoute((_req, res) => {
     res.json(getDataDeletionSettings());
   })
@@ -1208,7 +1219,7 @@ app.get(
 
 app.put(
   "/api/admin/data-deletion",
-  requireOwnerAdmin,
+  requireAdmin,
   handleRoute((req, res) => {
     const settings = updateDataDeletionSettings(req.body || {});
     auditRequest(req, {
@@ -1228,7 +1239,7 @@ app.put(
 
 app.post(
   "/api/admin/data-deletion/run",
-  requireOwnerAdmin,
+  requireAdmin,
   handleRoute((req, res) => {
     const result = runYearlyDataDeletion({ reason: "manual" });
     auditRequest(req, {
@@ -1300,7 +1311,7 @@ app.post(
       action: "auto_update_installed",
       area: "it",
       subjectType: "system_action",
-      summary: "Raspberry Pi two-week auto-update setup was started.",
+      summary: "Raspberry Pi weekly auto-update setup was started.",
       details: { ok: result.ok }
     });
     res.json(result);
@@ -1318,8 +1329,8 @@ app.put(
       area: "it",
       subjectType: "system_action",
       summary: enabled
-        ? "Raspberry Pi two-week auto-update was turned on."
-        : "Raspberry Pi two-week auto-update was turned off.",
+        ? "Raspberry Pi weekly auto-update was turned on."
+        : "Raspberry Pi weekly auto-update was turned off.",
       details: { ok: result.ok, enabled }
     });
     res.json(result);
@@ -1596,6 +1607,11 @@ app.get("*", (_req, res) => {
 });
 
 io.use((socket, next) => {
+  if (socket.handshake.auth?.mode === "tv") {
+    socket.data.tvDisplay = true;
+    next();
+    return;
+  }
   const token = String(socket.handshake.auth?.token || "");
   const session = token ? adminSessions.get(token) : null;
   if (
@@ -1609,6 +1625,11 @@ io.use((socket, next) => {
 });
 
 io.on("connection", (socket) => {
+  if (socket.data.tvDisplay) {
+    socket.join("tv-display");
+    socket.emit("tv:update", getTvDisplayData());
+    return;
+  }
   socket.emit("dashboard:update", getDashboardData());
 });
 

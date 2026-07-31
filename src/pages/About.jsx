@@ -5,6 +5,7 @@ import {
   HeartHandshake,
   ListChecks,
   Mail,
+  Monitor,
   Phone,
   Plus,
   QrCode,
@@ -41,6 +42,7 @@ function contactsFromSettings(settings = {}) {
 export default function About() {
   const [accessInfo, setAccessInfo] = useState(null);
   const [browserQr, setBrowserQr] = useState("");
+  const [tvQr, setTvQr] = useState("");
   const [appQr, setAppQr] = useState("");
   const [iphoneQr, setIphoneQr] = useState("");
   const [inventorContacts, setInventorContacts] = useState([]);
@@ -56,8 +58,13 @@ export default function About() {
       .then(async (info) => {
         if (!active) return;
         setAccessInfo(info);
-        const [browserImage, appImage, iphoneImage] = await Promise.all([
+        const [browserImage, tvImage, appImage, iphoneImage] = await Promise.all([
           QRCode.toDataURL(info.browserUrl, { width: 320, margin: 2, color: qrColors }),
+          QRCode.toDataURL(info.tvUrl || `${info.selectedServerUrl}/tv`, {
+            width: 320,
+            margin: 2,
+            color: qrColors
+          }),
           QRCode.toDataURL(info.androidInstallUrl || info.appDownloadUrl, {
             width: 320,
             margin: 2,
@@ -67,6 +74,7 @@ export default function About() {
         ]);
         if (active) {
           setBrowserQr(browserImage);
+          setTvQr(tvImage);
           setAppQr(appImage);
           setIphoneQr(iphoneImage);
         }
@@ -212,6 +220,14 @@ export default function About() {
             title="Open in a browser"
             description="Works on iPhone, iPad, Android, laptops, and desktop browsers."
             url={accessInfo?.browserUrl}
+          />
+          <QrAccessCard
+            image={tvQr}
+            title="Open TV Section"
+            description="Use this on a TV or monitor device to show guests who are nearly ready."
+            url={accessInfo?.tvUrl}
+            icon="tv"
+            actionLabel="Open TV Section"
           />
           <QrAccessCard
             image={iphoneQr}
@@ -378,6 +394,8 @@ function QrAccessCard({
               <Download size={18} />
             ) : icon === "apple" ? (
               <Apple size={18} />
+            ) : icon === "tv" ? (
+              <Monitor size={18} />
             ) : (
               <Smartphone size={18} />
             )}

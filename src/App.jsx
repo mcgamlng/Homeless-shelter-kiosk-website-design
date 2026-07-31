@@ -15,10 +15,12 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Admin from "./pages/Admin.jsx";
 import About from "./pages/About.jsx";
 import InstallApp from "./pages/InstallApp.jsx";
+import TvDisplay from "./pages/TvDisplay.jsx";
 import { getKioskCssVariables, getKioskCustomization } from "../shared/kioskCustomization.js";
 
 const navItems = [
   { label: "Kiosk", to: "/kiosk" },
+  { label: "TV", to: "/tv" },
   { label: "Dashboard", to: "/dashboard" },
   { label: "Excel spreadsheets", to: "/excel-spreadsheets" },
   { label: "Page customization", to: "/page-customization" },
@@ -41,7 +43,7 @@ const protectedPaths = new Set([
 ]);
 
 function permissionForPath(path) {
-  if (path === "/admin") return "owner_admin";
+  if (path === "/admin") return "admin";
   if (path === "/excel-spreadsheets") return "admin_excel";
   if (path === "/page-customization") return "admin_customization";
   if (path === "/activity-customization") return "admin_activities";
@@ -205,6 +207,7 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<KioskLauncher />} />
           <Route path="/kiosk" element={<Kiosk settings={settings} />} />
+          <Route path="/tv" element={<TvDisplay />} />
           <Route path="/install" element={<InstallApp />} />
           <Route
             path="/dashboard"

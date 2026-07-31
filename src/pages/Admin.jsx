@@ -217,6 +217,7 @@ function createStaffUserDraft() {
     permissions: {
       dashboard: true,
       about: false,
+      admin: false,
       admin_excel: false,
       admin_customization: false,
       admin_activities: false,
@@ -233,6 +234,7 @@ const pagePermissionOptions = [
 ];
 
 const adminSectionPermissionOptions = [
+  ["admin", "Admin page"],
   ["admin_excel", "Excel spreadsheets"],
   ["admin_customization", "Page customization"],
   ["admin_activities", "Activity customization"],
@@ -291,22 +293,15 @@ const adminSectionConfig = {
   admin: {
     title: "Admin",
     heading: "Admin",
-    description: "Owner-only controls for the Admin PIN and deleting collected spreadsheet data.",
-    permissionName: "Owner Admin",
-    permissionKey: "owner_admin"
+    description:
+      "Controls for the Admin PIN, audit tracking, and deleting collected spreadsheet data.",
+    permissionName: "Admin page",
+    permissionKey: "admin"
   }
 };
 
 function normalizePermissionToggle(permissions, permission, checked) {
-  const next = { ...permissions, [permission]: checked };
-  if (permission.startsWith("admin_") && checked) {
-    next.admin = true;
-  }
-  if (permission.startsWith("admin_")) {
-    next.admin =
-      checked || adminSectionPermissionOptions.some(([key]) => key !== permission && next[key]);
-  }
-  return next;
+  return { ...permissions, [permission]: checked };
 }
 
 const piMaintenanceCommands = {
@@ -432,7 +427,7 @@ export default function Admin({ section = "activities" }) {
   const canUseActivities = isOwnerAdmin || Boolean(sessionPermissions.admin_activities);
   const canUseIt = isOwnerAdmin || Boolean(sessionPermissions.admin_it);
   const canUseUsers = isOwnerAdmin || Boolean(sessionPermissions.admin_users);
-  const canUseOwnerAdmin = isOwnerAdmin;
+  const canUseOwnerAdmin = isOwnerAdmin || Boolean(sessionPermissions.admin);
   const canManageUsers = canUseUsers;
   const canUseActiveSection =
     !signedIn || isOwnerAdmin || Boolean(sessionPermissions[sectionInfo.permissionKey]);
@@ -920,7 +915,7 @@ export default function Admin({ section = "activities" }) {
     try {
       const result = await api.setAutoUpdate(currentAdminToken(), enabled);
       setSystemControlMessage(
-        result.message || (enabled ? "Two-week auto-update is turning on." : "Auto-update is off.")
+        result.message || (enabled ? "Weekly auto-update is turning on." : "Auto-update is off.")
       );
       window.setTimeout(() => refreshAutoUpdateStatus(currentAdminToken()), 1500);
     } catch (err) {
@@ -970,6 +965,43 @@ export default function Admin({ section = "activities" }) {
     } finally {
       setExporting(false);
     }
+  }
+
+  function downloadDurationChartData() {
+    if (!analytics?.activityDurationTotals?.length) {
+      setMessage("There is no measured activity duration data for this report yet.");
+      return;
+    }
+    const header = [
+      "Activity",
+      "Measured Sessions",
+      "Average Actual Minutes",
+      "Shortest Minutes",
+      "Longest Minutes",
+      "Average Scheduled Minutes",
+      "Average Difference Minutes"
+    ];
+    const rows = analytics.activityDurationTotals.map((item) => [
+      item.activity,
+      item.sessions,
+      item.averageActualMinutes,
+      item.shortestMinutes,
+      item.longestMinutes,
+      item.averageScheduledMinutes,
+      item.averageDifferenceMinutes
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `listening-house-duration-chart-${analyticsPeriod}-${analyticsDate}.csv`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function saveActivity(activity) {
@@ -1757,7 +1789,7 @@ export default function Admin({ section = "activities" }) {
                   <strong>Automatic Raspberry Pi updates</strong>
                   <p>
                     Optional background update. When turned on, the Raspberry Pi checks GitHub,
-                    rebuilds the app, and restarts the server every two weeks.
+                    rebuilds the app, and restarts the server once a week.
                   </p>
                   <span className={`system-status-pill ${autoUpdateStatus?.active ? "is-on" : ""}`}>
                     {autoUpdateStatus?.active ? "On" : "Off"}
@@ -1777,7 +1809,7 @@ export default function Admin({ section = "activities" }) {
                       disabled={!signedIn || autoUpdateSaving || Boolean(runningSystemAction)}
                       onChange={(event) => toggleAutoUpdate(event.target.checked)}
                     />
-                    <span>{autoUpdateSaving ? "Saving..." : "Update every two weeks"}</span>
+                    <span>{autoUpdateSaving ? "Saving..." : "Update every week"}</span>
                   </label>
                   <button
                     className="secondary-button compact-button"
@@ -1940,7 +1972,7 @@ export default function Admin({ section = "activities" }) {
         <AdminSectionIntro
           id="admin-section-owner"
           title="Admin"
-          description="Owner-only controls for changing the Admin PIN and deleting collected spreadsheet data."
+          description="Protected controls for changing the Admin PIN, deleting collected spreadsheet data, and reviewing staff activity."
           allowed={canUseOwnerAdmin}
         />
       ) : null}
@@ -2037,8 +2069,8 @@ export default function Admin({ section = "activities" }) {
                   Staff Tracking / Activity Log
                 </h2>
                 <p>
-                  This owner-only log records staff sign-ins, dashboard moves, status changes,
-                  activity edits, kiosk customization, IT actions, and Admin changes.
+                  This admin log records staff sign-ins, dashboard moves, status changes, activity
+                  edits, kiosk customization, IT actions, and Admin changes.
                 </p>
               </div>
               <button
@@ -2135,7 +2167,7 @@ export default function Admin({ section = "activities" }) {
                   Staff Tracking / Activity Log
                 </h2>
                 <p>
-                  Owner-only history of staff sign-ins, dashboard changes, activity edits, kiosk
+                  Protected history of staff sign-ins, dashboard changes, activity edits, kiosk
                   customization, IT tools, and Admin actions. PIN values are never shown here.
                 </p>
               </div>
@@ -2227,7 +2259,7 @@ export default function Admin({ section = "activities" }) {
           </section>
         </>
       ) : activeSection === "admin" ? (
-        <RestrictedAdminSection title="Admin" ownerOnly />
+        <RestrictedAdminSection title="Admin" />
       ) : null}
 
       {activeSection === "excel" ? (
@@ -2323,11 +2355,53 @@ export default function Admin({ section = "activities" }) {
                   <AnalyticsStat label="Completed" value={analytics.summary.completedActivities} />
                   <AnalyticsStat label="Skipped" value={analytics.summary.skippedActivities} />
                   <AnalyticsStat
+                    label="Avg actual time"
+                    value={formatDurationMinutes(analytics.summary.averageActualDurationMinutes)}
+                  />
+                  <AnalyticsStat
                     label="Most used"
                     value={analytics.summary.mostRequestedActivity}
                     wide
                   />
                 </div>
+
+                <section className="analytics-duration-panel">
+                  <div className="analytics-section-title">
+                    <div>
+                      <h3>Actual activity time</h3>
+                      <p>Measured from when staff press In Progress until they press Completed.</p>
+                    </div>
+                    <button
+                      className="secondary-button compact-button"
+                      type="button"
+                      disabled={!analytics.activityDurationTotals.length}
+                      onClick={downloadDurationChartData}
+                    >
+                      <Download size={18} />
+                      Download chart data
+                    </button>
+                  </div>
+                  {analytics.activityDurationTotals.length === 0 ? (
+                    <p className="analytics-empty">
+                      No measured durations yet. Mark an activity In Progress and then Completed to
+                      start collecting this data.
+                    </p>
+                  ) : (
+                    <div className="duration-chart-list">
+                      {analytics.activityDurationTotals.map((item) => (
+                        <DurationChartRow
+                          key={item.activity}
+                          item={item}
+                          maxMinutes={Math.max(
+                            ...analytics.activityDurationTotals.map(
+                              (duration) => duration.averageActualMinutes
+                            )
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
 
                 <div className="analytics-table-wrap">
                   <table className="analytics-table">
@@ -2410,7 +2484,7 @@ export default function Admin({ section = "activities" }) {
               </h2>
               <p>
                 Add staff users and choose which top navigation sections they can open. Everyone can
-                use the kiosk. The Admin page is owner-only and cannot be assigned to staff users.
+                use the kiosk. Give Admin page access only to trusted staff.
               </p>
             </div>
           </div>
@@ -3236,6 +3310,38 @@ function AnalyticsStat({ label, value, wide = false }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function formatDurationMinutes(value) {
+  const minutes = Number(value) || 0;
+  if (minutes <= 0) return "None yet";
+  return `${minutes} min`;
+}
+
+function DurationChartRow({ item, maxMinutes }) {
+  const width = maxMinutes > 0 ? Math.max(8, (item.averageActualMinutes / maxMinutes) * 100) : 0;
+  const difference = Number(item.averageDifferenceMinutes) || 0;
+  return (
+    <article className="duration-chart-row">
+      <div className="duration-chart-meta">
+        <strong>{item.activity}</strong>
+        <span>
+          {item.sessions} measured {item.sessions === 1 ? "session" : "sessions"}
+        </span>
+      </div>
+      <div className="duration-bar-track" aria-hidden="true">
+        <span style={{ width: `${width}%` }} />
+      </div>
+      <div className="duration-chart-numbers">
+        <strong>{formatDurationMinutes(item.averageActualMinutes)}</strong>
+        <span>
+          Short {item.shortestMinutes} / long {item.longestMinutes} / scheduled avg{" "}
+          {item.averageScheduledMinutes} / {difference >= 0 ? "+" : ""}
+          {difference} min
+        </span>
+      </div>
+    </article>
   );
 }
 

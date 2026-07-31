@@ -27,6 +27,7 @@ test("yearly deletion removes guest data and preserves staff users", async () =>
       permissions: {
         dashboard: true,
         about: true,
+        admin: true,
         admin_excel: true,
         admin_it: false,
         admin_users: true

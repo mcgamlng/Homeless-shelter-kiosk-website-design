@@ -41,8 +41,10 @@ medical details, or sensitive notes.
 - Manual drag, earlier/later, and exact-time scheduling controls
 - Automatic daily rollover
 - Real-time Socket.IO updates on every open dashboard
+- Public lightweight TV Section for a separate lobby/monitor display
 - SQLite persistence
 - Day, week, month, and year Excel downloads from Analytics
+- Activity duration analytics measured from In Progress to Completed
 - Admin PIN protection
 - Staff user roles with page access and Admin-section permissions
 - Kiosk wording and color customization
@@ -107,6 +109,7 @@ npm start
 Open:
 
 - Kiosk: `http://localhost:3000/kiosk`
+- TV Section: `http://localhost:3000/tv`
 - Dashboard: `http://localhost:3000/dashboard`
 - Admin: `http://localhost:3000/admin`
 - About and QR codes: `http://localhost:3000/about`
@@ -358,13 +361,13 @@ which top navigation sections each person can open:
 - **Activity customization:** schedule spacing, daily resets, activity/service setup, limits,
   waitlists, and alarms.
 - **IT tools:** phone/network access, read-aloud voice tools, Raspberry Pi update/reboot,
-  the optional two-week auto-update checkbox, and kiosk exit controls.
-- **User control:** staff PINs and staff access to Dashboard, About, Excel spreadsheets,
-  Page customization, Activity customization, IT tools, and User control.
+  the optional weekly auto-update checkbox, and kiosk exit controls.
+- **User control:** staff PINs and staff access to Dashboard, About, Admin page, Excel
+  spreadsheets, Page customization, Activity customization, IT tools, and User control.
 
-Everyone can still use the kiosk page. Staff users only receive Dashboard, About, Excel
-spreadsheets, Page customization, Activity customization, or IT tools access when the owner grants
-it.
+Everyone can still use the kiosk and TV pages. Staff users only receive Dashboard, About, Admin
+page, Excel spreadsheets, Page customization, Activity customization, IT tools, or User Control
+access when the owner grants it.
 
 ## Automatic Startup
 
@@ -397,7 +400,7 @@ the project files, and the local database. If you choose to install Codex CLI on
 a developer tool, not part of the production kiosk startup.
 
 Admin also includes **Kiosk & Raspberry Pi Controls**. Staff can run the GitHub update, turn the
-two-week automatic GitHub updater on or off, reboot the Pi, or try to exit only the Chromium kiosk window.
+weekly automatic GitHub updater on or off, reboot the Pi, or try to exit only the Chromium kiosk window.
 Rebooting does not delete saved SQLite data, but unsaved form edits are lost and staff phones
 disconnect while the Pi restarts. The Raspberry Pi update also installs a desktop shortcut called
 **Open Listening House Kiosk** so staff can reopen the kiosk without rebooting if Chromium is closed.
